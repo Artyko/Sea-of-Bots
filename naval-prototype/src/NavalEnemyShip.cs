@@ -26,6 +26,7 @@ public class NavalEnemyShip : MonoBehaviour
     private float heading,speed,verticalSpeed,footOffset,retryCrew,rudder;
     private float nextTack;
     private float orbitSide=1f;
+    private bool helmUseful=true;
     private static readonly FieldInfo Velocity=typeof(FirstPersonMover).GetField("_velocity",BindingFlags.Instance|BindingFlags.NonPublic);
     public void Initialize(FirstPersonMover observer,Transform opponent,NavalWater sea,float feet)
     {
@@ -90,7 +91,7 @@ public class NavalEnemyShip : MonoBehaviour
     }
     private bool Alive(int i){return crew[i]!=null&&crew[i].IsAlive();}
     private bool CanHelm()
-    {return Alive(0)&&repairers[0]!=null&&!repairers[0].Rescuing&&!repairers[0].Assaulting;}
+    {return helmUseful&&Alive(0)&&repairers[0]!=null&&!repairers[0].Rescuing&&!repairers[0].Assaulting&&!repairers[0].Defending&&!repairers[0].Busy;}
     private void LateUpdate()
     {
         if(player==null||target==null||!player.IsAlive()||!player.IsPlayerInputEnabled()||Time.timeScale==0f)return;
@@ -105,6 +106,13 @@ public class NavalEnemyShip : MonoBehaviour
         if(Time.time>=retryCrew){retryCrew=Time.time+2f;RecruitCrew();}
         structure.Refresh(Boat.forward*speed+Vector3.up*verticalSpeed);
         Hull.Step(Boat,ocean,dt,false);rig.RefreshRig();
+        helmUseful=NavalCrewRoles.HelmUseful(rig.SailPowerFactor,speed);
+        if(Alive(0)&&!repairers[0].Rescuing&&!repairers[0].Assaulting&&!repairers[0].Defending&&!Hull.Sunk)
+        {
+            repairers[0].Tick(dt,!helmUseful);
+            if(!repairers[0].RepairDuty)
+                repairers[0].SetPost(helmUseful?new Vector3(0f,0.825f,-4.8f):new Vector3(-1.7f,0.825f,-4.5f));
+        }
         float throttle=0f,turn=0f;
         if(!Hull.Sunk&&CanHelm()&&stations.IsFunctional(0))
         {
@@ -179,7 +187,7 @@ public class NavalEnemyShip : MonoBehaviour
         if(camera!=null)for(int i=0;i<3;i++)if(Alive(i))
         {
             Vector3 screen=camera.WorldToScreenPoint(crew[i].transform.position+Vector3.up*2.2f);
-            if(screen.z>0f)GUI.Label(new Rect(screen.x-85f,Screen.height-screen.y-20f,190f,25f),i==0?"Enemy helmsman":crewRoles.Role(i-1));
+            if(screen.z>0f)GUI.Label(new Rect(screen.x-85f,Screen.height-screen.y-20f,190f,25f),i==0?(repairers[0].Rescuing?"Swimming to ladder":repairers[0].Busy?repairers[0].Status:helmUseful?"Enemy helmsman":"Helm released"):crewRoles.Role(i-1));
         }
     }
     private void OnDestroy()

@@ -36,7 +36,9 @@ public class NavalAlliedCrew : MonoBehaviour
             }
         }
         NavalTestWorld world=NavalTestWorld.Active;
-        roles.Tick(Mathf.Min(Time.deltaTime,0.05f),world!=null?world.EnemyBoat:null,world!=null?world.EnemyVelocity:Vector3.zero,true,footOffset);
+        NavalShipVisuals rig=hull.Root.GetComponent<NavalShipVisuals>();
+        bool useful=NavalCrewRoles.HelmUseful(rig!=null?rig.SailPowerFactor:0f,world!=null?world.ShipVelocity.magnitude:0f);
+        roles.Tick(Mathf.Min(Time.deltaTime,0.05f),world!=null?world.EnemyBoat:null,world!=null?world.EnemyVelocity:Vector3.zero,useful,footOffset);
     }
     private void OnGUI()
     {

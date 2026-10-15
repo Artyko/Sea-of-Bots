@@ -14,6 +14,7 @@ public class NavalBoarder : MonoBehaviour
     private float started,jumpTime,duration,retryAt,scanAt,quietSince=-1f,height,returnAt;
     private Matrix4x4 previousBoat;
     private Character opponent;
+    private float returnMoveSpeed;
     private readonly List<Vector3> route=new List<Vector3>();
     private static readonly MethodInfo SetOpponent=typeof(AIController).GetMethod("SetTargetOpponentCharacter",BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic);
     private static readonly FieldInfo Velocity=typeof(FirstPersonMover).GetField("_velocity",BindingFlags.Instance|BindingFlags.NonPublic);
@@ -156,7 +157,7 @@ public class NavalBoarder : MonoBehaviour
     {
         if(Time.time<returnAt||!Valid(home)||home.Sunk)return;
         returnAt=Time.time+2f;if(!Plan(current,home))return;
-        robot.DisableAI();worker.BoardingWalk(true);BuildReturnRoute();phase=5;started=Time.time;
+        robot.DisableAI();worker.BoardingWalk(true);BuildReturnRoute();phase=5;started=Time.time;returnMoveSpeed=0f;
     }
     private void CancelApproach()
     {
@@ -180,10 +181,15 @@ public class NavalBoarder : MonoBehaviour
         if(route.Count==0){BeginJump(true);return;}
         Vector3 feet=current.Root.InverseTransformPoint(robot.transform.position-current.Root.up*worker.FootOffset);
         Vector3 delta=current.Root.TransformVector(route[0]-feet),before=robot.transform.position;
-        CharacterController body=robot.GetComponentInChildren<CharacterController>();Vector3 step=Vector3.ClampMagnitude(delta,2.8f*dt)+Vector3.down*0.3f*dt;
+        Vector3 look=delta;look.y=0f;
+        if(look.sqrMagnitude>0.01f)robot.transform.rotation=Quaternion.RotateTowards(robot.transform.rotation,Quaternion.LookRotation(look),720f*dt);
+        float alignment=look.sqrMagnitude>0.01f?Mathf.Clamp01(Vector3.Dot(robot.transform.forward,look.normalized)):1f;
+        bool stairs=NavalWalkRoutes.InStairwell(feet.x,feet.y,feet.z)||NavalWalkRoutes.InStairwell(route[0].x,route[0].y,route[0].z);
+        float wanted=NavalCrewMovement.TargetSpeed(worker.DeckWalkSpeed,alignment,delta.magnitude,route.Count==1,stairs);
+        returnMoveSpeed=NavalCrewMovement.Accelerate(returnMoveSpeed,wanted,dt);
+        CharacterController body=robot.GetComponentInChildren<CharacterController>();Vector3 step=Vector3.ClampMagnitude(delta,returnMoveSpeed*dt)+Vector3.down*0.3f*dt;
         if(body!=null&&body.enabled)body.Move(step);else robot.transform.position+=step;
         Vector3 travel=robot.transform.position-before;travel.y=0f;worker.BoardingMoved(travel.magnitude);
-        Vector3 look=delta;look.y=0f;if(look.sqrMagnitude>0.01f)robot.transform.rotation=Quaternion.RotateTowards(robot.transform.rotation,Quaternion.LookRotation(look),240f*dt);
         feet=current.Root.InverseTransformPoint(robot.transform.position-current.Root.up*worker.FootOffset);
         if(Vector3.Distance(feet,route[0])<(route.Count==1?0.1f:0.28f))route.RemoveAt(0);
     }

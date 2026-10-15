@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public class NavalCrewController
 {
@@ -24,17 +24,14 @@ public class NavalCrewController
         for(int i=0;i<2;i++)if(crew[i]!=null&&workers[i]!=null)
         {
             if(boarders[i]==null){boarders[i]=crew[i].gameObject.AddComponent<NavalBoarder>();boarders[i].Initialize(crew[i],workers[i],hull);}
-            if(NavalRamMath.Assault(stations.IsFunctional(1),stations.IsFunctional(2))&&roles[i]!=0)
+            if(NavalRamMath.Assault(stations.IsFunctional(1),stations.IsFunctional(2))&&roles[i]!=0&&!workers[i].RepairDuty&&!hull.HasActiveLeaks)
                 boarders[i].TryStart(enemy);
         }
         int side=enemy!=null?stations.TargetSide(enemy.position):-1;
         if(side>=0&&(!stations.IsFunctional(side)||stations.PlayerStation==side))side=-1;
         if(side<0)combat=-1;
         else if(!Free(combat))combat=Free(0)?0:Free(1)?1:-1;
-        int repair=-1;
-        bool busyRepair=workers[0]!=null&&workers[0].RepairDuty||workers[1]!=null&&workers[1].RepairDuty;
-        if(!busyRepair)repair=NavalCrewRoles.RepairCandidate(Free(0),Free(1),combat);
-        for(int i=0;i<2;i++)if(workers[i]!=null)workers[i].Tick(dt,i==repair);
+        for(int i=0;i<2;i++)if(workers[i]!=null)workers[i].Tick(dt,NavalCrewRoles.CanRepair(Free(i),i,combat)||(Free(i)&&hull.Volume>BoatDimensions.SinkVolume*BoatDimensions.VolumeScale*0.5f));
         int helm=-1;
         if(helmAllowed&&stations.PlayerStation!=0&&stations.IsFunctional(0))
         {

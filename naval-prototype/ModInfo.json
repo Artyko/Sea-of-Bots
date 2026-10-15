@@ -1,10 +1,10 @@
-{
+﻿{
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v47.dll",
+  "MainDLLFileName": "NavalPrototype-v51.dll",
   "Author": "Kirill",
-  "Version": 47,
-  "Description": "Bidirectional boarding jumps with body capsule clearance over rails, nearby-ship planning, and return to home ship after combat or on sinking.",
+  "Version": 51,
+  "Description": "Sailors bail flooding with visible voxel buckets, scoop and overboard pour animations; carried water remains aboard until poured.",
   "ModDependencies": [],
   "Tags": []
 }

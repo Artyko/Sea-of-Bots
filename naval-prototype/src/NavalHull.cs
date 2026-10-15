@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 public class NavalHullVoxel : MonoBehaviour
@@ -43,10 +43,11 @@ public class NavalHull
     private readonly float[] floodFloors = new float[12*24];
     public float LeftWater { get { return Flood.Side(true); } }
     public float RightWater { get { return Flood.Side(false); } }
-    public float Volume { get { return Flood.Total; } }
+    public float Volume { get { float total=Flood.Total;foreach(NavalRepairSailor worker in RepairWorkers)if(worker!=null)total+=worker.BucketWater;return total; } }
     public float WaterDepthAt(Vector3 local) { return Flood.Depth(Flood.Index(local.x,local.z)); }
     public bool Sunk;
     public bool FloodEffectsHidden;
+    public bool HasActiveLeaks;
     public float SinkDepth;
     private const float Cell = 0.25f;
     private Material streamMaterial;
@@ -143,7 +144,7 @@ public class NavalHull
     public void Step(Transform boat, NavalWater ocean, float dt, bool pump)
     {
         FloodEffectsHidden=NavalFloodVisibilityMath.HideEffects(NavalFloodAppearance.Clearance(boat,ocean));
-        HoleCount = 0; SubmergedArea = 0f; Inflow = 0f;
+        HoleCount = 0; SubmergedArea = 0f; Inflow = 0f;HasActiveLeaks=false;
         int visibleStreams = 0;
         foreach (NavalHullVoxel voxel in Voxels)
         {
@@ -163,6 +164,7 @@ public class NavalHull
             SubmergedArea += area;
             float amount = Flood.Add(cellIndex,flow * dt);
             voxel.InflowRate=Mathf.Max(0f,amount/dt);
+            if(voxel.InflowRate>0.00001f)HasActiveLeaks=true;
             if(area>0f&&flow>0.00001f){voxel.LastWetAt=Time.time;voxel.LastWetFlow=Mathf.Max(0.001f,flow);}
             Inflow += amount / dt;
             bool show = !FloodEffectsHidden && amount > 0.00001f && area > 0f && visibleStreams < 32;
