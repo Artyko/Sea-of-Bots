@@ -75,6 +75,7 @@ public class NavalShipVisuals : MonoBehaviour
             sail.Add(hull.AddVoxel(transform,fabric,center,new Vector3(0.25f,0.25f,0.07f),false,false));
         }
         attachedRig.AddRange(sail);
+        foreach(NavalHullVoxel cell in sail)cell.RigFabric=true;
         foreach (NavalHullVoxel cell in mastCells) originalSizes[cell] = cell.transform.localScale;
         foreach (NavalHullVoxel cell in attachedRig) originalSizes[cell] = cell.transform.localScale;
         foreach (NavalHullVoxel cell in originalSizes.Keys) cell.ManagedRig = true;

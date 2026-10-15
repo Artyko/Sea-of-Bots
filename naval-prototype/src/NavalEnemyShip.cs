@@ -56,6 +56,7 @@ public class NavalEnemyShip : MonoBehaviour
             cell.GetComponent<Renderer>().sharedMaterial=ocean.InteriorMaterial;
             water[i]=cell.transform;cell.SetActive(false);
         }
+        Boat.gameObject.AddComponent<NavalFloodAppearance>().Initialize(ocean,Hull,water);
         ocean.AdditionalHull=Boat;
         nextTack=Time.time+30f;
         RecruitCrew();
@@ -137,6 +138,8 @@ public class NavalEnemyShip : MonoBehaviour
         ram.Velocity=(next-Boat.position)/Mathf.Max(dt,0.001f);ram.AngularRate=Mathf.DeltaAngle(Boat.eulerAngles.y,nextRotation.eulerAngles.y)/Mathf.Max(dt,0.001f);
         if(NavalShipContact.Constrain(Boat.position,Boat.rotation,ref next,ref nextRotation,target))
         {ram.Contact(target.GetComponent<NavalRamDamage>());speed=0f;heading=nextRotation.eulerAngles.y;}
+        float rigRetention=NavalRigContact.Resolve(ram,Boat.position,Boat.rotation,ref next,ref nextRotation,target.GetComponent<NavalRamDamage>());
+        if(rigRetention<1f){speed*=rigRetention;heading=nextRotation.eulerAngles.y;}
         Boat.position=next;Boat.rotation=nextRotation;
         if(rider)
         {
@@ -147,7 +150,7 @@ public class NavalEnemyShip : MonoBehaviour
         }
         for(int i=0;i<water.Length;i++)
         {
-            float d=Hull.Flood.Depth(i);water[i].gameObject.SetActive(d>0.0005f);
+            float d=Hull.Flood.Depth(i);water[i].gameObject.SetActive(d>0.0005f&&!Hull.FloodEffectsHidden);
             water[i].localScale=new Vector3(Hull.Flood.CellWidth,Mathf.Max(0.0005f,d),Hull.Flood.CellLength);
             water[i].localPosition=new Vector3(Hull.Flood.X(i),BoatDimensions.HoldFloor+d*0.5f,Hull.Flood.Z(i));
         }

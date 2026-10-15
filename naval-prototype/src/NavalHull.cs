@@ -8,6 +8,7 @@ public class NavalHullVoxel : MonoBehaviour
     public bool Missing;
     public bool HydraulicShell = true;
     public bool ManagedRig;
+    public bool RigFabric;
     public bool Detached;
     public bool Batched;
     public NavalHull Owner;
@@ -45,6 +46,7 @@ public class NavalHull
     public float Volume { get { return Flood.Total; } }
     public float WaterDepthAt(Vector3 local) { return Flood.Depth(Flood.Index(local.x,local.z)); }
     public bool Sunk;
+    public bool FloodEffectsHidden;
     public float SinkDepth;
     private const float Cell = 0.25f;
     private Material streamMaterial;
@@ -140,6 +142,7 @@ public class NavalHull
     }
     public void Step(Transform boat, NavalWater ocean, float dt, bool pump)
     {
+        FloodEffectsHidden=NavalFloodVisibilityMath.HideEffects(NavalFloodAppearance.Clearance(boat,ocean));
         HoleCount = 0; SubmergedArea = 0f; Inflow = 0f;
         int visibleStreams = 0;
         foreach (NavalHullVoxel voxel in Voxels)
@@ -162,7 +165,7 @@ public class NavalHull
             voxel.InflowRate=Mathf.Max(0f,amount/dt);
             if(area>0f&&flow>0.00001f){voxel.LastWetAt=Time.time;voxel.LastWetFlow=Mathf.Max(0.001f,flow);}
             Inflow += amount / dt;
-            bool show = amount > 0.00001f && area > 0f && visibleStreams < 32;
+            bool show = !FloodEffectsHidden && amount > 0.00001f && area > 0f && visibleStreams < 32;
             if (show)
             {
                 visibleStreams++;

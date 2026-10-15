@@ -162,6 +162,7 @@ public class NavalTestWorld : MonoBehaviour
             floodVisuals[i]=Part(boat,"WaterCell_"+i,Vector3.zero,Vector3.one,ocean.InteriorMaterial,false).transform;
             floodVisuals[i].gameObject.SetActive(false);
         }
+        boat.gameObject.AddComponent<NavalFloodAppearance>().Initialize(ocean,hull,floodVisuals);
         rig = boat.gameObject.AddComponent<NavalShipVisuals>();
         rig.Initialize(hull, wood, lightWood, blackMast, MakeMaterial(new Color(0.91f, 0.90f, 0.84f)),
             MakeMaterial(new Color(0.12f, 0.085f, 0.05f)), deckWood, alternatePlank);
@@ -182,7 +183,7 @@ public class NavalTestWorld : MonoBehaviour
         ReturnToDeck();
         Active = this;
         ToggleEnemy();
-        Debug.Log("[NavalPrototype] v42 ships and waves started on native Naval Ocean editor map.");
+        Debug.Log("[NavalPrototype] v47 ships and waves started on native Naval Ocean editor map.");
     }
 
     private Material MakeMaterial(Color color)
@@ -302,6 +303,8 @@ public class NavalTestWorld : MonoBehaviour
         ram.Velocity=(next-oldPosition)/Mathf.Max(dt,0.001f);ram.AngularRate=Mathf.DeltaAngle(oldRotation.eulerAngles.y,nextRotation.eulerAngles.y)/Mathf.Max(dt,0.001f);
         if(NavalShipContact.Constrain(oldPosition,oldRotation,ref next,ref nextRotation,enemy!=null?enemy.Boat:null))
         {ram.Contact(enemy!=null?enemy.Boat.GetComponent<NavalRamDamage>():null);speed=0f;heading=nextRotation.eulerAngles.y;}
+        float rigRetention=NavalRigContact.Resolve(ram,oldPosition,oldRotation,ref next,ref nextRotation,enemy!=null?enemy.Boat.GetComponent<NavalRamDamage>():null);
+        if(rigRetention<1f){speed*=rigRetention;heading=nextRotation.eulerAngles.y;}
         boat.position = next;boat.rotation=nextRotation;
         Physics.SyncTransforms();
         ocean.Focus = player.transform.position;
@@ -492,7 +495,7 @@ public class NavalTestWorld : MonoBehaviour
         for(int i=0;i<floodVisuals.Length;i++)
         {
             Transform visual=floodVisuals[i]; float depth=hull.Flood.Depth(i);
-            visual.gameObject.SetActive(depth>0.0005f);
+            visual.gameObject.SetActive(depth>0.0005f&&!hull.FloodEffectsHidden);
             visual.localScale=new Vector3(hull.Flood.CellWidth,Mathf.Max(0.0005f,depth),hull.Flood.CellLength);
             visual.localPosition=new Vector3(hull.Flood.X(i),BoatDimensions.HoldFloor+depth*0.5f,hull.Flood.Z(i));
         }
@@ -504,9 +507,9 @@ public class NavalTestWorld : MonoBehaviour
         GUI.Box(new Rect(15f,285f,720f,25f),"FPS: "+(1000f/Mathf.Max(1f,frameMilliseconds)).ToString("F0")+" | Water mesh CPU: "+ocean.BuildMilliseconds.ToString("F1")+" ms | Static hull: chunk rendering");
         GUI.Label(new Rect(Screen.width * 0.5f - 5f, Screen.height * 0.5f - 10f, 20f, 20f), "+");
         if (Time.time < damageMessageUntil) GUI.Box(new Rect(15f, 195f, 720f, 30f), damageMessage);
-        GUI.Box(new Rect(15f, 145f, 720f, 45f), "v42 Swimming: WASD | Space: rise | Left Ctrl: dive | F8: return to boat\n" +
+        GUI.Box(new Rect(15f, 145f, 720f, 45f), "v47 Swimming: WASD | Space: rise | Left Ctrl: dive | F8: return to boat\n" +
             (swimming ? "SWIMMING - slow movement, buoyancy active" : "Walking / on deck") + " | Wooden hull / black mast");
-        GUI.Box(new Rect(15f, 15f, 720f, 125f), "Naval Prototype v42 / Kirill - 12 x 24 m\nF6: toggle | E: stations | Steer only at helm | F8: deck | F7: waves\nG: damage aimed hull | F9/F11: port/starboard hole | Hold R: aimed repair | Shift+R: restore ship | Hold F10: pump\nSail drive: " + (rig.SailPowerFactor * 100f).ToString("F0") + "% | Missing voxels: " + hull.HoleCount + " | Wet area: " + hull.SubmergedArea.ToString("F2") + " m2 | Flow: " + hull.Inflow.ToString("F2") + " m3/s\nWater: " + hull.Volume.ToString("F1") + " m3 | Port: " + hull.LeftWater.ToString("F1") + " | Starboard: " + hull.RightWater.ToString("F1") + "\n" + (hull.Sunk ? "SINKING - F6 removes boat; repairs no longer recover this boat." : "Flood grid: 12 x 24 cells; water spreads locally and downhill."));
+        GUI.Box(new Rect(15f, 15f, 720f, 125f), "Naval Prototype v47 / Kirill - 12 x 24 m\nF6: toggle | E: stations | Steer only at helm | F8: deck | F7: waves\nG: damage aimed hull | F9/F11: port/starboard hole | Hold R: aimed repair | Shift+R: restore ship | Hold F10: pump\nSail drive: " + (rig.SailPowerFactor * 100f).ToString("F0") + "% | Missing voxels: " + hull.HoleCount + " | Wet area: " + hull.SubmergedArea.ToString("F2") + " m2 | Flow: " + hull.Inflow.ToString("F2") + " m3/s\nWater: " + hull.Volume.ToString("F1") + " m3 | Port: " + hull.LeftWater.ToString("F1") + " | Starboard: " + hull.RightWater.ToString("F1") + "\n" + (hull.Sunk ? "SINKING - F6 removes boat; repairs no longer recover this boat." : "Flood grid: 12 x 24 cells; water spreads locally and downhill."));
     }
     private void OnDestroy()
     {
@@ -516,6 +519,11 @@ public class NavalTestWorld : MonoBehaviour
         foreach (Material material in materials) if (material != null) Destroy(material);
     }
 }
+
+
+
+
+
 
 
 

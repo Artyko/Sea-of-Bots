@@ -43,7 +43,7 @@ public class NavalDrowning : MonoBehaviour
         Color original=GUI.color;
         if(breath.Air<=10f)GUI.color=new Color(1f,0.45f,0.35f);
         GUI.Box(new Rect(Screen.width*0.5f-180f,Screen.height-165f,360f,30f),
-            "AIR: "+Mathf.CeilToInt(breath.Air)+" s"+(breath.Submerged?" | Surface to breathe":" | Recovering"));
+            "AIR: "+Mathf.CeilToInt(breath.Air)+" s | Surface to breathe");
         GUI.color=original;
     }
 }

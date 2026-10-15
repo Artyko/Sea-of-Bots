@@ -7,9 +7,25 @@ public class NavalRamDamage : MonoBehaviour
     public float AngularRate;
     public float LastContact=float.NegativeInfinity;
     private float lastDamage=float.NegativeInfinity;
+    private float lastRigDamage=float.NegativeInfinity;
+    public readonly List<NavalHullVoxel> RigCells=new List<NavalHullVoxel>();
     public NavalRamDamage Opponent;
     public Vector3 ContactLocal;
-    public void Initialize(NavalHull hull){Hull=hull;}
+    public void Initialize(NavalHull hull)
+    {Hull=hull;foreach(NavalHullVoxel cell in hull.Voxels)if(cell.ManagedRig)RigCells.Add(cell);}
+    public void RigImpact(Vector3 point,float speed)
+    {
+        if(speed<1.2f||Time.time-lastRigDamage<2f)return;
+        Vector3 local=transform.InverseTransformPoint(point);NavalHullVoxel closest=null;float best=0.8f*0.8f;
+        foreach(NavalHullVoxel cell in Hull.Voxels)
+        {
+            if(!cell.HydraulicShell||cell.Missing||cell.Detached)continue;
+            float distance=(cell.LocalCenter-local).sqrMagnitude;
+            if(distance<best){best=distance;closest=cell;}
+        }
+        if(closest==null)return;
+        lastRigDamage=Time.time;Hull.Damage(closest.LocalCenter,0.01f);
+    }
     private static Vector3[] Corners(Transform ship)
     {
         Quaternion flat=Quaternion.Euler(0f,ship.eulerAngles.y,0f);

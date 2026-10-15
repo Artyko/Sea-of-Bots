@@ -9,7 +9,7 @@ public class NavalBreathClock
         if(depth>0.05f)Submerged=true;
         else if(depth< -0.05f)Submerged=false;
         dt=Math.Max(0f,dt);
-        Air=Math.Max(0f,Math.Min(Capacity,Air+(Submerged?-dt:dt*3f)));
+        Air=Submerged?Math.Max(0f,Air-dt):Capacity;
         return Air<=0f;
     }
 }

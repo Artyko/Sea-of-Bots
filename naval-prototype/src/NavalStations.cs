@@ -285,13 +285,21 @@ public class NavalCannonball : MonoBehaviour
         System.Array.Sort(hits, delegate(RaycastHit a, RaycastHit b) { return a.distance.CompareTo(b.distance); });
         foreach (RaycastHit hit in hits)
         {
+            Vector3 hitPoint=hit.distance<=0.0001f?hit.collider.ClosestPoint(transform.position):hit.point;
             Character hitRobot=hit.collider.GetComponentInParent<Character>();
             if (hitRobot == attacker || (!hostile && hitRobot == owner)) continue;
             if (hit.collider.transform.IsChildOf(boat) && Time.time < born + 0.12f) continue;
             NavalHullVoxel voxel = hit.collider.GetComponent<NavalHullVoxel>();
             if (voxel != null && voxel.Owner != null)
             {
-                voxel.Owner.Damage(voxel.Owner.Root.InverseTransformPoint(hit.point), 0.55f*RadiusScale);
+                Vector3 local=voxel.transform.InverseTransformPoint(hit.point);
+                if(!NavalCannonImpactMath.ValidContact(hit.distance,local.x,local.y,local.z))
+                    hitPoint=hit.collider.ClosestPoint(transform.position);
+                // Initial sphere overlaps can report a zero/invalid contact. Recover the
+                // actual surface, then place the compact damage sphere just inside the plank.
+                Vector3 toCentre=voxel.transform.position-hitPoint;
+                Vector3 damagePoint=hitPoint+toCentre*NavalCannonImpactMath.InsetFraction(toCentre.magnitude);
+                voxel.Owner.Damage(voxel.Owner.Root.InverseTransformPoint(damagePoint), NavalRigImpactMath.CannonRadius*RadiusScale);
                 if (!voxel.Missing) voxel.SetMissing(true);
             }
             else
@@ -301,10 +309,10 @@ public class NavalCannonball : MonoBehaviour
                 Character target = part != null ? part.GetOwner() : null;
                 if (attacker != null && part != null && target != null && target != attacker && target.IsAlive() &&
                     NavalBattleMath.CanDamageCrew(hostile,target.IsPlayerTeam,target.IsNeutral) && !target.IsImmuneToDamage() && part.CanBeDamaged)
-                    part.TryStabVolume(transform.position, hit.point + step.normalized * 0.3f*RadiusScale, attackId, ImpactStrength, attacker, FireType.None, false, DamageSourceType.None);
+                    part.TryStabVolume(transform.position, hitPoint + step.normalized * 0.3f*RadiusScale, attackId, ImpactStrength, attacker, FireType.None, false, DamageSourceType.None);
                 else if (hit.collider.isTrigger) continue;
             }
-            Burst(hit.point); Destroy(gameObject); return true;
+            Burst(hitPoint); Destroy(gameObject); return true;
         }
         return false;
     }

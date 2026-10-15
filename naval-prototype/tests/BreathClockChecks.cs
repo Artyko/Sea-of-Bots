@@ -10,9 +10,10 @@ class BreathClockChecks
         Check(clock.Step(0.2f,1f)&&clock.Air==0f,"Drowns at 30 seconds");
         clock=new NavalBreathClock();clock.Step(0.2f,20f);
         clock.Step(0f,1f);Check(clock.Air==9f,"Surface jitter does not reset reserve");
-        clock.Step(-0.2f,2f);Check(clock.Air==15f,"Air restores gradually on surfacing");
+        clock.Step(-0.2f,0.001f);Check(clock.Air==30f,"Air restores immediately in the first surfaced frame");
         clock.Step(-0.2f,100f);Check(clock.Air==30f,"Recovery capped at capacity");
         clock.Step(0.2f,0f);Check(clock.Air==30f,"Pause consumes no air");
+        clock.Step(0.2f,1f);Check(clock.Air==29f,"Next dive starts with full reserve");
         NavalBreathClock a=new NavalBreathClock(),b=new NavalBreathClock();
         a.Step(0.2f,10f);for(int i=0;i<100;i++)b.Step(0.2f,0.1f);
         Check(Math.Abs(a.Air-b.Air)<0.001f,"Air drain independent of frame rate");

@@ -21,13 +21,22 @@ public class NavalRepairSailor : MonoBehaviour
     private bool returning,stranded;
     private bool changingPost;
     public bool RepairDuty { get { return leak!=null || returning&&!changingPost; } }
-    public void SetPost(Vector3 post)
+    public void SetPost(Vector3 post,bool force=false)
     {
-        if((home-post).sqrMagnitude<0.01f||RepairDuty||stranded)return;
+        if((!force&&(home-post).sqrMagnitude<0.01f)||RepairDuty||stranded)return;
         feet=boat.InverseTransformPoint(robot.transform.position-boat.up*footOffset);
         home=post;route.Clear();returning=true;changingPost=true;
         float side=feet.x<0?-1f:1f, next=post.x<0?-1f:1f;
-        if(Mathf.Abs(feet.x)<1f)route.Add(new Vector3(side*1.4f,0.825f,feet.z));
+        if(NavalWalkRoutes.InStairwell(feet.x,feet.y,feet.z))
+        {route.Add(new Vector3(0f,feet.y,feet.z));Append(NavalWalkRoutes.UpFrom(feet.y,feet.z));}
+        else if(feet.y<0.3f)
+        {
+            route.Add(new Vector3(side*1.65f,BoatDimensions.HoldFloor,feet.z));
+            route.Add(new Vector3(side*1.65f,BoatDimensions.HoldFloor,-3.65f));
+            route.Add(new Vector3(0f,BoatDimensions.HoldFloor,-3.65f));
+            Append(NavalWalkRoutes.UpFrom(BoatDimensions.HoldFloor,-3.65f));
+        }
+        else if(Mathf.Abs(feet.x)<1f)route.Add(new Vector3(side*1.4f,0.825f,feet.z));
         route.Add(new Vector3(side*1.4f,0.825f,0.8f));
         if(Mathf.Abs(post.x)<0.1f)
         {route.Add(new Vector3(side*1.4f,0.825f,-4.8f));route.Add(post);}
@@ -51,8 +60,11 @@ public class NavalRepairSailor : MonoBehaviour
     public void EndRescue()
     {Rescuing=false;stranded=false;Defending=false;Assaulting=false;feet=boat.InverseTransformPoint(robot.transform.position-boat.up*footOffset);home=feet;returning=false;if(gait!=null)gait.enabled=true;}
     public void PrepareBoardingPost(Vector3 post)
-    {Release();route.Clear();returning=false;changingPost=false;SetPost(post);}
+    {Release();route.Clear();returning=false;changingPost=false;SetPost(post,true);}
     public void BeginAssault(){BeginDefense();Assaulting=true;}
+    public void BoardingWalk(bool active)
+    {if(gait!=null){gait.enabled=active;if(!active)gait.Stop();}}
+    public void BoardingMoved(float distance){if(gait!=null)gait.Moved(distance);}
     public void BeginDefense()
     {
         Release();route.Clear();returning=false;changingPost=false;Defending=true;

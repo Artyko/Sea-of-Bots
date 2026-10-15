@@ -1,10 +1,10 @@
 {
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v42.dll",
+  "MainDLLFileName": "NavalPrototype-v47.dll",
   "Author": "Kirill",
-  "Version": 42,
-  "Description": "Enemy spawns one hundred metres ahead facing the player. Overboard sailors float, swim around hulls toward the nearest usable ladder, climb aboard and resume duty or melee.",
+  "Version": 47,
+  "Description": "Bidirectional boarding jumps with body capsule clearance over rails, nearby-ship planning, and return to home ship after combat or on sinking.",
   "ModDependencies": [],
   "Tags": []
 }
