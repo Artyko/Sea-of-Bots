@@ -1,0 +1,7 @@
+/dist/
+/tests/*.exe
+/tests/*.pdb
+__pycache__/
+*.pyc
+*.log
+*.bak

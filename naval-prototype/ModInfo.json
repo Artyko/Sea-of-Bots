@@ -1,0 +1,10 @@
+{
+  "DisplayName": "Naval Prototype — Boat and Water",
+  "UniqueID": "SchoolNavalPrototype",
+  "MainDLLFileName": "NavalPrototype-v42.dll",
+  "Author": "Kirill",
+  "Version": 42,
+  "Description": "Enemy spawns one hundred metres ahead facing the player. Overboard sailors float, swim around hulls toward the nearest usable ladder, climb aboard and resume duty or melee.",
+  "ModDependencies": [],
+  "Tags": []
+}

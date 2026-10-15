@@ -1,0 +1,820 @@
+{
+  "empty": {
+    "$type": "LevelEditorLevelData, Assembly-CSharp",
+    "RootLevelObject": {
+      "$type": "LevelEditorLevelObject, Assembly-CSharp",
+      "Name": "LevelRoot",
+      "UniqueIndex": 0,
+      "LevelObjectEntry": null,
+      "Transform": {
+        "$type": "LevelEditorTransform, Assembly-CSharp",
+        "Position": {
+          "$type": "System.Single[], mscorlib",
+          "$values": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        },
+        "Rotation": {
+          "$type": "System.Single[], mscorlib",
+          "$values": [
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        },
+        "Scale": {
+          "$type": "System.Single[], mscorlib",
+          "$values": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      },
+      "CustomInspectorFloatValues": null,
+      "CustomInspectorIntValues": null,
+      "CustomInspectorStringValues": null,
+      "CustomInspectorBoolValues": null,
+      "CustomInspectorColorValues": null,
+      "Children": {
+        "$type": "System.Collections.Generic.List`1[[LevelEditorLevelObject, Assembly-CSharp]], mscorlib",
+        "$values": []
+      }
+    },
+    "DifficultyConfigurations": {
+      "$type": "System.Collections.Generic.List`1[[LevelEditorDifficultyData, Assembly-CSharp]], mscorlib",
+      "$values": [
+        {
+          "$type": "LevelEditorDifficultyData, Assembly-CSharp",
+          "DifficultyTier": 1,
+          "EnemiesInLevel": {
+            "$type": "System.Collections.Generic.List`1[[EnemyCount, Assembly-CSharp]], mscorlib",
+            "$values": []
+          },
+          "SavedVersionNumber": 0,
+          "BeatenVersionNumber": 0
+        }
+      ]
+    },
+    "WorkshopUploadID": 0,
+    "Title": "",
+    "Description": "",
+    "AuthorName": null,
+    "DialogueTag": null,
+    "ExportedByVersion": null,
+    "GeneratedUniqueID": "377ce330-be2e-402c-aef6-f83d2bb76bdb",
+    "ArenaIsHidden": false,
+    "LevelType": 0,
+    "ModdedMetadata": {
+      "$type": "System.Collections.Generic.Dictionary`2[[System.String, mscorlib],[System.String, mscorlib]], mscorlib",
+      "LevelCustomObjects": "{\"$type\":\"ModLibrary.LevelEditor.CustomObjectsList, ModLibrary\",\"Objects\":{\"$type\":\"System.Collections.Generic.List`1[[LevelEditorLevelObject, Assembly-CSharp]], mscorlib\",\"$values\":[]}}"
+    }
+  },
+  "flat": {
+    "$type": "LevelEditorLevelObject, Assembly-CSharp",
+    "Name": "CubeFlat(Clone)",
+    "UniqueIndex": 497,
+    "LevelObjectEntry": {
+      "$type": "LevelObjectEntry, Assembly-CSharp",
+      "DisplayName": "CubeFlat",
+      "PathUnderResources": "Prefabs/LevelObjects/Primitives/CubeFlat",
+      "PreviewPathUnderResources": "Prefabs/LevelObjects/Primitives/CubeFlat.png"
+    },
+    "Transform": {
+      "$type": "LevelEditorTransform, Assembly-CSharp",
+      "Position": {
+        "$type": "System.Single[], mscorlib",
+        "$values": [
+          36.62185,
+          0.5,
+          -43.44789
+        ]
+      },
+      "Rotation": {
+        "$type": "System.Single[], mscorlib",
+        "$values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "Scale": {
+        "$type": "System.Single[], mscorlib",
+        "$values": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "CustomInspectorFloatValues": {
+      "$type": "System.Collections.Generic.List`1[[CustomInspectorFloatValue, Assembly-CSharp]], mscorlib",
+      "$values": [
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 2.0,
+          "ClassName": "ReplaceMaterial",
+          "FieldName": "GlowAmount",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 1.0,
+          "ClassName": "ReplaceMaterial",
+          "FieldName": "Alpha",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 0.0,
+          "ClassName": "ReplaceMaterial",
+          "FieldName": "Metallic",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 0.0,
+          "ClassName": "ReplaceMaterial",
+          "FieldName": "Smoothness",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        }
+      ]
+    },
+    "CustomInspectorIntValues": {
+      "$type": "System.Collections.Generic.List`1[[CustomInspectorIntValue, Assembly-CSharp]], mscorlib",
+      "$values": [
+        {
+          "$type": "CustomInspectorIntValue, Assembly-CSharp",
+          "Value": 0,
+          "ClassName": "ReplaceMaterial",
+          "FieldName": "Skin",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        }
+      ]
+    },
+    "CustomInspectorStringValues": {
+      "$type": "System.Collections.Generic.List`1[[CustomInspectorStringValue, Assembly-CSharp]], mscorlib",
+      "$values": [
+        {
+          "$type": "CustomInspectorStringValue, Assembly-CSharp",
+          "Value": "",
+          "ClassName": "MoveGroupMember",
+          "FieldName": "MoveGroup",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorStringValue, Assembly-CSharp",
+          "Value": "",
+          "ClassName": "SectionMember",
+          "FieldName": "Sections",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        }
+      ]
+    },
+    "CustomInspectorBoolValues": {
+      "$type": "System.Collections.Generic.List`1[[CustomInspectorBoolValue, Assembly-CSharp]], mscorlib",
+      "$values": [
+        {
+          "$type": "CustomInspectorBoolValue, Assembly-CSharp",
+          "Value": false,
+          "ClassName": "LevelEditorDisableColliders",
+          "FieldName": "DisableColliders",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        }
+      ]
+    },
+    "CustomInspectorColorValues": {
+      "$type": "System.Collections.Generic.List`1[[CustomInspectorColorValue, Assembly-CSharp]], mscorlib",
+      "$values": [
+        {
+          "$type": "CustomInspectorColorValue, Assembly-CSharp",
+          "Value": {
+            "$type": "UnityEngine.Color, UnityEngine.CoreModule",
+            "r": 0.0,
+            "g": 0.0,
+            "b": 0.0,
+            "a": 0.0
+          },
+          "ClassName": "ReplaceMaterial",
+          "FieldName": "Color",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        }
+      ]
+    },
+    "Children": {
+      "$type": "System.Collections.Generic.List`1[[LevelEditorLevelObject, Assembly-CSharp]], mscorlib",
+      "$values": []
+    }
+  },
+  "water": {
+    "$type": "LevelEditorLevelObject, Assembly-CSharp",
+    "Name": "CubeTransparent(Clone)",
+    "UniqueIndex": 495,
+    "LevelObjectEntry": {
+      "$type": "LevelObjectEntry, Assembly-CSharp",
+      "DisplayName": "CubeTransparent",
+      "PathUnderResources": "Prefabs/LevelObjects/Primitives/CubeTransparent",
+      "PreviewPathUnderResources": "Prefabs/LevelObjects/Primitives/CubeTransparent.png"
+    },
+    "Transform": {
+      "$type": "LevelEditorTransform, Assembly-CSharp",
+      "Position": {
+        "$type": "System.Single[], mscorlib",
+        "$values": [
+          27.61602,
+          0.5,
+          -39.443
+        ]
+      },
+      "Rotation": {
+        "$type": "System.Single[], mscorlib",
+        "$values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "Scale": {
+        "$type": "System.Single[], mscorlib",
+        "$values": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "CustomInspectorFloatValues": {
+      "$type": "System.Collections.Generic.List`1[[CustomInspectorFloatValue, Assembly-CSharp]], mscorlib",
+      "$values": [
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 0.0,
+          "ClassName": "ReplaceMaterial",
+          "FieldName": "GlowAmount",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 0.5,
+          "ClassName": "ReplaceMaterial",
+          "FieldName": "Alpha",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 0.0,
+          "ClassName": "ReplaceMaterial",
+          "FieldName": "Metallic",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 0.0,
+          "ClassName": "ReplaceMaterial",
+          "FieldName": "Smoothness",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        }
+      ]
+    },
+    "CustomInspectorIntValues": {
+      "$type": "System.Collections.Generic.List`1[[CustomInspectorIntValue, Assembly-CSharp]], mscorlib",
+      "$values": [
+        {
+          "$type": "CustomInspectorIntValue, Assembly-CSharp",
+          "Value": 0,
+          "ClassName": "ReplaceMaterial",
+          "FieldName": "Skin",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        }
+      ]
+    },
+    "CustomInspectorStringValues": {
+      "$type": "System.Collections.Generic.List`1[[CustomInspectorStringValue, Assembly-CSharp]], mscorlib",
+      "$values": [
+        {
+          "$type": "CustomInspectorStringValue, Assembly-CSharp",
+          "Value": "",
+          "ClassName": "MoveGroupMember",
+          "FieldName": "MoveGroup",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorStringValue, Assembly-CSharp",
+          "Value": "",
+          "ClassName": "SectionMember",
+          "FieldName": "Sections",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        }
+      ]
+    },
+    "CustomInspectorBoolValues": {
+      "$type": "System.Collections.Generic.List`1[[CustomInspectorBoolValue, Assembly-CSharp]], mscorlib",
+      "$values": [
+        {
+          "$type": "CustomInspectorBoolValue, Assembly-CSharp",
+          "Value": false,
+          "ClassName": "LevelEditorDisableColliders",
+          "FieldName": "DisableColliders",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        }
+      ]
+    },
+    "CustomInspectorColorValues": {
+      "$type": "System.Collections.Generic.List`1[[CustomInspectorColorValue, Assembly-CSharp]], mscorlib",
+      "$values": [
+        {
+          "$type": "CustomInspectorColorValue, Assembly-CSharp",
+          "Value": {
+            "$type": "UnityEngine.Color, UnityEngine.CoreModule",
+            "r": 1.0,
+            "g": 1.0,
+            "b": 1.0,
+            "a": 1.0
+          },
+          "ClassName": "ReplaceMaterial",
+          "FieldName": "Color",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        }
+      ]
+    },
+    "Children": {
+      "$type": "System.Collections.Generic.List`1[[LevelEditorLevelObject, Assembly-CSharp]], mscorlib",
+      "$values": []
+    }
+  },
+  "light": {
+    "$type": "LevelEditorLevelObject, Assembly-CSharp",
+    "Name": "LevelLightSettings(Clone)",
+    "UniqueIndex": 19,
+    "LevelObjectEntry": {
+      "$type": "LevelObjectEntry, Assembly-CSharp",
+      "DisplayName": "LevelLightSettings",
+      "PathUnderResources": "Prefabs/LevelObjects/Settings/LevelLightSettings",
+      "PreviewPathUnderResources": "Prefabs/LevelObjects/Settings/LevelLightSettings.png"
+    },
+    "Transform": {
+      "$type": "LevelEditorTransform, Assembly-CSharp",
+      "Position": {
+        "$type": "System.Single[], mscorlib",
+        "$values": [
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "Rotation": {
+        "$type": "System.Single[], mscorlib",
+        "$values": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ]
+      },
+      "Scale": {
+        "$type": "System.Single[], mscorlib",
+        "$values": [
+          1.0,
+          1.0,
+          1.0
+        ]
+      }
+    },
+    "CustomInspectorFloatValues": {
+      "$type": "System.Collections.Generic.List`1[[CustomInspectorFloatValue, Assembly-CSharp]], mscorlib",
+      "$values": [
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 58.0,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "DirectionalRotationX",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 315.0,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "DirectionalRotationY",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 1.0,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "DirectionalIntensity",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 0.632,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "DirectionalShadowStrength",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 0.0,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "SunSize",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 10.0,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "SunSizeConvergence",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 1.0,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "AtmosphereThickness",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 1.2,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "SkyExposure",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 1.4,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "SkyTopExponent",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 2.5,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "SkyBottomExponent",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 1.0,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "SkyIntensity",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 1000.0,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "FogStartDistance",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 2000.0,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "FogEndDistance",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 0.666,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "CameraColorBlend",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorFloatValue, Assembly-CSharp",
+          "Value": 1.0,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "CameraExposure",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        }
+      ]
+    },
+    "CustomInspectorIntValues": {
+      "$type": "System.Collections.Generic.List`1[[CustomInspectorIntValue, Assembly-CSharp]], mscorlib",
+      "$values": [
+        {
+          "$type": "CustomInspectorIntValue, Assembly-CSharp",
+          "Value": 3,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "SkyboxIndex",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": true
+        },
+        {
+          "$type": "CustomInspectorIntValue, Assembly-CSharp",
+          "Value": 0,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "CameraColorGrading",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        }
+      ]
+    },
+    "CustomInspectorStringValues": {
+      "$type": "System.Collections.Generic.List`1[[CustomInspectorStringValue, Assembly-CSharp]], mscorlib",
+      "$values": [
+        {
+          "$type": "CustomInspectorStringValue, Assembly-CSharp",
+          "Value": "",
+          "ClassName": "SectionMember",
+          "FieldName": "Sections",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        }
+      ]
+    },
+    "CustomInspectorBoolValues": {
+      "$type": "System.Collections.Generic.List`1[[CustomInspectorBoolValue, Assembly-CSharp]], mscorlib",
+      "$values": [
+        {
+          "$type": "CustomInspectorBoolValue, Assembly-CSharp",
+          "Value": false,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "IsActive",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorBoolValue, Assembly-CSharp",
+          "Value": true,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "EnableDirectionalLight",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": true
+        },
+        {
+          "$type": "CustomInspectorBoolValue, Assembly-CSharp",
+          "Value": true,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "AmbientUsesSkybox",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": true
+        },
+        {
+          "$type": "CustomInspectorBoolValue, Assembly-CSharp",
+          "Value": true,
+          "ClassName": "LevelLightSettings",
+          "FieldName": "FogEnabled",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": true
+        }
+      ]
+    },
+    "CustomInspectorColorValues": {
+      "$type": "System.Collections.Generic.List`1[[CustomInspectorColorValue, Assembly-CSharp]], mscorlib",
+      "$values": [
+        {
+          "$type": "CustomInspectorColorValue, Assembly-CSharp",
+          "Value": {
+            "$type": "UnityEngine.Color, UnityEngine.CoreModule",
+            "r": 1.0,
+            "g": 0.956862748,
+            "b": 0.721568644,
+            "a": 1.0
+          },
+          "ClassName": "LevelLightSettings",
+          "FieldName": "DirectionalColor",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorColorValue, Assembly-CSharp",
+          "Value": {
+            "$type": "UnityEngine.Color, UnityEngine.CoreModule",
+            "r": 0.5411765,
+            "g": 0.4117647,
+            "b": 0.4117647,
+            "a": 1.0
+          },
+          "ClassName": "LevelLightSettings",
+          "FieldName": "AmbientColor",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorColorValue, Assembly-CSharp",
+          "Value": {
+            "$type": "UnityEngine.Color, UnityEngine.CoreModule",
+            "r": 0.5019608,
+            "g": 0.5019608,
+            "b": 0.5019608,
+            "a": 1.0
+          },
+          "ClassName": "LevelLightSettings",
+          "FieldName": "SkyTint",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorColorValue, Assembly-CSharp",
+          "Value": {
+            "$type": "UnityEngine.Color, UnityEngine.CoreModule",
+            "r": 0.375,
+            "g": 0.375,
+            "b": 0.375,
+            "a": 1.0
+          },
+          "ClassName": "LevelLightSettings",
+          "FieldName": "GroundTint",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorColorValue, Assembly-CSharp",
+          "Value": {
+            "$type": "UnityEngine.Color, UnityEngine.CoreModule",
+            "r": 0.0,
+            "g": 0.105882354,
+            "b": 0.470588237,
+            "a": 1.0
+          },
+          "ClassName": "LevelLightSettings",
+          "FieldName": "SkyColor",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorColorValue, Assembly-CSharp",
+          "Value": {
+            "$type": "UnityEngine.Color, UnityEngine.CoreModule",
+            "r": 0.6901961,
+            "g": 0.8117647,
+            "b": 1.0,
+            "a": 1.0
+          },
+          "ClassName": "LevelLightSettings",
+          "FieldName": "HorizonColor",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorColorValue, Assembly-CSharp",
+          "Value": {
+            "$type": "UnityEngine.Color, UnityEngine.CoreModule",
+            "r": 0.0383143425,
+            "g": 0.0739266351,
+            "b": 0.1981132,
+            "a": 1.0
+          },
+          "ClassName": "LevelLightSettings",
+          "FieldName": "GroundColor",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        },
+        {
+          "$type": "CustomInspectorColorValue, Assembly-CSharp",
+          "Value": {
+            "$type": "UnityEngine.Color, UnityEngine.CoreModule",
+            "r": 0.1786668,
+            "g": 0.3177611,
+            "b": 0.6886792,
+            "a": 1.0
+          },
+          "ClassName": "LevelLightSettings",
+          "FieldName": "FogColor",
+          "OverrideClassDisplayName": null,
+          "IsHiddenField": false,
+          "IsHiddenFromNonUnityEditor": false,
+          "ChangesFieldVisibility": false
+        }
+      ]
+    },
+    "Children": {
+      "$type": "System.Collections.Generic.List`1[[LevelEditorLevelObject, Assembly-CSharp]], mscorlib",
+      "$values": []
+    }
+  }
+}
