@@ -13,6 +13,7 @@ public class NavalAlliedCrew : MonoBehaviour
     private NavalStations stations;
     private readonly NavalCrewController roles=new NavalCrewController();
     public int LivingCrew {get{int n=0;if(crew!=null)foreach(Character sailor in crew)if(sailor!=null&&sailor.IsAlive())n++;return n;}}
+    public bool NeedsRetreat {get{return roles.NeedsRetreat;}}
     public bool HasHelmsman { get { return roles.HasHelmsman; } }
     private Vector3 Home(int i){return new Vector3(i%2==0?-1.8f:1.8f,0.825f,4.9f-i/2*.9f);}
     public void Initialize(FirstPersonMover owner,NavalHull ship,NavalStructure frame,NavalStations controls,float feet)

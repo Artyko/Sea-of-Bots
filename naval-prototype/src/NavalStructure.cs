@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 // A fixed attachment graph is built in the intact configuration. Gun aiming
@@ -17,7 +17,7 @@ public class NavalStructure : MonoBehaviour
     public void Initialize(NavalHull owner)
     {
         hull=owner;
-        foreach(NavalHullVoxel cell in hull.Voxels)if(!cell.ManagedRig)
+        foreach(NavalHullVoxel cell in hull.Voxels)if(!cell.ManagedRig&&!cell.MovableEquipment)
         {
             cells.Add(cell); parents.Add(cell.transform.parent);
             positions.Add(cell.transform.localPosition); sizes.Add(cell.transform.localScale);

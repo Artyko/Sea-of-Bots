@@ -41,8 +41,8 @@ public partial class NavalSailorRescue
         if(Time.time<escapeRetry)return;
         if(escapeRoute.Count==0)PlanHoldEscape();
         NavalWalkPoint waypoint=escapeRoute[0];Vector3 target=new Vector3(waypoint.X,waypoint.Y,waypoint.Z);
-        if(escapeShip.Bilge!=null)escapeShip.Bilge.RequestPassage(escapeFeet,target);
-        Vector3 offset=ship.TransformVector(target-escapeFeet),before=escapeFeet;
+        Vector3 movementTarget=escapeShip.Bilge!=null?escapeShip.Bilge.PassageTarget(escapeFeet,target,worker,dt):target;
+        Vector3 offset=ship.TransformVector(movementTarget-escapeFeet),before=escapeFeet;
         Vector3 look=offset;look.y=0f;
         if(look.sqrMagnitude>.01f)robot.transform.rotation=Quaternion.RotateTowards(robot.transform.rotation,Quaternion.LookRotation(look),360f*dt);
         bool stairs=NavalWalkRoutes.InStairwell(escapeFeet.x,escapeFeet.y,escapeFeet.z,escapeShip.Definition.StairWidth*.5f+.175f)||NavalWalkRoutes.InStairwell(target.x,target.y,target.z,escapeShip.Definition.StairWidth*.5f+.175f);

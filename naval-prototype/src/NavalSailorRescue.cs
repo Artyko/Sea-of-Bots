@@ -10,7 +10,7 @@ public partial class NavalSailorRescue : MonoBehaviour
     private int side,stage;
     private bool climbing;
     private Vector3 feet;
-    private float scanAt,headOffset;
+    private float scanAt,headOffset,maintenanceSubmergedAt=-1f;
     private static readonly FieldInfo Velocity=typeof(FirstPersonMover).GetField("_velocity",BindingFlags.Instance|BindingFlags.NonPublic);
     public void Initialize(Character sailor,NavalRepairSailor repair,NavalHull ship)
     {
@@ -27,11 +27,17 @@ public partial class NavalSailorRescue : MonoBehaviour
         NavalBoarder boarder=GetComponent<NavalBoarder>();if(boarder!=null&&boarder.InFlight)return;
         Vector3 foot=robot.transform.position-Vector3.up*worker.FootOffset;
         float depth=world.WaterLevelAt(foot)-foot.y;
-        if(depth<0.9f)return;
+        if(depth<0.9f){maintenanceSubmergedAt=-1f;return;}
         RaycastHit support;
         bool standing=Physics.Raycast(foot+Vector3.up*0.25f,Vector3.down,out support,0.55f,
             PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore);
-        if(standing&&depth<worker.FootOffset+headOffset)return;
+        if(depth<worker.FootOffset+headOffset)
+        {maintenanceSubmergedAt=-1f;if(standing)return;}
+        else if(maintenanceSubmergedAt<0f)maintenanceSubmergedAt=Time.time;
+        // A short repair/pump task may finish using the existing 30-second air
+        // reserve. Do not interrupt it immediately just because the head dips.
+        if(worker.MaintenanceDuty&&InteriorShip(foot)!=null&&(standing||worker.RepairAccessActive)&&
+            (depth<worker.FootOffset+headOffset||maintenanceSubmergedAt>=0f&&Time.time-maintenanceSubmergedAt<10f))return;
         worker.BeginRescue();if(boarder!=null)boarder.SuspendForRescue();scanAt=0f;climbing=false;chosen=null;
         NavalHull interior=InteriorShip(foot);if(interior!=null)BeginHoldEscape(interior);
     }

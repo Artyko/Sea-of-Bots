@@ -1,10 +1,10 @@
 ﻿{
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v64.dll",
+  "MainDLLFileName": "NavalPrototype-v69.dll",
   "Author": "Kirill",
-  "Version": 64,
-  "Description": "Underwater tint and depth indication in submerged holds including third-person head submersion; shared subtle working-cycle bar above the friendly bilge pump.",
+  "Version": 69,
+  "Description": "Sloop compartments, flood boards and bilge pump; shared tactical retreat while guns are unmanned and crew fight flooding.",
   "ModDependencies": [],
   "Tags": []
 }

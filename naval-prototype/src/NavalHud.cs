@@ -52,7 +52,7 @@ public partial class NavalTestWorld
         NavalShipDefinition definition=ship!=null?ship.Definition:own?NavalSessionSettings.PlayerShip:NavalSessionSettings.EnemyShip;
         float line=y+33f;
         Row(x+12f,line,"Тип",ShipName(definition));line+=18f;
-        Row(x+12f,line,"Состояние",ship==null?"Не создан":ship.Sunk?"Тонет":"На плаву");line+=18f;
+        Row(x+12f,line,"Состояние",ship==null?"Не создан":ship.Sunk?"Тонет":(own?retreat.Active:enemy.Retreating)?"Отход для ремонта":"На плаву");line+=18f;
         if(ship!=null)
         {
             Row(x+12f,line,"Матросы",(own?(allies!=null?allies.LivingCrew:0):enemy.LivingCrew)+" / "+definition.CrewCount);line+=18f;
@@ -64,7 +64,7 @@ public partial class NavalTestWorld
             Row(x+12f,line,"Вода",ship.Volume.ToString("F1")+" м³");line+=18f;
             Row(x+12f,line,"Лев. / прав.",ship.LeftWater.ToString("F0")+" / "+ship.RightWater.ToString("F0")+" м³");line+=18f;
             Row(x+12f,line,"Приток",ship.Inflow.ToString("F2")+" м³/с");line+=18f;
-            Row(x+12f,line,"Повреждения",ship.HoleCount+" вокс.");
+            Row(x+12f,line,ship.Definition.Compartments?"Поврежд. / щиты":"Повреждения",ship.HoleCount+(ship.Definition.Compartments&&ship.Bilge!=null?" / "+ship.Bilge.ShieldSummary:" вокс."));
         }
         GUI.Label(new Rect(x+12f,y+234f,width-24f,18f),own?"Сменить свой — начать бой заново":"Заменить противника — 250 м",hudText);
         bool enabled=GUI.enabled;
@@ -96,7 +96,7 @@ public partial class NavalTestWorld
             string[,] rows={
                 {"F4","Выбор кораблей"},{"F6","Включить / выключить мод"},{"F7","Сильные / слабые волны"},
                 {"F8","Вернуться на палубу"},{"F9","Пробоина слева"},{"F10 (держать)","Тестовая откачка"},
-                {"F11","Пробоина справа"},{"F12","Убрать / создать врага"},{"E","Станция / дверь / лестница"},
+                {"F11","Пробоина справа"},{"F12","Убрать / создать врага"},{"E","Станция / лестница"},
                 {"W A S D","Ходьба / управление"},{"ЛКМ / Space","Выстрел из пушки"},{"Space в воде","Подняться к поверхности"},
                 {"Ctrl в воде","Погружаться"},{"G","Повредить выбранное"},{"R (держать)","Чинить выбранное"},
                 {"Shift + R","Восстановить судно"},{"Q у помпы","Выбрать режим помпы"},{"T (держать)","Работать помпой"},{"H","Скрыть список клавиш"}
@@ -110,7 +110,7 @@ public partial class NavalTestWorld
         float infoY=showHelp?750f:330f;
         string distance=enemy!=null?Vector3.Distance(boat.position,enemy.Boat.position).ToString("F0")+" м":"—";
         GUI.Label(new Rect(16f,infoY,650f,20f),"До противника: "+distance+"  |  "+(swimming?"Плавание":"На ногах")+"  |  Волны: "+(rough?"сильные":"слабые"),hudText);
-        GUI.Label(new Rect(16f,infoY+20f,650f,20f),"v64  |  FPS: "+(1000f/Mathf.Max(1f,frameMilliseconds)).ToString("F0")+"  |  Вода CPU: "+ocean.BuildMilliseconds.ToString("F1")+" мс",hudText);
+        GUI.Label(new Rect(16f,infoY+20f,650f,20f),"v69  |  FPS: "+(1000f/Mathf.Max(1f,frameMilliseconds)).ToString("F0")+"  |  Вода CPU: "+ocean.BuildMilliseconds.ToString("F1")+" мс",hudText);
         GUI.matrix=previous;
     }
 }

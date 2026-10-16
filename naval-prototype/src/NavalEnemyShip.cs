@@ -27,6 +27,8 @@ public class NavalEnemyShip : MonoBehaviour
     private NavalRepairSailor[] repairers;
     private readonly List<Material> materials=new List<Material>();
     private float heading,speed,verticalSpeed,footOffset,retryCrew,rudder;
+    private readonly NavalRetreatState retreat=new NavalRetreatState();
+    public bool Retreating {get{return retreat.Active;}}
     private float nextTack;
     private float orbitSide=1f;
     private bool helmUseful=true;
@@ -119,6 +121,7 @@ public class NavalEnemyShip : MonoBehaviour
             if(!repairers[0].RepairDuty)
                 repairers[0].SetPost(helmUseful?stations.Post(0):new Vector3(-1.7f,0.825f,-4.5f));
         }
+        retreat.Step(dt,crewRoles.NeedsRetreat,Hull.HasActiveLeaks||Hull.Volume>.12f,target!=null&&!Hull.Sunk);
         float throttle=0f,turn=0f;
         if(!Hull.Sunk&&CanHelm()&&stations.IsFunctional(0))
         {
@@ -127,11 +130,13 @@ public class NavalEnemyShip : MonoBehaviour
             Vector3 radial=toward.normalized;
             Vector3 desired=Vector3.Cross(Vector3.up,radial)*orbitSide+radial*NavalGunneryMath.ApproachWeight(distance);
             if(stations.AllGunsBroken)desired=radial;
+            if(retreat.Active)desired=-radial+Vector3.Cross(Vector3.up,radial)*orbitSide*.2f;
             if(NavalWorldMap.Active!=null)desired=NavalWorldMap.Active.AvoidLand(Boat.position,desired,Boat);
             float wanted=Mathf.Atan2(desired.x,desired.z)*Mathf.Rad2Deg;
             turn=Mathf.Clamp(Mathf.DeltaAngle(heading,wanted)/25f,-1f,1f);
             throttle=distance<24f?0.35f:0.8f;
             if(stations.AllGunsBroken)throttle=0.7f;
+            if(retreat.Active)throttle=1f;
         }
         speed=NavalRigMath.StepSpeed(speed,throttle,rig.SailPowerFactor,dt);
         float depth=Hull.Volume/(BoatDimensions.HoldArea*Hull.AreaScale);
@@ -191,7 +196,7 @@ public class NavalEnemyShip : MonoBehaviour
         if(camera!=null)for(int i=0;i<Hull.Definition.CrewCount;i++)if(Alive(i))
         {
             Vector3 screen=camera.WorldToScreenPoint(crew[i].transform.position+Vector3.up*2.2f);
-            if(screen.z>0f)GUI.Label(new Rect(screen.x-85f,Screen.height-screen.y-20f,190f,25f),i==0?(repairers[0].Rescuing?repairers[0].RescueStatus:repairers[0].Busy?repairers[0].Status:helmUseful?"Enemy helmsman":"Helm released"):crewRoles.Role(i-1));
+            if(screen.z>0f)GUI.Label(new Rect(screen.x-85f,Screen.height-screen.y-20f,190f,25f),i==0?(repairers[0].Rescuing?repairers[0].RescueStatus:repairers[0].Busy?repairers[0].Status:helmUseful?(retreat.Active?"Отход для ремонта":"Enemy helmsman"):"Helm released"):crewRoles.Role(i-1));
         }
     }
     private void OnDestroy()

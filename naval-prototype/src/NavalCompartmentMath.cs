@@ -1,7 +1,9 @@
-using System;
+﻿using System;
 public static class NavalCompartmentMath
 {
     public const float WallX=1.4375f,DoorZ=2.625f;
+    // A 30 cm coaming, independent of ship scale.
+    public static float CoamingHeight(float scale){return .3f/Math.Max(.01f,scale);}
     public static int Region(float x,float z)
     {return Math.Abs(x)<WallX?0:(x<0f?1:3)+(z>=0f?1:0);}
     public static float Move(NavalFloodGrid grid,int from,int to,float requested)

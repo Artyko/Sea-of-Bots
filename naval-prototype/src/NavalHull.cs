@@ -9,6 +9,7 @@ public class NavalHullVoxel : MonoBehaviour
     public bool HydraulicShell = true;
     public bool InternalBarrier;
     public bool ManagedRig;
+    public bool MovableEquipment;
     public bool RigFabric;
     public bool Detached;
     public bool Batched;

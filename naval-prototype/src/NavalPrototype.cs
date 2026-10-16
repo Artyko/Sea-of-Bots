@@ -94,6 +94,7 @@ public partial class NavalTestWorld : MonoBehaviour
     private NavalWorldMap seaMap;
     private float frameMilliseconds=16.7f;
     private bool rough = true;
+    private readonly NavalRetreatState retreat=new NavalRetreatState();
     private float heading;
     private float rudder;
     private NavalBoarding boarding;
@@ -188,7 +189,7 @@ public partial class NavalTestWorld : MonoBehaviour
         ReturnToDeck();
         Active = this;
         ToggleEnemy();
-        Debug.Log("[NavalPrototype] v64 ships and waves started on native Naval Ocean editor map.");
+        Debug.Log("[NavalPrototype] v69 ships and waves started on native Naval Ocean editor map.");
     }
 
     private Material MakeMaterial(Color color)
@@ -267,6 +268,7 @@ public partial class NavalTestWorld : MonoBehaviour
         hull.Step(boat, ocean, dt, Input.GetKey(KeyCode.F10));
         float depth = hull.Volume / (HoldArea * hull.AreaScale);
         UpdateHoldVisuals();
+        retreat.Step(dt,allies!=null&&allies.NeedsRetreat,hull.HasActiveLeaks||hull.Volume>.12f,EnemyBoat!=null&&!hull.Sunk&&!stations.AtHelm);
         float throttle = stations.AtHelm ? stations.ForwardInput : 0f;
         float turn = stations.AtHelm ? stations.TurnInput : 0f;
         if(!stations.AtHelm&&allies!=null&&allies.HasHelmsman&&stations.IsFunctional(0)&&EnemyBoat!=null&&!hull.Sunk)
@@ -275,10 +277,12 @@ public partial class NavalTestWorld : MonoBehaviour
             float distance=toward.magnitude;Vector3 radial=toward.normalized;
             Vector3 desired=Vector3.Cross(Vector3.up,radial)+radial*Mathf.Clamp((distance-45f)/20f,-1f,1f);
             if(stations.AllGunsBroken)desired=radial;
+            if(retreat.Active)desired=-radial+Vector3.Cross(Vector3.up,radial)*.2f;
             if(seaMap!=null)desired=seaMap.AvoidLand(boat.position,desired,boat);
             turn=Mathf.Clamp(Mathf.DeltaAngle(heading,Mathf.Atan2(desired.x,desired.z)*Mathf.Rad2Deg)/25f,-1f,1f);
             throttle=distance<24f?0.35f:0.8f;
             if(stations.AllGunsBroken)throttle=0.7f;
+            if(retreat.Active)throttle=1f;
         }
         rig.RefreshRig();
         speed = NavalRigMath.StepSpeed(speed, throttle, rig.SailPowerFactor, dt);

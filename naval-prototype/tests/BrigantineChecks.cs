@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 class BrigantineChecks
 {
     static void Check(bool ok,string name){if(!ok)throw new Exception(name);}
@@ -8,7 +8,7 @@ class BrigantineChecks
         var stationState=new NavalStationState();stationState.PressInteract(4,false,4);Check(stationState.Active==4,"Fourth gun can be operated by player");
         var old=NavalShipDefinition.Sloop;var brig=NavalShipDefinition.Brigantine;
         Check((.825f-BoatDimensions.HoldFloor)*brig.Scale/NavalWalkRoutes.StepCount<.25f,"Brig stairs stay below controller step height");
-        Check(old.Scale==2f&&old.GunCount==2&&old.MastZ.Length==1&&!old.Compartments,"Legacy profile retained");
+        Check(old.Scale==2f&&old.GunCount==2&&old.MastZ.Length==1&&old.Compartments,"Sloop size, guns and crew retained with shared compartments");
         Check(brig.Scale==3f&&brig.GunCount==4&&brig.CrewCount==4&&brig.MastZ.Length==2&&brig.Compartments,"Brigantine profile");
         Check(NavalShipDefinition.GunSide(0)==NavalShipDefinition.GunSide(2)&&NavalShipDefinition.GunZ(0)!=NavalShipDefinition.GunZ(2),"Two distinct guns per broadside");
         Check(Math.Abs(NavalShipDefinition.HelmZ(brig)-brig.MastZ[1])>1f,"Helm clear of aft mast");
