@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Reflection;
 public class NavalDeckDefense
 {
@@ -26,7 +26,7 @@ public class NavalDeckDefense
     }
     public void Tick()
     {
-        int sample=Alive(0)?0:Alive(1)?1:-1;
+        int sample=-1;for(int i=0;i<crew.Length;i++)if(Alive(i)){sample=i;break;}
         if(sample<0||hull.Sunk){Stop();return;}
         if(intruder!=null&&(!OnDeck(intruder)||intruder.IsPlayerTeam==crew[sample].IsPlayerTeam))intruder=null;
         if(Time.time>=scanAt)
@@ -40,7 +40,8 @@ public class NavalDeckDefense
         if(!Alive(Guard))
         {
             Stop();
-            int chosen=NavalBoardingRules.ChooseGuard(Alive(0),Alive(1),workers[0]!=null&&workers[0].RepairDuty,workers[1]!=null&&workers[1].RepairDuty);
+            int chosen=-1;for(int pass=0;pass<2&&chosen<0;pass++)for(int i=0;i<crew.Length;i++)if(Alive(i)&&(pass>0||!workers[i].RepairDuty)){chosen=i;break;}
+            if(chosen<0)return;
             Guard=chosen;workers[Guard].BeginDefense();crew[Guard].ActivateAI();
             previousBoat=hull.Root.localToWorldMatrix;
         }

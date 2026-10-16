@@ -71,7 +71,7 @@ public class NavalWorldMap : MonoBehaviour
         int count;
         while(true)
         {
-            count=Physics.OverlapBoxNonAlloc(point+Vector3.down*1.5f,new Vector3(6.5f,1.8f,12.5f),overlap,heading,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore);
+            count=Physics.OverlapBoxNonAlloc(point+Vector3.down*1.5f,new Vector3(6.5f,1.8f,12.5f)*(Mathf.Abs(ship.lossyScale.x)/2f),overlap,heading,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore);
             if(count<overlap.Length)break;overlap=new Collider[overlap.Length*2];
         }
         for(int i=0;i<count;i++)if(Land(overlap[i])){cache.Clear=false;break;}
@@ -83,7 +83,7 @@ public class NavalWorldMap : MonoBehaviour
         cache.AvoidAt=Time.time+0.2f;cache.Avoid=Vector3.zero;int count;
         while(true)
         {
-            count=Physics.SphereCastNonAlloc(point+Vector3.down,8f,direction.normalized,casts,65f,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore);
+            count=Physics.SphereCastNonAlloc(point+Vector3.down,8f*(Mathf.Abs(ship.lossyScale.x)/2f),direction.normalized,casts,65f,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore);
             if(count<casts.Length)break;casts=new RaycastHit[casts.Length*2];
         }
         for(int i=0;i<count;i++)if(Land(casts[i].collider)){Vector3 normal=casts[i].normal;normal.y=0f;cache.Avoid=normal.normalized*2.5f;break;}

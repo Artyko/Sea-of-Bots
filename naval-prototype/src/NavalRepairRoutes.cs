@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 public static class NavalRepairRoutes
 {
@@ -7,11 +7,37 @@ public static class NavalRepairRoutes
         if(route.Count>0){NavalWalkPoint last=route[route.Count-1];if(Math.Abs(last.X-x)+Math.Abs(last.Y-y)+Math.Abs(last.Z-z)<0.01f)return;}
         route.Add(new NavalWalkPoint(x,y,z));
     }
-    public static List<NavalWalkPoint> Plan(NavalWalkPoint start,NavalWalkPoint goal)
+    public static List<NavalWalkPoint> Plan(NavalWalkPoint start,NavalWalkPoint goal,bool compartments=false,float stairWidth=1.85f)
+    {
+        if(!compartments)return OpenPlan(start,goal,stairWidth);
+        List<NavalWalkPoint> result=new List<NavalWalkPoint>();
+        if(start.Y<.3f&&goal.Y<.3f&&NavalCompartmentMath.Region(start.X,start.Z)!=0&&NavalCompartmentMath.Region(start.X,start.Z)==NavalCompartmentMath.Region(goal.X,goal.Z))
+        {
+            float x=start.X<0f?-2f:2f;Add(result,x,BoatDimensions.HoldFloor,start.Z);Add(result,x,BoatDimensions.HoldFloor,goal.Z);Add(result,goal.X,goal.Y,goal.Z);return result;
+        }
+        if(start.Y<0.3f&&NavalCompartmentMath.Region(start.X,start.Z)!=0)
+        {
+            float side=start.X<0f?-1f:1f,z=start.Z<0f?-NavalCompartmentMath.DoorZ:NavalCompartmentMath.DoorZ;
+            Add(result,side*2f,BoatDimensions.HoldFloor,start.Z);Add(result,side*2f,BoatDimensions.HoldFloor,z);
+            Add(result,side*.95f,BoatDimensions.HoldFloor,z);start=result[result.Count-1];
+        }
+        NavalWalkPoint destination=goal;
+        bool room=goal.Y<0.3f&&NavalCompartmentMath.Region(goal.X,goal.Z)!=0;
+        if(room)destination=new NavalWalkPoint(goal.X<0f?-.95f:.95f,BoatDimensions.HoldFloor,goal.Z<0f?-NavalCompartmentMath.DoorZ:NavalCompartmentMath.DoorZ);
+        foreach(NavalWalkPoint p in OpenPlan(start,destination,stairWidth))
+        {float x=p.Y<0.3f?Math.Max(-.95f,Math.Min(.95f,p.X)):p.X;Add(result,x,p.Y,p.Z);}
+        if(room)
+        {
+            float side=goal.X<0f?-1f:1f;Add(result,side*2f,BoatDimensions.HoldFloor,destination.Z);
+            Add(result,side*2f,BoatDimensions.HoldFloor,goal.Z);Add(result,goal.X,goal.Y,goal.Z);
+        }
+        return result;
+    }
+    private static List<NavalWalkPoint> OpenPlan(NavalWalkPoint start,NavalWalkPoint goal,float stairWidth)
     {
         List<NavalWalkPoint> route=new List<NavalWalkPoint>();
         bool upper=goal.Y>0.3f;
-        if(NavalWalkRoutes.InStairwell(start.X,start.Y,start.Z))
+        if(NavalWalkRoutes.InStairwell(start.X,start.Y,start.Z,stairWidth*.5f+.175f))
         {
             Add(route,0f,start.Y,start.Z);
             if(upper)

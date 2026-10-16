@@ -7,6 +7,7 @@ public class NavalHullVoxel : MonoBehaviour
     public float OpeningArea;
     public bool Missing;
     public bool HydraulicShell = true;
+    public bool InternalBarrier;
     public bool ManagedRig;
     public bool RigFabric;
     public bool Detached;
@@ -39,10 +40,19 @@ public class NavalHull
     public int HoleCount { get; private set; }
     public float SubmergedArea { get; private set; }
     public float Inflow { get; private set; }
-    public readonly NavalFloodGrid Flood = new NavalFloodGrid(12,24,BoatDimensions.HoldWidth,BoatDimensions.HoldLength,BoatDimensions.WorldScale,BoatDimensions.Rim-BoatDimensions.HoldFloor);
+    public readonly NavalShipDefinition Definition;
+    public NavalBilgeSystem Bilge;
+    public float WorldScale {get{return Definition.Scale;}}
+    public float AreaScale {get{return Definition.AreaScale;}}
+    public float VolumeScale {get{return Definition.VolumeScale;}}
+    public readonly NavalFloodGrid Flood;
+    public NavalHull():this(NavalShipDefinition.Sloop){}
+    public NavalHull(NavalShipDefinition definition)
+    {Definition=definition;Flood=new NavalFloodGrid(12,24,BoatDimensions.HoldWidth,BoatDimensions.HoldLength,definition.Scale,definition.RimY-BoatDimensions.HoldFloor);}
     private readonly float[] floodFloors = new float[12*24];
-    public float LeftWater { get { return Flood.Side(true); } }
-    public float RightWater { get { return Flood.Side(false); } }
+    public float LeftWater { get { return SideWater(true); } }
+    public float RightWater { get { return SideWater(false); } }
+    private float SideWater(bool port){float total=Flood.Side(port);foreach(NavalRepairSailor worker in RepairWorkers)if(worker!=null&&(worker.CarriedSide<0f)==port)total+=worker.BucketWater;return total;}
     public float Volume { get { float total=Flood.Total;foreach(NavalRepairSailor worker in RepairWorkers)if(worker!=null)total+=worker.BucketWater;return total; } }
     public float WaterDepthAt(Vector3 local) { return Flood.Depth(Flood.Index(local.x,local.z)); }
     public bool Sunk;
@@ -76,8 +86,10 @@ public class NavalHull
     }
     private void Add(Transform boat, Material material, Vector3 center)
     {
-        if (BoatDimensions.IntersectsCannonPort(center.x, center.y, center.z, Cell * 0.5f, Cell * 0.5f, Cell * 0.5f)) return;
-        AddVoxel(boat, material, center, Vector3.one * Cell, true, true);
+        if (CannonPort(center.x, center.y, center.z, Cell * 0.5f, Cell * 0.5f, Cell * 0.5f)) return;
+        float low=Definition.AboveDeckY(center.y-Cell*.5f),high=Definition.AboveDeckY(center.y+Cell*.5f);
+        center.y=(low+high)*.5f;
+        AddVoxel(boat, material, center, new Vector3(Cell,high-low,Cell), true, true);
     }
     public NavalHullVoxel AddVoxel(Transform boat, Material material, Vector3 center, Vector3 size, bool shell, bool solid)
     {
@@ -98,6 +110,11 @@ public class NavalHull
         Voxels.Add(voxel);
         return voxel;
     }
+    public bool CannonPort(float x,float y,float z,float halfX,float halfY,float halfZ)
+    {
+        if(BoatDimensions.IntersectsCannonPort(x,y,z,halfX,halfY,halfZ))return true;
+        return Definition.GunCount>2&&BoatDimensions.IntersectsCannonPort(x,y,z-4.3f,halfX,halfY,halfZ);
+    }
     public void AddDecorationBox(Transform boat, Material material, Vector3 center, Vector3 size, bool solid, bool cutCannonPorts = false)
     {
         int nx = Mathf.CeilToInt(size.x / Cell), ny = Mathf.CeilToInt(size.y / Cell), nz = Mathf.CeilToInt(size.z / Cell);
@@ -106,7 +123,7 @@ public class NavalHull
         {
             Vector3 point = center + new Vector3((x + 0.5f) * cell.x - size.x * 0.5f,
                 (y + 0.5f) * cell.y - size.y * 0.5f, (z + 0.5f) * cell.z - size.z * 0.5f);
-            if (cutCannonPorts && BoatDimensions.IntersectsCannonPort(point.x, point.y, point.z, cell.x * 0.5f, cell.y * 0.5f, cell.z * 0.5f)) continue;
+            if (cutCannonPorts && CannonPort(point.x, point.y, point.z, cell.x * 0.5f, cell.y * 0.5f, cell.z * 0.5f)) continue;
             AddVoxel(boat, material, point, cell, false, solid);
         }
     }
@@ -158,9 +175,10 @@ public class NavalHull
                 BoatDimensions.HoldFloor + Flood.Depth(cellIndex),Flood.Z(cellIndex))).y;
             float sea = ocean.Height(point.x, point.z);
             // Partial submergence of a voxel opening changes its effective wet area.
-            float halfHeight = Cell * BoatDimensions.WorldScale * 0.5f * (Mathf.Abs(boat.right.y) + Mathf.Abs(boat.up.y) + Mathf.Abs(boat.forward.y));
+            Vector3 cellSize=voxel.transform.lossyScale;
+            float halfHeight=.5f*(Mathf.Abs(boat.right.y*cellSize.x)+Mathf.Abs(boat.up.y*cellSize.y)+Mathf.Abs(boat.forward.y*cellSize.z));
             float area;
-            float flow = FloodMath.OpeningFlow(voxel.OpeningArea * BoatDimensions.AreaScale, sea, internalY, point.y, halfHeight, out area);
+            float flow = FloodMath.OpeningFlow(voxel.OpeningArea * AreaScale, sea, internalY, point.y, halfHeight, out area);
             SubmergedArea += area;
             float amount = Flood.Add(cellIndex,flow * dt);
             voxel.InflowRate=Mathf.Max(0f,amount/dt);
@@ -188,18 +206,19 @@ public class NavalHull
             else if (voxel.Stream != null) voxel.Stream.gameObject.SetActive(false);
         }
         // Open gunports are the lowest intact openings above the deck.
-        Vector3 port = boat.TransformPoint(new Vector3(-BoatDimensions.HalfWidth, BoatDimensions.CannonPortSill, -1f));
-        Vector3 starboard = boat.TransformPoint(new Vector3(BoatDimensions.HalfWidth, BoatDimensions.CannonPortSill, -1f));
-        float portFlow = Mathf.Max(0f, ocean.Height(port.x, port.z) - port.y) * 0.8f;
-        float rightFlow = Mathf.Max(0f, ocean.Height(starboard.x, starboard.z) - starboard.y) * 0.8f;
-        float portAmount=Flood.Add(Flood.Index(-BoatDimensions.HalfWidth,-1f),portFlow*dt);
-        float rightAmount=Flood.Add(Flood.Index(BoatDimensions.HalfWidth,-1f),rightFlow*dt);
-        Inflow += (portAmount+rightAmount)/dt;
+        for(int gun=0;gun<Definition.GunCount;gun++)
+        {
+            float x=NavalShipDefinition.GunSide(gun)*BoatDimensions.HalfWidth,z=NavalShipDefinition.GunZ(gun);
+            Vector3 opening=boat.TransformPoint(new Vector3(x,Definition.AboveDeckY(BoatDimensions.CannonPortSill),z));
+            float flow=Mathf.Max(0f,ocean.Height(opening.x,opening.z)-opening.y)*.2f*AreaScale;
+            float accepted=Flood.Add(Flood.Index(x,z),flow*dt);Inflow+=accepted/dt;
+        }
         for(int i=0;i<Flood.Water.Length;i++)
             floodFloors[i]=boat.TransformPoint(new Vector3(Flood.X(i),BoatDimensions.HoldFloor,Flood.Z(i))).y;
+        if(Bilge!=null)Bilge.UpdateBarriers();
         Flood.Spread(dt,floodFloors,boat.up.y);
-        if(pump)Flood.Pump(BoatDimensions.PumpRate*BoatDimensions.AreaScale*dt);
-        if (Volume >= BoatDimensions.SinkVolume * BoatDimensions.VolumeScale) Sunk = true;
+        if(pump)Flood.Pump(BoatDimensions.PumpRate*AreaScale*dt);
+        if (Volume >= BoatDimensions.SinkVolume * VolumeScale) Sunk = true;
         if (Sunk) SinkDepth = Mathf.Min(5f, SinkDepth + dt * 0.2f);
     }
 }

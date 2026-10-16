@@ -3,6 +3,7 @@ using System;
 // Volume remains aboard during carrying; only Dump removes it from the ship.
 public class NavalBucketLoad
 {
+    public const float DefaultCapacity=1.8f;
     public float Amount {get;private set;}
     public float Scoop(NavalFloodGrid grid,float x,float z,float capacity,float reach)
     {

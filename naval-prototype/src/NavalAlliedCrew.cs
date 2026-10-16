@@ -1,4 +1,4 @@
-using ModLibrary;
+﻿using ModLibrary;
 using UnityEngine;
 
 public class NavalAlliedCrew : MonoBehaviour
@@ -7,22 +7,23 @@ public class NavalAlliedCrew : MonoBehaviour
     private NavalHull hull;
     private NavalStructure structure;
     private float footOffset,retry;
-    private readonly Character[] crew=new Character[2];
-    private readonly NavalRepairSailor[] workers=new NavalRepairSailor[2];
-    private readonly bool[] spawned=new bool[2];
+    private Character[] crew;
+    private NavalRepairSailor[] workers;
+    private bool[] spawned;
     private NavalStations stations;
     private readonly NavalCrewController roles=new NavalCrewController();
+    public int LivingCrew {get{int n=0;if(crew!=null)foreach(Character sailor in crew)if(sailor!=null&&sailor.IsAlive())n++;return n;}}
     public bool HasHelmsman { get { return roles.HasHelmsman; } }
-    private Vector3 Home(int i){return new Vector3(i==0?-1.7f:1.7f,0.825f,3.2f);}
+    private Vector3 Home(int i){return new Vector3(i%2==0?-1.8f:1.8f,0.825f,4.9f-i/2*.9f);}
     public void Initialize(FirstPersonMover owner,NavalHull ship,NavalStructure frame,NavalStations controls,float feet)
-    {player=owner;hull=ship;structure=frame;stations=controls;footOffset=feet*0.85f;roles.Initialize(hull,stations,crew,workers);}
+    {player=owner;hull=ship;structure=frame;stations=controls;footOffset=feet*0.85f;crew=new Character[ship.Definition.CrewCount];workers=new NavalRepairSailor[crew.Length];spawned=new bool[crew.Length];roles.Initialize(hull,stations,crew,workers);}
     private void LateUpdate()
     {
         if(player==null||!player.IsAlive()||!player.IsPlayerInputEnabled()||Time.timeScale==0f)return;
         if(Time.time>=retry)
         {
             retry=Time.time+2f;EnemyFactory factory=Singleton<EnemyFactory>.Instance;
-            if(factory!=null)for(int i=0;i<2;i++)if(!spawned[i])
+            if(factory!=null)for(int i=0;i<hull.Definition.CrewCount;i++)if(!spawned[i])
             {
                 Vector3 position=hull.Root.TransformPoint(Home(i))+hull.Root.up*footOffset;
                 Transform body=factory.SpawnEnemy(EnemyType.Hammer1,position,position+hull.Root.forward,null);
@@ -43,7 +44,7 @@ public class NavalAlliedCrew : MonoBehaviour
     private void OnGUI()
     {
         Camera camera=player!=null?player.GetPlayerCamera():null;if(camera==null)return;
-        for(int i=0;i<2;i++)if(crew[i]!=null&&crew[i].IsAlive())
+        for(int i=0;i<hull.Definition.CrewCount;i++)if(crew[i]!=null&&crew[i].IsAlive())
         {
             Vector3 screen=camera.WorldToScreenPoint(crew[i].transform.position+Vector3.up*2.2f);
             if(screen.z>0f)GUI.Label(new Rect(screen.x-90f,Screen.height-screen.y-20f,200f,25f),"Ally: "+roles.Role(i));

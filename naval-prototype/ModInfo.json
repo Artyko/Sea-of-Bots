@@ -1,10 +1,10 @@
 ﻿{
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v51.dll",
+  "MainDLLFileName": "NavalPrototype-v64.dll",
   "Author": "Kirill",
-  "Version": 51,
-  "Description": "Sailors bail flooding with visible voxel buckets, scoop and overboard pour animations; carried water remains aboard until poured.",
+  "Version": 64,
+  "Description": "Underwater tint and depth indication in submerged holds including third-person head submersion; shared subtle working-cycle bar above the friendly bilge pump.",
   "ModDependencies": [],
   "Tags": []
 }

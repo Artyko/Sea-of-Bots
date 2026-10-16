@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using UnityEngine;
 
 public class NavalUnderwater : MonoBehaviour
@@ -19,7 +19,9 @@ public class NavalUnderwater : MonoBehaviour
             effect = camera.gameObject.AddComponent<NavalWaterCamera>();
         }
         Vector3 position = camera.transform.position;
-        effect.Depth = Mathf.Max(0f, level(position) - position.y);
+        Transform head=player.GetHeadTransform();
+        Vector3 top=head!=null?head.position+Vector3.up*(.3f*Mathf.Abs(player.transform.lossyScale.y)):player.transform.position;
+        effect.Depth=NavalSubmersionMath.VisualDepth(level(position)-position.y,level(top)-top.y);
         effect.Underwater = player.IsAlive() && player.IsPlayerInputEnabled() && effect.Depth > 0.04f;
     }
     private void OnDestroy() { if (effect != null) Destroy(effect); }
@@ -66,8 +68,9 @@ public class NavalWaterCamera : MonoBehaviour
     {
         if (!Underwater) return;
         int previousDepth = GUI.depth; Color previousColor = GUI.color;
-        GUI.depth = 1000; GUI.color = new Color(0.05f, 0.35f, 0.60f, 0.25f + Mathf.Clamp01(Depth / 8f) * 0.15f);
+        GUI.depth = 1000; GUI.color = new Color(0.05f, 0.35f, 0.60f, 0.32f + Mathf.Clamp01(Depth / 10f) * 0.20f);
         GUI.DrawTexture(new Rect(0f, 0f, Screen.width, Screen.height), Texture2D.whiteTexture);
         GUI.color = previousColor; GUI.depth = previousDepth;
+        GUI.Box(new Rect(Screen.width-194f,14f,180f,26f),"ПОД ВОДОЙ | "+Depth.ToString("F1")+" м");
     }
 }

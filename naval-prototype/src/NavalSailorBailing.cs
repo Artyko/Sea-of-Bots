@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public partial class NavalRepairSailor
 {
@@ -12,7 +12,7 @@ public partial class NavalRepairSailor
     private void BailRoute(Vector3 goal)
     {
         route.Clear();stuck=0f;
-        Append(NavalRepairRoutes.Plan(new NavalWalkPoint(feet.x,feet.y,feet.z),new NavalWalkPoint(goal.x,goal.y,goal.z)));
+        Append(NavalRepairRoutes.Plan(new NavalWalkPoint(feet.x,feet.y,feet.z),new NavalWalkPoint(goal.x,goal.y,goal.z),hull.Definition.Compartments,hull.Definition.StairWidth));
     }
     private bool StartBailing()
     {
@@ -21,7 +21,7 @@ public partial class NavalRepairSailor
         for(int i=0;i<hull.Flood.Water.Length;i++)
         {
             float depth=hull.Flood.Depth(i);if(depth<0.015f)continue;
-            Vector3 point=new Vector3(hull.Flood.X(i)<0f?-1.65f:1.65f,BoatDimensions.HoldFloor,Mathf.Clamp(hull.Flood.Z(i),-5f,5f));
+            Vector3 point=new Vector3(hull.Flood.X(i)<0f?-2f:2f,BoatDimensions.HoldFloor,Mathf.Clamp(hull.Flood.Z(i),-5f,5f));
             if(Mathf.Abs(point.x-hull.Flood.X(i))>1.2f)continue;
             Vector3 bottom=boat.TransformPoint(point)+boat.up*0.5f;
             if(Physics.CheckCapsule(bottom,bottom+boat.up*1.3f,0.38f,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore))continue;
@@ -42,7 +42,7 @@ public partial class NavalRepairSailor
             if(!allowed||leak!=null)return false;
             bool otherRepair=false;
             foreach(NavalRepairSailor worker in hull.RepairWorkers)if(worker!=null&&worker!=this&&worker.HasJob)otherRepair=true;
-            bool urgent=hull.Volume>BoatDimensions.SinkVolume*BoatDimensions.VolumeScale*0.5f&&otherRepair;
+            bool urgent=hull.Volume>BoatDimensions.SinkVolume*hull.VolumeScale*0.5f&&otherRepair;
             if(!urgent)
             {
                 // Give repair jobs first choice; accepted patches retain their priority.
@@ -58,7 +58,7 @@ public partial class NavalRepairSailor
             Vector3 target=route[0];float before=Vector3.Distance(feet,target);
             Move(target,dt,route.Count==1);
             float after=Vector3.Distance(feet,target);
-            if(after<(route.Count==1?0.12f:0.28f)){route.RemoveAt(0);stuck=0f;}
+            if(NavalRouteArrival.Reached(feet.x,feet.y,feet.z,target.x,target.y,target.z,route.Count==1)){route.RemoveAt(0);stuck=0f;}
             else if(before-after<dt*0.1f)stuck+=dt;else stuck=0f;
             if(stuck>4f||feet.y<BoatDimensions.HoldFloor-0.7f)
             {CancelBailing();route.Clear();bailRetry=Time.time+8f;BeginReturn();return true;}
@@ -69,7 +69,7 @@ public partial class NavalRepairSailor
             if(bailState==1){bailState=2;bailTime=0f;}
             else if(bailState==2&&bailTime>=1.2f)
             {
-                bucketLoad.Scoop(hull.Flood,bailPickup.x,bailPickup.z,0.6f,1.5f);
+                bucketLoad.Scoop(hull.Flood,bailPickup.x,bailPickup.z,NavalBucketLoad.DefaultCapacity,1.5f);
                 if(BucketWater<=0f){CancelBailing();BeginReturn();return true;}
                 bailState=3;bailTime=0f;BailRoute(bailOutlet);
             }

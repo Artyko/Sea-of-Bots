@@ -1,7 +1,7 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Reflection;
 [DefaultExecutionOrder(350)]
-public class NavalSailorRescue : MonoBehaviour
+public partial class NavalSailorRescue : MonoBehaviour
 {
     private Character robot;
     private NavalRepairSailor worker;
@@ -33,10 +33,11 @@ public class NavalSailorRescue : MonoBehaviour
             PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore);
         if(standing&&depth<worker.FootOffset+headOffset)return;
         worker.BeginRescue();if(boarder!=null)boarder.SuspendForRescue();scanAt=0f;climbing=false;chosen=null;
+        NavalHull interior=InteriorShip(foot);if(interior!=null)BeginHoldEscape(interior);
     }
     private bool Landing(NavalSeaLadder ladder,int which)
     {
-        Vector3 point=new Vector3(which==0?-2.2f:2.2f,0.88f,3.8f);RaycastHit hit;
+        Vector3 point=new Vector3(which==0?-2.2f:2.2f,0.88f,ladder.Hull.Definition.LadderZ);RaycastHit hit;
         Vector3 world=ladder.transform.TransformPoint(point);
         return Physics.Raycast(world+ladder.transform.up*0.4f,-ladder.transform.up,out hit,0.8f,
             PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore)&&hit.collider.transform.IsChildOf(ladder.transform)&&
@@ -52,7 +53,7 @@ public class NavalSailorRescue : MonoBehaviour
             {
                 if(!ladder.Usable(i)||!Landing(ladder,i))continue;
                 NavalSwimPoint next;
-                float distance=NavalSwimPath.Route(new NavalSwimPoint(local.x,local.z),new NavalSwimPoint(i==0?-3.7f:3.7f,3.8f),out next);
+                float distance=NavalSwimPath.Route(new NavalSwimPoint(local.x,local.z),new NavalSwimPoint(i==0?-3.7f:3.7f,ladder.Hull.Definition.LadderZ),out next);
                 if(distance<nearest){nearest=distance;chosen=ladder;side=i;}
             }
         }
@@ -68,13 +69,21 @@ public class NavalSailorRescue : MonoBehaviour
         CheckForWater();NavalTestWorld world=NavalTestWorld.Active;
         if(!worker.Rescuing||robot==null||!robot.IsAlive()||world==null||!world.SimulationActive)return;
         float dt=Mathf.Min(Time.deltaTime,0.05f);robot.DisableAI();ZeroVelocity();
+        // A flooded hold is still inside a ship. Never steer through its hull
+        // toward an exterior sea ladder or lift straight into the upper deck.
+        if(escapeShip==null&&!climbing)
+        {
+            NavalHull interior=InteriorShip(robot.transform.position-Vector3.up*worker.FootOffset);
+            if(interior!=null)BeginHoldEscape(interior);
+        }
+        if(escapeShip!=null){EscapeHold(dt);return;}
         if(climbing)
         {
             if(chosen==null||!chosen.Usable(side)||!Landing(chosen,side))
             {climbing=false;chosen=null;scanAt=0f;return;}
             float sign=side==0?-1f:1f;
-            Vector3 target=stage==0?new Vector3(sign*3.7f,feet.y,3.8f):stage==1?new Vector3(sign*3.7f,2.55f,3.8f):
-                stage==2?new Vector3(sign*2.2f,2.55f,3.8f):new Vector3(sign*2.2f,0.86f,3.8f);
+            Vector3 target=stage==0?new Vector3(sign*3.7f,feet.y,chosen.Hull.Definition.LadderZ):stage==1?new Vector3(sign*3.7f,chosen.Hull.Definition.AboveDeckY(2.55f),chosen.Hull.Definition.LadderZ):
+                stage==2?new Vector3(sign*2.2f,chosen.Hull.Definition.AboveDeckY(2.55f),chosen.Hull.Definition.LadderZ):new Vector3(sign*2.2f,0.86f,chosen.Hull.Definition.LadderZ);
             feet=Vector3.MoveTowards(feet,target,1.3f*dt);Place(chosen.transform.TransformPoint(feet)+chosen.transform.up*worker.FootOffset);
             if((feet-target).sqrMagnitude<0.0001f)
             {
@@ -95,10 +104,10 @@ public class NavalSailorRescue : MonoBehaviour
         if(chosen!=null)
         {
             Vector3 local=chosen.transform.InverseTransformPoint(robot.transform.position);NavalSwimPoint next;
-            NavalSwimPath.Route(new NavalSwimPoint(local.x,local.z),new NavalSwimPoint(side==0?-3.7f:3.7f,3.8f),out next);
+            NavalSwimPath.Route(new NavalSwimPoint(local.x,local.z),new NavalSwimPoint(side==0?-3.7f:3.7f,chosen.Hull.Definition.LadderZ),out next);
             Vector3 destination=chosen.transform.TransformPoint(new Vector3(next.X,local.y,next.Z));
             direction=destination-robot.transform.position;direction.y=0f;
-            if(local.y> -1.6f&&local.y<2.7f&&Vector2.Distance(new Vector2(local.x,local.z),new Vector2(side==0?-3.7f:3.7f,3.8f))*BoatDimensions.WorldScale<1.1f)
+            if(local.y> -1.6f&&local.y<2.7f&&Vector2.Distance(new Vector2(local.x,local.z),new Vector2(side==0?-3.7f:3.7f,chosen.Hull.Definition.LadderZ))*chosen.Hull.WorldScale<1.1f)
             {climbing=true;stage=0;feet=chosen.transform.InverseTransformPoint(robot.transform.position-chosen.transform.up*worker.FootOffset);return;}
         }
         float sea=world.WaterLevelAt(robot.transform.position);

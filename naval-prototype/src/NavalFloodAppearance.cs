@@ -30,10 +30,12 @@ public class NavalFloodAppearance : MonoBehaviour
     public static float Clearance(Transform boat,NavalWater sea)
     {
         float clearance=float.NegativeInfinity;
+        NavalSeaLadder equipment=boat.GetComponent<NavalSeaLadder>();
+        float top=equipment!=null?equipment.Hull.Definition.AboveDeckY(2.25f):2.25f;
         // The hull and rails, not the still-protruding mast, define full submergence.
         for(int x=-1;x<=1;x++)for(int z=-1;z<=1;z++)
         {
-            Vector3 point=boat.TransformPoint(new Vector3(x*BoatDimensions.HalfWidth,2.25f,z*BoatDimensions.HalfLength));
+            Vector3 point=boat.TransformPoint(new Vector3(x*BoatDimensions.HalfWidth,top,z*BoatDimensions.HalfLength));
             clearance=Mathf.Max(clearance,point.y-sea.Height(point.x,point.z));
         }
         return clearance;

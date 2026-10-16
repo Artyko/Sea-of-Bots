@@ -1,19 +1,19 @@
-using UnityEngine;
+﻿using UnityEngine;
 
-public class NavalStations : MonoBehaviour
+public partial class NavalStations : MonoBehaviour
 {
     private Transform boat;
     private NavalHull hull;
     private FirstPersonMover player;
     private NavalWater ocean;
     private Transform helm;
-    private readonly Transform[] guns = new Transform[2];
-    private readonly Transform[] barrels = new Transform[2];
-    private readonly float[] yaw = new float[2];
-    private readonly float[] pitch = new float[2];
-    private readonly float[] readyAt = new float[2];
-    private readonly float[] shotAt = new float[]{-100f,-100f};
-    private readonly System.Collections.Generic.List<NavalHullVoxel>[] mechanisms = new System.Collections.Generic.List<NavalHullVoxel>[3];
+    private Transform[] guns;
+    private Transform[] barrels;
+    private float[] yaw;
+    private float[] pitch;
+    private float[] readyAt;
+    private float[] shotAt;
+    private System.Collections.Generic.List<NavalHullVoxel>[] mechanisms;
     private Material iron;
     private Material flash;
     private Material smoke;
@@ -29,43 +29,43 @@ public class NavalStations : MonoBehaviour
     public bool RecentlyFired(int gun) { return Time.time-shotAt[gun]<2f; }
     public int TargetSide(Vector3 point)
     {return boat.InverseTransformPoint(point).x<0f?1:2;}
-    public Vector3 CrewPosition(int station)
-    { return boat.TransformPoint(station==0?new Vector3(0f,0.825f,-4.8f):new Vector3(station==1?-1.35f:1.35f,0.825f,-1f)); }
+    public int GunCount {get{return hull.Definition.GunCount;}}
+    public int WorkingGuns {get{int n=0;for(int i=1;i<=GunCount;i++)if(Functional(i))n++;return n;}}
+    public void PauseInput(){ForwardInput=0f;TurnInput=0f;}
+    public bool AllGunsBroken {get{for(int i=1;i<=GunCount;i++)if(Functional(i))return false;return true;}}
+    public Vector3 Post(int station)
+    {return station==0?new Vector3(0f,.825f,NavalShipDefinition.HelmZ(hull.Definition)):new Vector3(NavalShipDefinition.GunSide(station-1)*1.35f,.825f,NavalShipDefinition.GunZ(station-1));}
+    public Vector3 CrewPosition(int station){return boat.TransformPoint(Post(station));}
     public Vector3 CrewForward(int station) { return station==0?boat.forward:barrels[station-1].forward; }
     public bool AimAndFire(int gun,Vector3 target,float dt,Character sailor)
     {
         if(PlayerStation==gun+1)return false;
         if(!Functional(gun+1)||sailor==null||!sailor.IsAlive())return false;
-        Vector3 muzzle=barrels[gun].TransformPoint(new Vector3(0f,0f,1.38f));
-        Vector3 local=boat.InverseTransformDirection(target-muzzle);
-        float bearing=Mathf.Atan2(local.x,local.z)*Mathf.Rad2Deg;
-        float wantedYaw=Mathf.DeltaAngle(gun==0?-90f:90f,bearing);
-        float distance=new Vector2(local.x,local.z).magnitude;
-        float angle;
-        if(Mathf.Abs(wantedYaw)>30f||!NavalBattleMath.FiringAngle(distance,local.y,32f,out angle)||angle < -5f||angle>45f)return false;
+        float wantedYaw,angle;
+        if(!TryAimSolution(gun,target,out wantedYaw,out angle))return false;
         yaw[gun]=Mathf.MoveTowards(yaw[gun],wantedYaw,28f*dt);
         pitch[gun]=Mathf.MoveTowards(pitch[gun],angle,24f*dt);Aim(gun);
-        if(Time.time>=readyAt[gun]&&Mathf.Abs(yaw[gun]-wantedYaw)<2f&&Mathf.Abs(pitch[gun]-angle)<2f)
-        { firingRobot=sailor;Fire(gun);firingRobot=null;readyAt[gun]=Time.time+5f;return true; }
+        if(Time.time>=readyAt[gun]&&Mathf.Abs(yaw[gun]-wantedYaw)<0.6f&&Mathf.Abs(pitch[gun]-angle)<0.6f)
+        { firingRobot=sailor;Fire(gun);firingRobot=null;return true; }
         return false;
     }
     public bool Operating { get { return active >= 0; } }
     public bool AtHelm { get { return active == 0; } }
     public float ForwardInput { get; private set; }
     public float TurnInput { get; private set; }
-    public Vector3 OperatorPosition
-    {
-        get { return boat.TransformPoint(active == 0 ? new Vector3(0f, 0.825f, -4.8f) :
-            new Vector3(active == 1 ? -1.35f : 1.35f, 0.825f, -1f)); }
-    }
+    public Vector3 OperatorPosition {get{return CrewPosition(active);}}
     public void Initialize(Transform ship, NavalHull owner, FirstPersonMover robot, NavalWater sea,
         Material wood, Material trim, Material black)
     {
-        boat = ship; hull = owner; player = robot; ocean = sea; iron = black;
+        boat = ship; RegisterShip(); hull = owner; player = robot; ocean = sea; iron = black;
+        guns=new Transform[GunCount];barrels=new Transform[GunCount];yaw=new float[GunCount];pitch=new float[GunCount];readyAt=new float[GunCount];shotAt=new float[GunCount];
+        for(int i=0;i<GunCount;i++)shotAt[i]=-100f;
+        mechanisms=new System.Collections.Generic.List<NavalHullVoxel>[GunCount+1];InitializeGunnery(GunCount);
         flash = MakeMaterial(new Color(1f, 0.65f, 0.08f));
         smoke = MakeMaterial(new Color(0.55f, 0.58f, 0.60f));
         wheelAccent = MakeMaterial(new Color(0.58f, 0.405f, 0.225f));
-        helm = Root("ShipWheel", new Vector3(0f, 1.4f, -4f));
+        helm = Root("ShipWheel", new Vector3(0f, hull.Definition.AboveDeckY(1.4f), NavalShipDefinition.HelmZ(hull.Definition)+.8f*hull.Definition.FixtureScale));
+        helm.localScale=Vector3.one*hull.Definition.FixtureScale;
         hull.AddDecorationBox(helm, wood, new Vector3(0f, -0.3f, 0f), new Vector3(0.2f, 0.6f, 0.25f), true);
         for (int i = 0; i < 12; i++)
         {
@@ -76,10 +76,10 @@ public class NavalStations : MonoBehaviour
         hull.AddDecorationBox(helm, wood, Vector3.zero, new Vector3(0.75f, 0.10f, 0.12f), true);
         hull.AddDecorationBox(helm, wood, Vector3.zero, new Vector3(0.10f, 0.75f, 0.12f), true);
         hull.AddDecorationBox(helm, wheelAccent, new Vector3(0f, 0f, -0.09f), new Vector3(0.22f, 0.22f, 0.12f), true);
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < GunCount; i++)
         {
-            float side = i == 0 ? -1f : 1f;
-            guns[i] = Root(i == 0 ? "PortCannon" : "StarboardCannon", new Vector3(side * 2.25f, 1f, -1f));
+            float side = NavalShipDefinition.GunSide(i);
+            guns[i] = Root((side<0f?"PortCannon":"StarboardCannon")+i, new Vector3(side * 2.25f, 1f, NavalShipDefinition.GunZ(i)));
             hull.AddDecorationBox(guns[i], wood, new Vector3(0f, -0.03f, 0f), new Vector3(0.75f, 0.3f, 0.9f), true);
             for (int wheel = -1; wheel <= 1; wheel += 2)
                 hull.AddDecorationBox(guns[i], black, new Vector3(wheel * 0.4f, -0.05f, 0f), new Vector3(0.15f, 0.35f, 0.65f), true);
@@ -88,7 +88,6 @@ public class NavalStations : MonoBehaviour
             hull.AddDecorationBox(barrels[i], black, new Vector3(0f, 0f, 0.55f), new Vector3(0.38f, 0.38f, 1.3f), true);
             hull.AddDecorationBox(barrels[i], trim, new Vector3(0f, 0f, 0.9f), new Vector3(0.42f, 0.42f, 0.1f), true);
             pitch[i] = 5f; Aim(i);
-            if(EnemyControlled)readyAt[i]=Time.time+8f;
         }
         sound = AudioClip.Create("NavalCannonBoom", 11025, 1, 22050, false);
         float[] samples = new float[11025]; System.Random random = new System.Random(14);
@@ -99,7 +98,7 @@ public class NavalStations : MonoBehaviour
                 Mathf.Sin(t * 2f * Mathf.PI * (65f - t * 40f)) * Mathf.Exp(-t * 9f) * 0.45f;
         }
         sound.SetData(samples, 0);
-        for (int i = 0; i < 3; i++)
+        for (int i = 0; i <= GunCount; i++)
         {
             mechanisms[i] = new System.Collections.Generic.List<NavalHullVoxel>();
             Transform mechanism = i == 0 ? helm : barrels[i - 1];
@@ -119,17 +118,16 @@ public class NavalStations : MonoBehaviour
         if (active < 0 && !sunk && !swimming)
         {
             Vector3 feet = player.transform.position - Vector3.up * feetOffset;
-            for (int i = 0; i < 3; i++)
+            for (int i = 0; i <= GunCount; i++)
             {
-                Vector3 anchor = boat.TransformPoint(i == 0 ? new Vector3(0f, 0.825f, -4.8f) :
-                    new Vector3(i == 1 ? -1.35f : 1.35f, 0.825f, -1f));
+                Vector3 anchor = CrewPosition(i);
                 float d = Vector3.Distance(feet, anchor);
                 if (d < distance) { distance = d; nearest = i; }
             }
         }
-        if (Input.GetKeyDown(KeyCode.E))
+        if (Input.GetKeyDown(KeyCode.E)&&!(hull.Bilge!=null&&hull.Bilge.PlayerInteracting))
         {
-            state.PressInteract(nearest, sunk || swimming || (nearest >= 0 && !Functional(nearest)));
+            state.PressInteract(nearest, sunk || swimming || (nearest >= 0 && !Functional(nearest)),GunCount);
             if (active >= 0)
             {
                 Vector3 facing = active == 0 ? boat.forward : barrels[active - 1].forward;
@@ -159,16 +157,16 @@ public class NavalStations : MonoBehaviour
     }
     public void UpdateRecoil()
     {
-        for (int i = 0; i < 2; i++)
+        for (int i = 0; i < GunCount; i++)
         {
             float recoil = Mathf.Clamp01(1f-(Time.time-shotAt[i])/0.35f) * 0.14f;
             barrels[i].localPosition = new Vector3(0f, 0.35f, 0f) - barrels[i].localRotation * Vector3.forward * recoil;
         }
     }
-    private void Aim(int gun) { barrels[gun].localRotation = Quaternion.Euler(-pitch[gun], (gun == 0 ? -90f : 90f) + yaw[gun], 0f); }
+    private void Aim(int gun) { barrels[gun].localRotation = Quaternion.Euler(-pitch[gun], (gun % 2 == 0 ? -90f : 90f) + yaw[gun], 0f); }
     private bool Functional(int station)
     {
-        if (mechanisms[station] == null) return false;
+        if (mechanisms==null||station<0||station>=mechanisms.Length||mechanisms[station] == null) return false;
         if (mechanisms[station].Count == 0) return false;
         foreach (NavalHullVoxel voxel in mechanisms[station]) if (voxel == null || voxel.Missing || voxel.Detached) return false;
         return true;
@@ -177,9 +175,9 @@ public class NavalStations : MonoBehaviour
     {
         if (!Functional(gun + 1)) return;
         shotAt[gun]=Time.time;
-        readyAt[gun] = Time.time + 2f;
+        readyAt[gun] = Time.time + NavalGunneryMath.ReloadSeconds;
         Vector3 muzzle = barrels[gun].TransformPoint(new Vector3(0f, 0f, 1.38f));
-        Vector3 direction = barrels[gun].forward;
+        Vector3 direction = ShotDirection(gun,barrels[gun].forward);
         GameObject ball = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         ball.name = "NavalPrototype_Cannonball"; ball.transform.SetParent(transform, false);
         ball.transform.position = muzzle; ball.transform.localScale = Vector3.one * 0.3f;
@@ -192,7 +190,7 @@ public class NavalStations : MonoBehaviour
             NavalShotPuff.Create(transform, muzzle + Random.insideUnitSphere * 0.18f,
                 direction * Random.Range(0.7f, 2.6f) + Vector3.up * Random.Range(0.6f, 1.3f) + Random.insideUnitSphere * 0.7f,
                 smoke, Random.Range(1.1f, 2.1f), Random.Range(0.16f, 0.34f));
-        Debug.Log("[NavalPrototype] Cannon fired: " + (gun == 0 ? "port" : "starboard"));
+        Debug.Log("[NavalPrototype] Cannon fired: " + (gun % 2 == 0 ? "port" : "starboard"));
     }
     public void Exit() { state.Exit(); ForwardInput = 0f; TurnInput = 0f; }
     private static Material MakeMaterial(Color color)
@@ -202,18 +200,19 @@ public class NavalStations : MonoBehaviour
     }
     private void OnGUI()
     {
+        DrawReloadBars();
         if(EnemyControlled)return;
         string text = active == 0 ? "HELM: W/S or arrows = sail; A/D = turn; E = leave" :
             (active > 0 ? "CANNON: A/D or arrows = aim +/-30; W/S = elevation -5..45; LMB/Space = fire; E = leave\nReload: " +
                 Mathf.Max(0f, readyAt[active - 1] - Time.time).ToString("F1") + " s" :
-                (nearest >= 0 ? "Press E: " + (nearest == 0 ? "ship wheel" : (nearest == 1 ? "port cannon" : "starboard cannon")) :
+                (nearest >= 0 ? "Press E: " + (nearest == 0 ? "ship wheel" : ((nearest-1)%2==0?"port cannon ":"starboard cannon ")+((nearest-1)/2+1)) :
                     "Approach a cannon or the stern wheel and press E"));
         if(active < 0 && nearest >= 0 && !Functional(nearest))
             text = (nearest == 0 ? "HELM DAMAGED" : "CANNON BARREL DAMAGED") + " - press R to repair";
         GUI.Box(new Rect(Screen.width * 0.5f - 350f, Screen.height - 90f, 700f, 70f), text);
     }
     private void OnDestroy()
-    { Exit(); if (flash != null) Destroy(flash); if (smoke != null) Destroy(smoke); if (wheelAccent != null) Destroy(wheelAccent); if (sound != null) Destroy(sound); }
+    { UnregisterShip(); Exit(); if (flash != null) Destroy(flash); if (smoke != null) Destroy(smoke); if (wheelAccent != null) Destroy(wheelAccent); if (sound != null) Destroy(sound); }
 }
 
 public class NavalCannonball : MonoBehaviour

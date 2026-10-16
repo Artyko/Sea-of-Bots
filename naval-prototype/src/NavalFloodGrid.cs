@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 // Height columns exchange volume only across shared edges. SI units for volume,
 // area and hydraulic heads; ship coordinates for indexing and rendering.
@@ -8,6 +8,7 @@ public class NavalFloodGrid
     public readonly float Width, Length, Scale, CellWidth, CellLength, CellArea;
     public readonly float MaxCellVolume;
     public readonly float[] Water;
+    public readonly float[] RightSill,ForwardSill;
     private readonly float[] delta;
     public NavalFloodGrid(int columns, int rows, float width, float length, float scale, float maximumDepth = float.MaxValue)
     {
@@ -16,6 +17,8 @@ public class NavalFloodGrid
         CellArea=CellWidth*CellLength*scale*scale;
         MaxCellVolume=maximumDepth*CellArea*scale;
         Water=new float[columns*rows]; delta=new float[Water.Length];
+        RightSill=new float[Water.Length];ForwardSill=new float[Water.Length];
+        for(int i=0;i<Water.Length;i++){RightSill[i]=ForwardSill[i]=float.NegativeInfinity;}
     }
     public float Total { get { float sum=0f; foreach(float value in Water) sum+=value; return sum; } }
     public float Side(bool port)
@@ -56,18 +59,19 @@ public class NavalFloodGrid
             for(int z=0;z<Rows;z++)for(int x=0;x<Columns;x++)
             {
                 int a=z*Columns+x;
-                if(x+1<Columns)Exchange(a,a+1,CellLength*Scale,step,floorHeights,upCosine);
-                if(z+1<Rows)Exchange(a,a+Columns,CellWidth*Scale,step,floorHeights,upCosine);
+                if(x+1<Columns)Exchange(a,a+1,CellLength*Scale,step,floorHeights,upCosine,RightSill[a]);
+                if(z+1<Rows)Exchange(a,a+Columns,CellWidth*Scale,step,floorHeights,upCosine,ForwardSill[a]);
             }
             for(int i=0;i<Water.Length;i++)Water[i]=Math.Max(0f,Water[i]+delta[i]);
         }
     }
-    private void Exchange(int a,int b,float edge,float dt,float[] floor,float up)
+    private void Exchange(int a,int b,float edge,float dt,float[] floor,float up,float sill)
     {
+        if(float.IsPositiveInfinity(sill))return;
         up=Math.Max(0.2f,up);
         float headA=floor[a]+Water[a]/CellArea*up, headB=floor[b]+Water[b]/CellArea*up;
         int from=headA>headB?a:b, to=from==a?b:a;
-        float high=Math.Max(headA,headB), low=Math.Max(Math.Min(headA,headB),Math.Max(floor[a],floor[b]));
+        float high=Math.Max(headA,headB), low=Math.Max(Math.Min(headA,headB),Math.Max(sill,Math.Max(floor[a],floor[b])));
         float difference=Math.Max(0f,high-low);
         float depth=Math.Min(Water[from]/CellArea,difference);
         float amount=0.9f*edge*depth*(float)Math.Sqrt(19.62f*difference)*dt;

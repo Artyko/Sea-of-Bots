@@ -5,7 +5,7 @@ public static class NavalRigContact
     private struct Hit
     {public NavalHullVoxel Cell;public Vector3 Point;public bool Attached;}
     private static readonly List<Hit> hits=new List<Hit>();
-    private static bool Touches(Vector3 ship,Quaternion rotation,Vector3 centre,Quaternion cellRotation,Vector3 halfSize)
+    private static bool Touches(Vector3 ship,Quaternion rotation,Vector3 centre,Quaternion cellRotation,Vector3 halfSize,float bodyScale)
     {
         Quaternion inverse=Quaternion.Inverse(rotation),relative=inverse*cellRotation;
         Vector3 p=inverse*(centre-ship);
@@ -13,10 +13,10 @@ public static class NavalRigContact
         Vector3 extent=new Vector3(Mathf.Abs(right.x)*halfSize.x+Mathf.Abs(up.x)*halfSize.y+Mathf.Abs(forward.x)*halfSize.z,
             Mathf.Abs(right.y)*halfSize.x+Mathf.Abs(up.y)*halfSize.y+Mathf.Abs(forward.y)*halfSize.z,
             Mathf.Abs(right.z)*halfSize.x+Mathf.Abs(up.z)*halfSize.y+Mathf.Abs(forward.z)*halfSize.z);
-        return NavalRigImpactMath.TouchesHull(p.x,p.y,p.z,extent.x,extent.y,extent.z);
+        return NavalRigImpactMath.TouchesHull(p.x,p.y,p.z,extent.x,extent.y,extent.z,bodyScale);
     }
     private static void Scan(NavalRamDamage rig,Vector3 bodyPosition,Quaternion bodyRotation,
-        Vector3 rigPosition,Quaternion rigRotation,bool movingRig)
+        Vector3 rigPosition,Quaternion rigRotation,bool movingRig,float bodyScale)
     {
         Quaternion delta=rigRotation*Quaternion.Inverse(rig.transform.rotation);
         foreach(NavalHullVoxel cell in rig.RigCells)
@@ -27,7 +27,7 @@ public static class NavalRigContact
             if(movingRig&&!attached)continue;
             Vector3 centre=cell.transform.position;Quaternion rotation=cell.transform.rotation;
             if(movingRig){centre=rigPosition+delta*(centre-rig.transform.position);rotation=delta*rotation;}
-            if(!Touches(bodyPosition,bodyRotation,centre,rotation,cell.transform.lossyScale*0.5f))continue;
+            if(!Touches(bodyPosition,bodyRotation,centre,rotation,cell.transform.lossyScale*0.5f,bodyScale))continue;
             hits.Add(new Hit{Cell=cell,Point=centre,Attached=attached});
         }
     }
@@ -45,8 +45,8 @@ public static class NavalRigContact
         {
             float t=(float)i/steps;Vector3 p=Vector3.Lerp(start,next,t);Quaternion q=Quaternion.Slerp(rotation,nextRotation,t);
             hits.Clear();
-            Scan(other,p,q,other.transform.position,other.transform.rotation,false);
-            Scan(mover,other.transform.position,other.transform.rotation,p,q,true);
+            Scan(other,p,q,other.transform.position,other.transform.rotation,false,mover.Hull.WorldScale/2f);
+            Scan(mover,other.transform.position,other.transform.rotation,p,q,true,other.Hull.WorldScale/2f);
             bool wood=false;Vector3 impact=Vector3.zero;NavalRamDamage impactedHull=null;
             foreach(Hit hit in hits)
             {

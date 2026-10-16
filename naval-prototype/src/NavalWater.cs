@@ -164,10 +164,11 @@ public class NavalWater : MonoBehaviour
         }
         // Remaining polygon lies inside the boat below the rim and is intentionally discarded.
     }
+    private float clipRim=BoatDimensions.Rim;
     private void PrepareClip(Transform boat)
-    {waterToClip=boat.worldToLocalMatrix*transform.localToWorldMatrix;clipToWater=transform.worldToLocalMatrix*boat.localToWorldMatrix;clipCenter=transform.InverseTransformPoint(boat.position);}
+    {NavalSeaLadder equipment=boat.GetComponent<NavalSeaLadder>();clipRim=equipment!=null?equipment.Hull.Definition.RimY:BoatDimensions.Rim;waterToClip=boat.worldToLocalMatrix*transform.localToWorldMatrix;clipToWater=transform.worldToLocalMatrix*boat.localToWorldMatrix;clipCenter=transform.InverseTransformPoint(boat.position);}
 
-    private static float Distance(Vector3 p, int plane)
+    private float Distance(Vector3 p, int plane)
     {
         switch (plane)
         {
@@ -175,7 +176,7 @@ public class NavalWater : MonoBehaviour
             case 1: return -p.x - BoatDimensions.HalfWidth;
             case 2: return p.z - BoatDimensions.HalfLength;
             case 3: return -p.z - BoatDimensions.HalfLength;
-            default: return p.y - BoatDimensions.Rim;
+            default: return p.y - clipRim;
         }
     }
     private void Split(List<Vector3> source, int plane)

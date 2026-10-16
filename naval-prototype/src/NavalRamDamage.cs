@@ -30,7 +30,7 @@ public class NavalRamDamage : MonoBehaviour
     {
         Quaternion flat=Quaternion.Euler(0f,ship.eulerAngles.y,0f);
         Vector3[] points=new Vector3[4];
-        for(int i=0;i<4;i++)points[i]=ship.position+flat*new Vector3((i==0||i==3?-1f:1f)*NavalShipContactMath.HalfWidth,0f,(i<2?-1f:1f)*NavalShipContactMath.HalfLength);
+        for(int i=0;i<4;i++)points[i]=ship.position+flat*new Vector3((i==0||i==3?-1f:1f)*NavalShipContactMath.HalfWidth*Mathf.Abs(ship.lossyScale.x)/2f,0f,(i<2?-1f:1f)*NavalShipContactMath.HalfLength*Mathf.Abs(ship.lossyScale.z)/2f);
         for(int i=0;i<4;i++)points[i].y=0f;return points;
     }
     public static void Closest(Transform a,Transform b,out Vector3 pa,out Vector3 pb)
