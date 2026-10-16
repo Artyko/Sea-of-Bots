@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Reflection;
 using System.Collections.Generic;
 [DefaultExecutionOrder(250)]
@@ -124,7 +124,7 @@ public class NavalBoarder : MonoBehaviour
         if(candidate==null||!candidate.IsAlive()||candidate.IsNeutral||candidate.IsPlayerTeam==robot.IsPlayerTeam)return false;
         if(!Valid(ship))return false;
         Vector3 p=ship.Root.InverseTransformPoint(candidate.transform.position);
-        if(Mathf.Abs(p.x)>3.2f||Mathf.Abs(p.z)>6.2f||p.y<BoatDimensions.HoldFloor+0.15f||p.y>3.1f)return false;
+        if(Mathf.Abs(p.x)>3.2f||Mathf.Abs(p.z)>6.2f||p.y<ship.Floor+0.15f||p.y>3.1f)return false;
         RaycastHit hit;
         return Physics.Raycast(candidate.transform.position+ship.Root.up*0.2f,-ship.Root.up,out hit,4f,
             PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore)&&hit.collider.transform.IsChildOf(ship.Root);
@@ -132,26 +132,9 @@ public class NavalBoarder : MonoBehaviour
     private void BuildReturnRoute()
     {
         route.Clear();Vector3 feet=current.Root.InverseTransformPoint(robot.transform.position-current.Root.up*worker.FootOffset);
-        float side=feet.x<0?-1.4f:1.4f;
-        if(NavalWalkRoutes.InStairwell(feet.x,feet.y,feet.z))
-        {
-            route.Add(new Vector3(0f,feet.y,feet.z));
-            foreach(NavalWalkPoint step in NavalWalkRoutes.UpFrom(feet.y,feet.z))route.Add(new Vector3(step.X,step.Y,step.Z));
-        }
-        else if(feet.y<0.3f)
-        {
-            route.Add(new Vector3(side,BoatDimensions.HoldFloor,feet.z));route.Add(new Vector3(side,BoatDimensions.HoldFloor,-3.65f));
-            route.Add(new Vector3(0,BoatDimensions.HoldFloor,-3.65f));
-            foreach(NavalWalkPoint step in NavalWalkRoutes.UpFrom(BoatDimensions.HoldFloor,-3.65f))route.Add(new Vector3(step.X,step.Y,step.Z));
-        }
-        else
-        {
-            if(Mathf.Abs(feet.x)<1.1f&&feet.z< -3f)route.Add(new Vector3(side,0.825f,feet.z));
-            route.Add(new Vector3(side,0.825f,0.8f));
-        }
-        float next=launch.x<0?-1.4f:1.4f;
-        route.Add(new Vector3(0,0.825f,0.8f));route.Add(new Vector3(next,0.825f,0.8f));
-        route.Add(new Vector3(next,0.825f,launch.z));route.Add(launch);
+        foreach(NavalWalkPoint point in NavalRepairRoutes.Plan(new NavalWalkPoint(feet.x,feet.y,feet.z),
+            new NavalWalkPoint(launch.x,launch.y,launch.z),current.Definition.Compartments,current.Definition.StairWidth,current.Floor))
+            route.Add(new Vector3(point.X,point.Y,point.Z));
     }
     private void TryReturn()
     {
@@ -184,7 +167,7 @@ public class NavalBoarder : MonoBehaviour
         Vector3 look=delta;look.y=0f;
         if(look.sqrMagnitude>0.01f)robot.transform.rotation=Quaternion.RotateTowards(robot.transform.rotation,Quaternion.LookRotation(look),720f*dt);
         float alignment=look.sqrMagnitude>0.01f?Mathf.Clamp01(Vector3.Dot(robot.transform.forward,look.normalized)):1f;
-        bool stairs=NavalWalkRoutes.InStairwell(feet.x,feet.y,feet.z)||NavalWalkRoutes.InStairwell(route[0].x,route[0].y,route[0].z);
+        bool stairs=NavalWalkRoutes.InStairwell(feet.x,feet.y,feet.z,current.Definition.StairWidth*.5f+.175f,current.Floor)||NavalWalkRoutes.InStairwell(route[0].x,route[0].y,route[0].z,current.Definition.StairWidth*.5f+.175f,current.Floor);
         float wanted=NavalCrewMovement.TargetSpeed(worker.DeckWalkSpeed,alignment,delta.magnitude,route.Count==1,stairs);
         returnMoveSpeed=NavalCrewMovement.Accelerate(returnMoveSpeed,wanted,dt);
         CharacterController body=robot.GetComponentInChildren<CharacterController>();Vector3 step=Vector3.ClampMagnitude(delta,returnMoveSpeed*dt)+Vector3.down*0.3f*dt;
@@ -236,7 +219,7 @@ public class NavalBoarder : MonoBehaviour
         if(!Valid(current)){phase=4;robot.DisableAI();return;}
         Carry();
         Vector3 local=current.Root.InverseTransformPoint(robot.transform.position);
-        if(Mathf.Abs(local.x)>3.3f||Mathf.Abs(local.z)>6.4f||local.y<BoatDimensions.HoldFloor-0.3f){robot.DisableAI();phase=4;return;}
+        if(Mathf.Abs(local.x)>3.3f||Mathf.Abs(local.z)>6.4f||local.y<current.Floor-0.3f){robot.DisableAI();phase=4;return;}
         if(phase==5){UpdateReturn(dt);return;}
         if(opponent!=null&&!OnShip(opponent,current))opponent=null;
         if(Time.time>=scanAt)

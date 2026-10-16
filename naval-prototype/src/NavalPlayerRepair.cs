@@ -28,7 +28,7 @@ public class NavalPlayerRepair : MonoBehaviour
         if(elapsed<4f)return;
         Vector3 patch=target.LocalCenter;
         foreach(NavalHullVoxel cell in hull.Voxels)
-            if((cell.HydraulicShell||cell.InternalBarrier)&&(cell.Missing||cell.Detached)&&(cell.LocalCenter-patch).sqrMagnitude<=0.85f*0.85f)
+            if((cell.HydraulicShell||cell.InternalBarrier||cell.RepairableEquipment)&&(cell.Missing||cell.Detached)&&(cell.LocalCenter-patch).sqrMagnitude<=0.85f*0.85f)
                 structure.RestoreCell(cell);
         target=null;elapsed=0f;scanAt=0f;
     }
@@ -39,7 +39,7 @@ public class NavalPlayerRepair : MonoBehaviour
         NavalHullVoxel best=null;float score=0.65f*0.65f;
         foreach(NavalHullVoxel cell in hull.Voxels)
         {
-            if(!(cell.HydraulicShell||cell.InternalBarrier)||!cell.Missing&&!cell.Detached)continue;
+            if(!(cell.HydraulicShell||cell.InternalBarrier||cell.RepairableEquipment)||!cell.Missing&&!cell.Detached)continue;
             Vector3 point=hull.Root.TransformPoint(cell.LocalCenter);
             Vector3 offset=point-ray.origin;float along=Vector3.Dot(offset,ray.direction);
             if(along<0f||offset.sqrMagnitude>36f)continue;

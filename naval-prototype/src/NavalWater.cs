@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -19,6 +19,7 @@ public class NavalWater : MonoBehaviour
     private readonly List<Vector3> inside = new List<Vector3>(10);
     private readonly List<Vector3> outside = new List<Vector3>(10);
     private const int Count = 101;
+    private readonly NavalWaveField waveField=new NavalWaveField(Count);
     private const float Spacing = 3f;
     private const float Half = 50f;
     private float nextMeshAt;
@@ -83,10 +84,7 @@ public class NavalWater : MonoBehaviour
     public float Height(float x, float z)
     {
         x -= transform.position.x; z -= transform.position.z;
-        return transform.position.y + Amplitude * (
-            0.62f * Mathf.Sin(x * 0.47f + z * 0.21f - simulationTime * 1.35f) +
-            0.28f * Mathf.Sin(z * 0.83f - x * 0.16f - simulationTime * 1.8f) +
-            0.10f * Mathf.Sin(x * 1.9f + z * 1.3f - simulationTime * 2.6f));
+        return transform.position.y+NavalWaveField.Sample(x,z,Amplitude,simulationTime);
     }
 
     public void RenderWaves(Transform boat, float speed)
@@ -96,13 +94,16 @@ public class NavalWater : MonoBehaviour
         buildWatch.Restart();
         float offsetX = Mathf.Floor((Focus.x - transform.position.x) / 40f) * 40f;
         float offsetZ = Mathf.Floor((Focus.z - transform.position.z) / 40f) * 40f;
+        Vector3 waterPosition=transform.position,boatPosition=boat.position;
+        Matrix4x4 toBoat=boat.worldToLocalMatrix;
+        waveField.Prepare(-Half*Spacing+offsetX,-Half*Spacing+offsetZ,Spacing,Amplitude,simulationTime);
         for (int i = 0; i < vertices.Length; i++)
         {
             vertices[i].x = (i % Count - Half) * Spacing + offsetX;
             vertices[i].z = (i / Count - Half) * Spacing + offsetZ;
-            Vector3 world = transform.position + new Vector3(vertices[i].x, 0f, vertices[i].z);
-            float h = Height(world.x, world.z);
-            Vector3 relative = boat.InverseTransformPoint(new Vector3(world.x, boat.position.y, world.z));
+            Vector3 world = waterPosition + new Vector3(vertices[i].x, 0f, vertices[i].z);
+            float h = waterPosition.y+waveField.At(i%Count,i/Count);
+            Vector3 relative = toBoat.MultiplyPoint3x4(new Vector3(world.x, boatPosition.y, world.z));
             // A small travelling wake behind the stern.
             if (relative.z < -BoatDimensions.HalfLength && relative.z > -20f)
             {
@@ -111,7 +112,7 @@ public class NavalWater : MonoBehaviour
                 h += ridge * Mathf.Abs(speed) * 0.035f * Mathf.Exp((relative.z + BoatDimensions.HalfLength) * 0.13f)
                     * Mathf.Sin(relative.z * 2f + simulationTime * 4f);
             }
-            vertices[i].y = h - transform.position.y;
+            vertices[i].y = h - waterPosition.y;
         }
         indices.Clear();
         clippedVertices.Clear(); clippedVertices.AddRange(vertices);

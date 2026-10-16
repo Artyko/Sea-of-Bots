@@ -7,8 +7,10 @@ public partial class NavalRepairSailor
     private GameObject carriedBoards;
     private float passageWorkUntil;
     public bool AvailableForShield {get{return robot!=null&&robot.IsAlive()&&!Defending&&hull!=null&&!hull.Sunk;}}
+    public bool WorkingOnPassage {get{return Time.time<passageWorkUntil;}}
     private bool ShieldWorking {get{return shieldJob!=null||Time.time<passageWorkUntil;}}
     private string ShieldStatus {get{return shieldJob==null?"Снимает щит для прохода":shieldStage==1?"Идёт за досками":shieldStage==2?"Несёт доски":(shieldJob.Removing?"Снимает щит ":"Закрепляет щит ")+Mathf.RoundToInt(shieldJob.Work/(shieldJob.Removing?NavalFloodResponseMath.RemoveSeconds:NavalFloodResponseMath.FitSeconds)*100f)+"%";}}
+    public void WaitForPassage(){passageWorkUntil=Time.time+.2f;}
     public void ShieldPassageWork()
     {
         passageWorkUntil=Time.time+.2f;
@@ -39,7 +41,7 @@ public partial class NavalRepairSailor
         if(system==null)return false;
         if(shieldJob==null)
         {
-            if((!allowed&&!(returning&&!changingPost))||leak!=null||pumpDuty||bailState!=0||accessStage!=0)return false;
+            if((!allowed&&!(returning&&!changingPost))||leak!=null||pumpDuty||bailState!=0)return false;
             if(!system.WantsShieldWorker)return false;
             shieldJob=system.ClaimShield(this);if(shieldJob==null)return false;
             shieldStage=shieldJob.Removing?2:1;
@@ -52,11 +54,8 @@ public partial class NavalRepairSailor
         shieldJob.Lease=Time.time+1f;robot.DisableAI();
         if(route.Count>0)
         {
-            Vector3 target=route[0];float before=Vector3.Distance(feet,target);
-            Move(target,dt,route.Count==1);
-            if(NavalRouteArrival.Reached(feet.x,feet.y,feet.z,target.x,target.y,target.z,route.Count==1)){route.RemoveAt(0);stuck=0f;}
-            else if(before-Vector3.Distance(feet,target)<dt*.1f)stuck+=dt;else stuck=0f;
-            if(stuck>5f)
+            RouteResult movement=FollowRoute(dt,5f);
+            if(movement==RouteResult.Blocked||movement==RouteResult.Fell)
             {system.ReleaseShield(shieldJob,this,true);ReleaseShieldJob();BeginReturn();}
             return true;
         }

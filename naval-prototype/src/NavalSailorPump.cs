@@ -17,7 +17,7 @@ public partial class NavalRepairSailor
         foreach(NavalRepairSailor worker in hull.RepairWorkers)if(worker!=null&&worker!=this&&worker.HasJob)otherRepair=true;
         if(pumpDuty&&hull.HasActiveLeaks&&!otherRepair&&Time.time>=pumpReview)
         {
-            pumpReview=Time.time+1f;HoldPosition();FindLeak();
+            pumpReview=Time.time+1f;HoldPosition();TryFindLeak();
             if(leak!=null){ReleasePump();return false;}
         }
         if(!pumpDuty)
@@ -26,7 +26,7 @@ public partial class NavalRepairSailor
             bool repairAvailable=false;
             float dangerVolume=BoatDimensions.SinkVolume*hull.VolumeScale*.25f;
             if(hull.HasActiveLeaks&&!otherRepair&&hull.Volume<dangerVolume)
-            {FindLeak();repairAvailable=leak!=null;if(repairAvailable)return false;}
+            {TryFindLeak();repairAvailable=leak!=null;if(repairAvailable)return false;}
             if(!NavalMaintenanceMath.NeedPump(hull.HasActiveLeaks,otherRepair,repairAvailable,hull.Volume,dangerVolume))return false;
             system.Operator=this;pumpDuty=true;pumpArrived=false;pumpReview=Time.time+1f;
             Debug.Log("[NavalPrototype] Crew assigned to bilge pump");returning=false;changingPost=false;route.Clear();stuck=0f;
@@ -35,10 +35,8 @@ public partial class NavalRepairSailor
         robot.DisableAI();
         if(route.Count>0)
         {
-            Vector3 destination=route[0];float before=Vector3.Distance(feet,destination);Move(destination,dt,route.Count==1);
-            if(NavalRouteArrival.Reached(feet.x,feet.y,feet.z,destination.x,destination.y,destination.z,route.Count==1)){route.RemoveAt(0);stuck=0f;}
-            else if(before-Vector3.Distance(feet,destination)<dt*.1f)stuck+=dt;else stuck=0f;
-            if(stuck>5f){pumpRetry=Time.time+10f;ReleasePump();BeginReturn();}
+            RouteResult movement=FollowRoute(dt,5f);
+            if(movement==RouteResult.Blocked||movement==RouteResult.Fell){pumpRetry=Time.time+10f;ReleasePump();BeginReturn();}
         }
         else
         {

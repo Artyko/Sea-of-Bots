@@ -3,8 +3,9 @@ public partial class NavalStations
 {
     private void DrawReloadBars()
     {
-        if(EnemyControlled||boat==null||hull==null||hull.Sunk||player==null||!player.IsAlive()||!player.IsPlayerInputEnabled())return;
-        Camera camera=player.GetPlayerCamera();if(camera==null)return;
+        NavalTestWorld world=NavalTestWorld.Active;
+        if(EnemyControlled||boat==null||hull==null||hull.Sunk||world==null||!world.SimulationActive)return;
+        Camera camera=world.ViewCamera;if(camera==null)return;
         for(int gun=0;gun<GunCount;gun++)
         {
             if(guns[gun]==null)continue;

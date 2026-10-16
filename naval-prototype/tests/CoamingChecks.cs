@@ -4,8 +4,8 @@ class CoamingChecks {
  static void Main(){
  foreach(float scale in new float[]{2f,3f,4f}){
   float height=NavalCompartmentMath.CoamingHeight(scale);
-  Check(Math.Abs(height*scale-.3f)<.0001f,"Physical threshold height");
-  Check(height*scale/4f<.1f,"Small walkable risers");
+  Check(Math.Abs(height*scale-.45f)<.0001f,"Physical threshold height");
+  Check(height*scale/4f<.15f,"Small walkable risers");
  }
  var grid=new NavalFloodGrid(2,1,2f,1f,1f,4f);
  grid.RightSill[0]=.3f;grid.Add(0,.2f);

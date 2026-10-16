@@ -1,10 +1,10 @@
 ﻿{
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v69.dll",
+  "MainDLLFileName": "NavalPrototype-v81.dll",
   "Author": "Kirill",
-  "Version": 69,
-  "Description": "Sloop compartments, flood boards and bilge pump; shared tactical retreat while guns are unmanned and crew fight flooding.",
+  "Version": 81,
+  "Description": "Batched compartment flood rendering, sparse barrier updates and dry-cell hydraulic fast paths; conserved flooding and crew mechanics retained.",
   "ModDependencies": [],
   "Tags": []
 }

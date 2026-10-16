@@ -18,7 +18,26 @@ public class NavalPrototypeMod : Mod
         swimmingPatch = new Harmony("SchoolNavalPrototype.SwimmingEntry");
         swimmingPatch.Patch(AccessTools.Method(typeof(FirstPersonMover), "applyMovement"),
             prefix: new HarmonyMethod(typeof(NavalPrototypeMod), "BeforeMovement"));
+        swimmingPatch.Patch(AccessTools.Method(typeof(FirstPersonMover),"onDeath"),prefix:new HarmonyMethod(typeof(NavalPrototypeMod),"BeforePlayerDeath"));
+        swimmingPatch.Patch(AccessTools.Method(typeof(FirstPersonMover),"ReparentCameraAndAnimateForDeath"),prefix:new HarmonyMethod(typeof(NavalPrototypeMod),"BeforeDeathCamera"));
+        swimmingPatch.Patch(AccessTools.Method(typeof(GameFlowManager),"onCharacterKilled"),prefix:new HarmonyMethod(typeof(NavalPrototypeMod),"BeforeCharacterKilled"));
+        swimmingPatch.Patch(AccessTools.Method(typeof(GameFlowManager),"LoseGameAndShowUI"),prefix:new HarmonyMethod(typeof(NavalPrototypeMod),"BeforeLoseGame"));
+        swimmingPatch.Patch(AccessTools.Method(typeof(GameFlowManager),"RefreshIsLevelWon"),prefix:new HarmonyMethod(typeof(NavalPrototypeMod),"BeforeVictoryCheck"));
+        foreach(string method in new string[]{"ConsciousnessTransferToKillerEnabled","ConsciousnessTransferToAlliesEnabled"})
+            swimmingPatch.Patch(AccessTools.Method(typeof(GameModeManager),method),postfix:new HarmonyMethod(typeof(NavalPrototypeMod),"AfterTransferEnabled"));
     }
+    private static void BeforePlayerDeath(FirstPersonMover __instance)
+    {NavalTestWorld world=NavalTestWorld.Active;if(world!=null&&world.OwnsPlayer(__instance))world.BeginSpectating();}
+    private static bool BeforeDeathCamera(FirstPersonMover __instance,ref bool __result)
+    {NavalTestWorld world=NavalTestWorld.Active;if(world==null||!world.OwnsPlayer(__instance))return true;__result=false;return false;}
+    private static bool BeforeCharacterKilled(Character __0)
+    {NavalTestWorld world=NavalTestWorld.Active;if(world==null||!world.OwnsPlayer(__0))return true;world.BeginSpectating();return false;}
+    private static bool BeforeLoseGame()
+    {NavalTestWorld world=NavalTestWorld.Active;return world==null||!world.Spectating;}
+    private static bool BeforeVictoryCheck()
+    {NavalTestWorld world=NavalTestWorld.Active;return world==null||!world.Spectating;}
+    private static void AfterTransferEnabled(ref bool __result)
+    {NavalTestWorld world=NavalTestWorld.Active;if(world!=null&&world.Spectating)__result=false;}
     private static void BeforeMovement(FirstPersonMover __instance)
     {
         NavalTestWorld active = NavalTestWorld.Active;
@@ -69,8 +88,8 @@ public class NavalPrototypeMod : Mod
 public partial class NavalTestWorld : MonoBehaviour
 {
     public static NavalTestWorld Active;
-    public bool SimulationActive {get{return player!=null&&player.IsAlive()&&player.IsPlayerInputEnabled()&&Time.timeScale>0f;}}
-    public bool IsBoarding {get{return boarding!=null&&boarding.Climbing;}}
+    public bool SimulationActive {get{return NavalSessionPolicy.Runs(Spectating,player!=null,player!=null&&player.IsAlive(),player!=null&&player.IsPlayerInputEnabled(),Time.timeScale==0f,scene==SceneManager.GetActiveScene().handle&&GameModeManager.IsSinglePlayer());}}
+    public bool IsBoarding {get{return !Spectating&&boarding!=null&&boarding.Climbing;}}
     public NavalHull PlayerHull {get{return hull;}}
     public Vector3 ShipVelocity { get { return boat!=null?boat.forward*speed:Vector3.zero; } }
     public Transform EnemyBoat { get { return enemy!=null&&!enemy.Hull.Sunk?enemy.Boat:null; } }
@@ -86,7 +105,6 @@ public partial class NavalTestWorld : MonoBehaviour
     private float footOffset;
     private float speed;
     private NavalWater ocean;
-    private Transform[] floodVisuals;
     private NavalHull hull;
     private NavalShipVisuals rig;
     private NavalStructure structure;
@@ -94,6 +112,7 @@ public partial class NavalTestWorld : MonoBehaviour
     private NavalWorldMap seaMap;
     private float frameMilliseconds=16.7f;
     private bool rough = true;
+    private readonly NavalHelmNavigator helmNavigator=new NavalHelmNavigator();
     private readonly NavalRetreatState retreat=new NavalRetreatState();
     private float heading;
     private float rudder;
@@ -119,7 +138,7 @@ public partial class NavalTestWorld : MonoBehaviour
 
     public void Initialize(FirstPersonMover owner)
     {
-        player = owner;
+        player = owner;liveCamera=owner.GetPlayerCamera();RememberLiveCamera();
         scene = SceneManager.GetActiveScene().handle;
         startPosition = player.transform.position;
         startRotation = player.transform.rotation;
@@ -161,13 +180,7 @@ public partial class NavalTestWorld : MonoBehaviour
         boat.rotation = Quaternion.Euler(0f, player.transform.eulerAngles.y, 0f);
         heading = boat.eulerAngles.y;
         hull = new NavalHull(NavalSessionSettings.PlayerShip); hull.Build(boat, wood, MakeMaterial(new Color(0.15f, 0.65f, 0.85f)), deckWood);
-        floodVisuals = new Transform[hull.Flood.Water.Length];
-        for(int i=0;i<floodVisuals.Length;i++)
-        {
-            floodVisuals[i]=Part(boat,"WaterCell_"+i,Vector3.zero,Vector3.one,ocean.InteriorMaterial,false).transform;
-            floodVisuals[i].gameObject.SetActive(false);
-        }
-        boat.gameObject.AddComponent<NavalFloodAppearance>().Initialize(ocean,hull,floodVisuals);
+        boat.gameObject.AddComponent<NavalFloodAppearance>().Initialize(ocean,hull);
         rig = boat.gameObject.AddComponent<NavalShipVisuals>();
         rig.Initialize(hull, wood, lightWood, blackMast, MakeMaterial(new Color(0.91f, 0.90f, 0.84f)),
             MakeMaterial(new Color(0.12f, 0.085f, 0.05f)), deckWood, alternatePlank);
@@ -189,7 +202,7 @@ public partial class NavalTestWorld : MonoBehaviour
         ReturnToDeck();
         Active = this;
         ToggleEnemy();
-        Debug.Log("[NavalPrototype] v69 ships and waves started on native Naval Ocean editor map.");
+        Debug.Log("[NavalPrototype] v81 ships and waves started on native Naval Ocean editor map.");
     }
 
     private Material MakeMaterial(Color color)
@@ -245,53 +258,54 @@ public partial class NavalTestWorld : MonoBehaviour
     }
     private void LateUpdate()
     {
-        if (player == null || !player.IsAlive() || !GameModeManager.IsSinglePlayer() ||
-            scene != SceneManager.GetActiveScene().handle) { Destroy(gameObject); return; }
-        if (boat == null || !player.IsPlayerInputEnabled() || Time.timeScale == 0f) return;
+        if (!GameModeManager.IsSinglePlayer() || scene != SceneManager.GetActiveScene().handle) { Destroy(gameObject); return; }
+        if(!Spectating&&(player==null||!player.IsAlive()))BeginSpectating();
+        if(boat==null||!SimulationActive)return;
+        if(Spectating)UpdateSpectator();else RememberLiveCamera();
         UpdateHudInput();
         if(replaceEnemy){replaceEnemy=false;if(enemy==null)ToggleEnemy();}
         float dt = Mathf.Min(Time.deltaTime, 0.05f);
         frameMilliseconds=Mathf.Lerp(frameMilliseconds,Time.unscaledDeltaTime*1000f,0.05f);
-        boarding.Tick(dt,stations.Operating);
-        if(!ShipMenuOpen&&!boarding.Climbing)stations.Tick(dt, footOffset, hull.Sunk, swimming);
-        SetStationLock(stations.Operating||boarding.Climbing||ShipMenuOpen);
+        if(!Spectating)boarding.Tick(dt,stations.Operating);
+        if(!Spectating&&!ShipMenuOpen&&!boarding.Climbing)stations.Tick(dt, footOffset, hull.Sunk, swimming);
+        if(!Spectating)SetStationLock(stations.Operating||boarding.Climbing||ShipMenuOpen);
         if(ShipMenuOpen)stations.PauseInput();
         if (Input.GetKeyDown(KeyCode.F7)) rough = !rough;
         ocean.Amplitude = rough ? 0.65f : 0.20f;
         if (Input.GetKeyDown(KeyCode.F9)) hull.Damage(new Vector3(-BoatDimensions.HalfWidth, -0.225f, 0f), 0.75f);
         if (Input.GetKeyDown(KeyCode.F11)) hull.Damage(new Vector3(BoatDimensions.HalfWidth, -0.225f, 0f), 0.75f);
         if(Input.GetKeyDown(KeyCode.F12))ToggleEnemy();
-        if (Input.GetKeyDown(KeyCode.R) && (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))) { structure.Restore(); hull.Repair(); rig.RestoreRig(); }
-        if (Input.GetKeyDown(KeyCode.G))
+        if (!Spectating && Input.GetKeyDown(KeyCode.R) && (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))) { structure.Restore(); hull.Repair(); rig.RestoreRig(); }
+        if (!Spectating && Input.GetKeyDown(KeyCode.G))
             DamageAimedPart();
         structure.Refresh(boat.forward*speed+Vector3.up*verticalVelocity);
         hull.Step(boat, ocean, dt, Input.GetKey(KeyCode.F10));
         float depth = hull.Volume / (HoldArea * hull.AreaScale);
-        UpdateHoldVisuals();
-        retreat.Step(dt,allies!=null&&allies.NeedsRetreat,hull.HasActiveLeaks||hull.Volume>.12f,EnemyBoat!=null&&!hull.Sunk&&!stations.AtHelm);
+        retreat.Step(dt,allies!=null&&allies.NeedsRetreat,hull.CombatCritical,EnemyBoat!=null&&!hull.Sunk&&!stations.AtHelm);
         float throttle = stations.AtHelm ? stations.ForwardInput : 0f;
         float turn = stations.AtHelm ? stations.TurnInput : 0f;
         if(!stations.AtHelm&&allies!=null&&allies.HasHelmsman&&stations.IsFunctional(0)&&EnemyBoat!=null&&!hull.Sunk)
         {
             Vector3 toward=EnemyBoat.position-boat.position;toward.y=0f;
             float distance=toward.magnitude;Vector3 radial=toward.normalized;
-            Vector3 desired=Vector3.Cross(Vector3.up,radial)+radial*Mathf.Clamp((distance-45f)/20f,-1f,1f);
+            float combatOrbit=stations.CombatOrbitSign(1f);
+            Vector3 desired=Vector3.Cross(Vector3.up,radial)*combatOrbit+radial*NavalGunneryMath.ApproachWeight(distance);
             if(stations.AllGunsBroken)desired=radial;
             if(retreat.Active)desired=-radial+Vector3.Cross(Vector3.up,radial)*.2f;
-            if(seaMap!=null)desired=seaMap.AvoidLand(boat.position,desired,boat);
-            turn=Mathf.Clamp(Mathf.DeltaAngle(heading,Mathf.Atan2(desired.x,desired.z)*Mathf.Rad2Deg)/25f,-1f,1f);
             throttle=distance<24f?0.35f:0.8f;
             if(stations.AllGunsBroken)throttle=0.7f;
             if(retreat.Active)throttle=1f;
+            helmNavigator.Steer(seaMap,boat,desired,speed,rig.SailPowerFactor,dt,ref throttle,out turn);
         }
+        else helmNavigator.Reset(boat.position);
         rig.RefreshRig();
         speed = NavalRigMath.StepSpeed(speed, throttle, rig.SailPowerFactor, dt);
         // Carry only a rider supported by this deck. No parenting and no airborne snapping.
         bool aboard = false;
-        foreach (RaycastHit hit in Physics.SphereCastAll(player.transform.position + Vector3.up * 0.2f,
+        if(!Spectating)foreach (RaycastHit hit in Physics.SphereCastAll(player.transform.position + Vector3.up * 0.2f,
             0.12f, Vector3.down, footOffset + 0.4f, PhysicsManager.GetEnvironmentLayerMask(), QueryTriggerInteraction.Ignore))
             if (hit.collider != null && hit.collider.transform.IsChildOf(boat) && hit.normal.y > 0.35f) aboard = true;
-        Vector3 localRider = boat.InverseTransformPoint(player.transform.position);
+        Vector3 localRider = !Spectating?boat.InverseTransformPoint(player.transform.position):Vector3.zero;
         rudder=NavalRigMath.StepRudder(rudder,turn,dt);
         heading += NavalRigMath.RudderRate(speed, rudder) * dt / (1f + depth);
         Vector3 flatForward = Quaternion.Euler(0f, heading, 0f) * Vector3.forward;
@@ -311,7 +325,7 @@ public partial class NavalTestWorld : MonoBehaviour
         Vector3 oldPosition=boat.position;Quaternion oldRotation=boat.rotation;
         Quaternion nextRotation=Quaternion.Slerp(oldRotation, Quaternion.Euler(pitch, heading, roll), 1f - Mathf.Exp(-4f * dt));
         Vector3 next = boat.position + Vector3.up*verticalVelocity*dt + flatForward * speed * dt / (1f + depth) * (hull.Sunk ? 0f : 1f);
-        if(seaMap!=null&&!seaMap.CanSail(next,Quaternion.Euler(0f,heading,0f),boat)){next=boat.position;speed=0f;}
+        if(seaMap!=null&&!seaMap.CanAdvance(boat.position,Quaternion.Euler(0f,boat.eulerAngles.y,0f),next,Quaternion.Euler(0f,heading,0f),boat)){next=boat.position;speed=0f;helmNavigator.LandBlocked();}
         ram.Velocity=(next-oldPosition)/Mathf.Max(dt,0.001f);ram.AngularRate=Mathf.DeltaAngle(oldRotation.eulerAngles.y,nextRotation.eulerAngles.y)/Mathf.Max(dt,0.001f);
         if(NavalShipContact.Constrain(oldPosition,oldRotation,ref next,ref nextRotation,enemy!=null?enemy.Boat:null,boat))
         {ram.Contact(enemy!=null?enemy.Boat.GetComponent<NavalRamDamage>():null);speed=0f;heading=nextRotation.eulerAngles.y;}
@@ -319,7 +333,7 @@ public partial class NavalTestWorld : MonoBehaviour
         if(rigRetention<1f){speed*=rigRetention;heading=nextRotation.eulerAngles.y;}
         boat.position = next;boat.rotation=nextRotation;
         Physics.SyncTransforms();
-        ocean.Focus = player.transform.position;
+        ocean.Focus = ViewCamera!=null?ViewCamera.transform.position:boat.position;
         ocean.RenderWaves(boat, speed);
         if (aboard)
         {
@@ -332,6 +346,8 @@ public partial class NavalTestWorld : MonoBehaviour
             if (enabled) controller.enabled = true;
             Physics.SyncTransforms();
         }
+        if(!Spectating)
+        {
         if(boarding.Climbing){SetSwimming(false);boarding.Apply(dt);if(VelocityField!=null)VelocityField.SetValue(player,Vector3.zero);}
         else UpdateSwimming(aboard, dt);
         if (stations.Operating)
@@ -343,14 +359,14 @@ public partial class NavalTestWorld : MonoBehaviour
             if (enabled) controller.enabled = true;
             if (VelocityField != null) VelocityField.SetValue(player, Vector3.zero);
         }
+        }
     }
     public float WaterLevelAt(Vector3 point)
     {
-        float sea = ocean.Height(point.x, point.z);
         float internalLevel;
         if(TryInternalWater(hull,point,out internalLevel))return internalLevel;
         if(enemy!=null&&TryInternalWater(enemy.Hull,point,out internalLevel))return internalLevel;
-        return sea;
+        return ocean.Height(point.x,point.z);
     }
     public float VisualWaterLevelAt(Vector3 point)
     {
@@ -360,7 +376,7 @@ public partial class NavalTestWorld : MonoBehaviour
         {
             if(ship==null||ship.Root==null)continue;
             Vector3 local=ship.Root.InverseTransformPoint(point);
-            if(Mathf.Abs(local.x)<BoatDimensions.HalfWidth&&Mathf.Abs(local.z)<BoatDimensions.HalfLength&&local.y>=BoatDimensions.HoldFloor-.3f&&
+            if(Mathf.Abs(local.x)<BoatDimensions.HalfWidth&&Mathf.Abs(local.z)<BoatDimensions.HalfLength&&local.y>=ship.Floor-.3f&&
                 NavalFloodAppearance.Clearance(ship.Root,ocean)<0f)return ocean.Height(point.x,point.z);
         }
         return WaterLevelAt(point);
@@ -370,12 +386,12 @@ public partial class NavalTestWorld : MonoBehaviour
         level=0f;if(ship==null||ship.Root==null||ship.FloodEffectsHidden)return false;
         Vector3 local=ship.Root.InverseTransformPoint(point);
         if(Mathf.Abs(local.x)>=BoatDimensions.HalfWidth-0.125f||Mathf.Abs(local.z)>=BoatDimensions.HalfLength-0.125f||
-            local.y<BoatDimensions.HoldFloor-0.3f||local.y>=ship.Definition.RimY)return false;
+            local.y<ship.Floor-0.3f||local.y>=ship.Definition.RimY)return false;
         float depth=ship.WaterDepthAt(local);
         // An empty cell is dry even when the outside sea is above this deck.
         if(depth<0.002f){level=float.NegativeInfinity;return true;}
         float verticalLocal=ship.Root.InverseTransformVector(Vector3.up).y;
-        level=NavalInteriorWaterMath.WorldLevel(point.y,local.y,BoatDimensions.HoldFloor+depth,verticalLocal);
+        level=NavalInteriorWaterMath.WorldLevel(point.y,local.y,ship.Floor+depth,verticalLocal);
         return true;
     }
     private bool WaterContact(bool aboard, out float sea)
@@ -515,16 +531,6 @@ public partial class NavalTestWorld : MonoBehaviour
         }
         stationLocked = value;
     }
-    private void UpdateHoldVisuals()
-    {
-        for(int i=0;i<floodVisuals.Length;i++)
-        {
-            Transform visual=floodVisuals[i]; float depth=hull.Flood.Depth(i);
-            visual.gameObject.SetActive(depth>0.0005f&&!hull.FloodEffectsHidden);
-            visual.localScale=new Vector3(hull.Flood.CellWidth,Mathf.Max(0.0005f,depth),hull.Flood.CellLength);
-            visual.localPosition=new Vector3(hull.Flood.X(i),BoatDimensions.HoldFloor+depth*0.5f,hull.Flood.Z(i));
-        }
-    }
     private void OnGUI()
     {
         if(boarding!=null&&player!=null&&player.IsAlive()&&player.IsPlayerInputEnabled())boarding.Draw();
@@ -536,6 +542,7 @@ public partial class NavalTestWorld : MonoBehaviour
     private void OnDestroy()
     {
         CloseShipMenu();
+        EndSpectating();
         if (Active == this) Active = null;
         SetStationLock(false);
         SetSwimming(false);

@@ -10,6 +10,8 @@ public class NavalShipVisuals : MonoBehaviour
     private readonly Dictionary<NavalHullVoxel, Vector3> originalSizes = new Dictionary<NavalHullVoxel, Vector3>();
     private readonly List<GameObject> debris = new List<GameObject>();
     private float[,] mastBounds;
+    private bool[] missingMast;
+    private readonly List<NavalHullVoxel> foundationCells=new List<NavalHullVoxel>();
     private int previousMissing = -1;
     private int previousHullRevision = -1;
     private readonly List<NavalShipVisuals> secondaryRigs=new List<NavalShipVisuals>();
@@ -20,7 +22,7 @@ public class NavalShipVisuals : MonoBehaviour
     {
         hull = owner;
         // The central aft companionway leaves solid deck beneath both guns.
-        // The hydraulic bottom forms the walkable lower deck, 6.1 m below.
+        // The hydraulic bottom forms the walkable lower deck at the profile floor.
         float opening=owner.Definition.StairWidth*.5f+.025f;
         float width=BoatDimensions.HoldWidth*.5f-opening,center=(BoatDimensions.HoldWidth*.5f+opening)*.5f;
         Deck(new Vector3(-center,.7f,0f),new Vector3(width,.25f,11.75f),deck,alternatePlank);
@@ -31,7 +33,7 @@ public class NavalShipVisuals : MonoBehaviour
         // Broad, shallow steps: walk down toward the stern, up toward the bow.
         for (int step=0;step<NavalWalkRoutes.StepCount;step++)
         {
-            float top=BoatDimensions.HoldFloor+(0.825f-BoatDimensions.HoldFloor)*(step+1)/NavalWalkRoutes.StepCount;
+            float top=hull.Floor+(0.825f-hull.Floor)*(step+1)/NavalWalkRoutes.StepCount;
             float run=3.5f/NavalWalkRoutes.StepCount;
             float z=-3f+(step+0.5f)*run;
             Box(new Vector3(0f,top-0.0625f,z),new Vector3(owner.Definition.StairWidth,0.125f,run),step%2==0?deck:alternatePlank,true);
@@ -42,7 +44,7 @@ public class NavalShipVisuals : MonoBehaviour
         {
             Box(new Vector3(side*(opening+.05f),0.84f,-1.25f),new Vector3(0.1f,0.03f,3.5f),trim,true);
             Box(new Vector3(side*2.80f,0.86f,0f),new Vector3(0.12f,0.07f,11.75f),trim,true);
-            Box(new Vector3(side*2.80f,BoatDimensions.HoldFloor+0.08f,0f),new Vector3(0.12f,0.16f,11.75f),trim,true);
+            Box(new Vector3(side*2.80f,hull.Floor+0.08f,0f),new Vector3(0.12f,0.16f,11.75f),trim,true);
             for(int gun=0;gun<hull.Definition.GunCount;gun++)
             {
                 if(NavalShipDefinition.GunSide(gun)!=side)continue;
@@ -54,9 +56,9 @@ public class NavalShipVisuals : MonoBehaviour
         }
         // Lower-deck frames and stern windows give the taller hull a sloop silhouette.
         for(int frame=0;frame<5;frame++)for(int side=-1;side<=1;side+=2)
-            Box(new Vector3(side*2.78f,-0.7f,-4.5f+frame*2.2f),new Vector3(0.18f,2.9f,0.18f),trim,true);
+            Box(new Vector3(side*2.78f,(hull.Floor+.575f)*.5f,-4.5f+frame*2.2f),new Vector3(0.18f,.575f-hull.Floor,0.18f),trim,true);
         for(int window=0;window<3;window++)
-            Box(new Vector3(-1.5f+window*1.5f,-0.65f,-6.14f),new Vector3(0.75f,0.7f,0.08f),dark,false);
+            Box(new Vector3(-1.5f+window*1.5f,hull.Definition.HullY(-.65f),-6.14f),new Vector3(0.75f,0.7f,0.08f),dark,false);
         for(int i=0;i<3;i++) Box(new Vector3(0f,0.65f+i*0.12f,6.1f+i*0.45f),new Vector3(4.2f-i*1.1f,0.45f,0.6f),timber,true);
         Box(new Vector3(0f,1.25f,7.4f),new Vector3(0.23f,0.23f,3.2f),trim,true);
         Box(new Vector3(0f,1.78f,-6f),new Vector3(6.2f,0.25f,0.35f),trim,true);
@@ -95,10 +97,15 @@ public class NavalShipVisuals : MonoBehaviour
         }
         attachedRig.AddRange(sail);
         foreach(NavalHullVoxel cell in sail)cell.RigFabric=true;
-        foreach (NavalHullVoxel cell in mastCells) originalSizes[cell] = cell.transform.localScale;
+        foreach (NavalHullVoxel cell in mastCells){cell.MastTimber=true;originalSizes[cell] = cell.transform.localScale;}
+        // Reinforce the small deck footing too: losing every support plank in the
+        // same first blast must not bypass intact mast timber durability.
+        foreach(NavalHullVoxel cell in hull.Voxels)
+            if(!cell.ManagedRig&&!originalSizes.ContainsKey(cell)&&Mathf.Abs(cell.LocalCenter.x)<.38f&&Mathf.Abs(cell.LocalCenter.z-mastZ)<.38f&&Mathf.Abs(cell.LocalCenter.y-.7f)<.14f)
+                {cell.MastTimber=true;foundationCells.Add(cell);}
         foreach (NavalHullVoxel cell in attachedRig) originalSizes[cell] = cell.transform.localScale;
         foreach (NavalHullVoxel cell in originalSizes.Keys) cell.ManagedRig = true;
-        mastBounds = new float[mastCells.Count, 6];
+        mastBounds = new float[mastCells.Count, 6];missingMast=new bool[mastCells.Count];
         for (int i = 0; i < mastCells.Count; i++) for (int axis = 0; axis < 3; axis++)
         { mastBounds[i, axis] = mastCells[i].LocalCenter[axis]; mastBounds[i, axis + 3] = originalSizes[mastCells[i]][axis] * 0.5f; }
         SailPowerFactor = 1f;buildingRig=false;
@@ -141,7 +148,8 @@ public class NavalShipVisuals : MonoBehaviour
     public void RefreshRig()
     {
         foreach(NavalShipVisuals rig in secondaryRigs)rig.RefreshRig();
-        bool[] missing = new bool[mastCells.Count];
+        if(previousMissing>=0&&previousHullRevision==hull.Revision)return;
+        bool[] missing=missingMast;
         int count = 0;
         for (int i = 0; i < missing.Length; i++)
         { missing[i] = mastCells[i].Missing || mastCells[i].transform.parent != transform; if (missing[i]) count++; }
@@ -150,9 +158,8 @@ public class NavalShipVisuals : MonoBehaviour
             previousMissing = count;
             previousHullRevision = hull.Revision;
             bool foundation=false;
-            foreach(NavalHullVoxel cell in hull.Voxels)
-                if(!cell.ManagedRig && !cell.Missing && !cell.Detached && cell.transform.parent==transform &&
-                    Mathf.Abs(cell.LocalCenter.x)<0.38f && Mathf.Abs(cell.LocalCenter.z-mastZ)<0.38f && Mathf.Abs(cell.LocalCenter.y-0.7f)<0.14f)
+            foreach(NavalHullVoxel cell in foundationCells)
+                if(!cell.Missing&&!cell.Detached&&cell.transform.parent==transform)
                 {foundation=true;break;}
             bool[] supported = NavalRigMath.Supported(mastBounds, missing, foundation?0.825f:float.MinValue);
             List<NavalHullVoxel> falling = new List<NavalHullVoxel>();
@@ -197,7 +204,7 @@ public class NavalShipVisuals : MonoBehaviour
         body.mass = 60f; body.interpolation = RigidbodyInterpolation.Interpolate;
         body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         body.angularVelocity = transform.right * 0.45f;
-        debris.Add(group);
+        debris.Add(group);hull.Revision++;
     }
     private void Box(Vector3 position,Vector3 size,Material material,bool solid)
     {

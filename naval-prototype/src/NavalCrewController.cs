@@ -6,9 +6,10 @@ public class NavalCrewController
     private NavalStations stations;
     private Character[] crew;
     private NavalRepairSailor[] workers;
-    private int[] roles;
+    private int[] roles,assigned;
     private NavalBoarder[] boarders;
     private NavalDeckDefense defense;
+    private int emergencyGunner=-1;
     public int MannedGuns {get;private set;}
     public bool Repairing {get;private set;}
     public bool NeedsRetreat {get{return MannedGuns==0&&Repairing;}}
@@ -18,7 +19,7 @@ public class NavalCrewController
     public void Initialize(NavalHull ship,NavalStations controls,Character[] sailors,NavalRepairSailor[] repair)
     {
         hull=ship;stations=controls;crew=sailors;workers=repair;
-        roles=new int[crew.Length];boarders=new NavalBoarder[crew.Length];
+        roles=new int[crew.Length];assigned=new int[crew.Length];boarders=new NavalBoarder[crew.Length];
         for(int i=0;i<roles.Length;i++)roles[i]=-1;
         defense=new NavalDeckDefense(hull,crew,workers);
     }
@@ -33,7 +34,18 @@ public class NavalCrewController
             if(boarders[i]==null){boarders[i]=crew[i].gameObject.AddComponent<NavalBoarder>();boarders[i].Initialize(crew[i],workers[i],hull);}
             if(stations.AllGunsBroken&&roles[i]!=0&&!workers[i].RepairDuty&&!hull.HasActiveLeaks&&(hull.Bilge==null||!hull.Bilge.WantsOperator))boarders[i].TryStart(enemy);
         }
-        int[] assigned=new int[crew.Length];for(int i=0;i<assigned.Length;i++)assigned[i]=-1;
+        // Recall the last emergency gunner as soon as the shared critical state clears.
+        // ReturnToGun preserves a safe descent if he is on a repair platform.
+        if(!hull.CombatCritical&&emergencyGunner>=0&&enemy!=null)
+        {
+            int sideToUse=stations.CombatSideToward(enemy.position),gun=-1;
+            if(sideToUse>0)for(int station=sideToUse;station<=stations.GunCount;station+=2)
+                if(stations.IsFunctional(station)&&stations.PlayerStation!=station){gun=station;break;}
+            if(gun>0&&workers[emergencyGunner]!=null&&workers[emergencyGunner].ReturnToGun(stations.Post(gun)))
+            {roles[emergencyGunner]=gun;emergencyGunner=-1;}
+            else if(stations.AllGunsBroken)emergencyGunner=-1;
+        }
+        for(int i=0;i<assigned.Length;i++)assigned[i]=-1;
         // Reserve a helmsman before gun allocation. With a two-person crew,
         // assigning guns first would pull the last free helmsman into maintenance.
         int helm=-1;
@@ -43,7 +55,7 @@ public class NavalCrewController
             if(helm<0)for(int i=0;i<crew.Length;i++)if(Free(i)&&assigned[i]<0){helm=i;break;}
             if(helm>=0)assigned[helm]=0;
         }
-        int side=enemy!=null?stations.TargetSide(enemy.position):-1;
+        int side=enemy!=null?stations.CombatSideToward(enemy.position):-1;
         if(side>0)for(int station=side;station<=stations.GunCount;station+=2)
         {
             if(!stations.IsFunctional(station)||stations.PlayerStation==station)continue;
@@ -59,12 +71,16 @@ public class NavalCrewController
         int needed=NavalMaintenanceMath.FreeWorkersNeeded(hull.HasActiveLeaks,repairAssigned,pumpNeeded,pumpAssigned),spare=0;
         if(hull.Bilge!=null&&hull.Bilge.WantsShieldWorker)needed++;
         for(int i=0;i<crew.Length;i++)if(Free(i)&&assigned[i]<0)spare++;
-        // Leave enough hands for a repairer AND a pump operator before flooding
-        // becomes critical, rather than reserving every other sailor for guns.
-        for(int i=crew.Length-1;i>=0&&spare<needed;i--)if(Free(i)&&assigned[i]>0)
-        {assigned[i]=-1;spare++;}
-        bool urgent=hull.Volume>BoatDimensions.SinkVolume*hull.VolumeScale*.5f;
-        for(int i=0;i<crew.Length;i++)if(workers[i]!=null)workers[i].Tick(dt,Free(i)&&(assigned[i]<0||urgent&&i!=helm));
+        int assignedGuns=0;
+        foreach(int station in assigned)if(station>0)assignedGuns++;
+        // Extra gunners can help normally; the final gunner only leaves in a critical emergency.
+        for(int i=crew.Length-1;i>=0&&spare<needed;i--)
+            if(Free(i)&&assigned[i]>0&&NavalCombatEmergency.ReleaseGunner(assignedGuns,hull.CombatCritical))
+            {
+                if(assignedGuns==1)emergencyGunner=i;
+                assigned[i]=-1;spare++;assignedGuns--;
+            }
+        for(int i=0;i<crew.Length;i++)if(workers[i]!=null)workers[i].Tick(dt,Free(i)&&assigned[i]<0);
         foreach(NavalRepairSailor worker in workers)if(worker!=null&&worker.MaintenanceDuty)Repairing=true;
         for(int i=0;i<crew.Length;i++)
         {

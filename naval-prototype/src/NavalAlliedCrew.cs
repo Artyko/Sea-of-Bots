@@ -20,7 +20,7 @@ public class NavalAlliedCrew : MonoBehaviour
     {player=owner;hull=ship;structure=frame;stations=controls;footOffset=feet*0.85f;crew=new Character[ship.Definition.CrewCount];workers=new NavalRepairSailor[crew.Length];spawned=new bool[crew.Length];roles.Initialize(hull,stations,crew,workers);}
     private void LateUpdate()
     {
-        if(player==null||!player.IsAlive()||!player.IsPlayerInputEnabled()||Time.timeScale==0f)return;
+        if(NavalTestWorld.Active==null||!NavalTestWorld.Active.SimulationActive)return;
         if(Time.time>=retry)
         {
             retry=Time.time+2f;EnemyFactory factory=Singleton<EnemyFactory>.Instance;
@@ -44,7 +44,7 @@ public class NavalAlliedCrew : MonoBehaviour
     }
     private void OnGUI()
     {
-        Camera camera=player!=null?player.GetPlayerCamera():null;if(camera==null)return;
+        Camera camera=NavalTestWorld.Active!=null?NavalTestWorld.Active.ViewCamera:null;if(camera==null)return;
         for(int i=0;i<hull.Definition.CrewCount;i++)if(crew[i]!=null&&crew[i].IsAlive())
         {
             Vector3 screen=camera.WorldToScreenPoint(crew[i].transform.position+Vector3.up*2.2f);

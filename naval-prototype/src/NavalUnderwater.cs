@@ -10,8 +10,8 @@ public class NavalUnderwater : MonoBehaviour
     { player = owner; level = waterLevel; }
     private void LateUpdate()
     {
-        if (player == null) return;
-        Camera camera = player.GetPlayerCamera();
+        NavalTestWorld world=NavalTestWorld.Active;
+        Camera camera=world!=null?world.ViewCamera:player!=null?player.GetPlayerCamera():null;
         if (camera == null) return;
         if (effect == null || effect.GetComponent<Camera>() != camera)
         {
@@ -19,6 +19,11 @@ public class NavalUnderwater : MonoBehaviour
             effect = camera.gameObject.AddComponent<NavalWaterCamera>();
         }
         Vector3 position = camera.transform.position;
+        if(world!=null&&world.Spectating)
+        {
+            effect.Depth=level(position)-position.y;effect.Underwater=effect.Depth>.04f;return;
+        }
+        if(player==null)return;
         Transform head=player.GetHeadTransform();
         Vector3 top=head!=null?head.position+Vector3.up*(.3f*Mathf.Abs(player.transform.lossyScale.y)):player.transform.position;
         effect.Depth=NavalSubmersionMath.VisualDepth(level(position)-position.y,level(top)-top.y);

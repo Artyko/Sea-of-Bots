@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 class GunneryChecks
 {
     static void Check(bool value,string name){if(!value)throw new Exception(name);}
@@ -20,7 +20,8 @@ class GunneryChecks
             Check(NavalGunneryMath.Choose(roll,2,new bool[]{false,false,true,false})==2,"Only remaining mast stays targetable");
         }
         foreach(int count in counts)Check(count>0,"Every feature can be chosen");
-        Check(counts[0]>counts[1]&&counts[1]>counts[2]&&counts[2]>counts[3],"Weighted target preference");
+        Check(counts[0]>counts[1]&&counts[1]>counts[3]&&counts[3]>counts[2],"Weighted target preference");
+        Check(counts[2]<70,"Mast is a rare target when all features are available");
         Check(NavalGunneryMath.Choose(.5f,-1,new bool[4])==-1,"No shot without available target");
         Check(NavalGunneryMath.Spread(100f)>NavalGunneryMath.Spread(20f),"Distant shots have more spread");
         Check(NavalGunneryMath.Spread(1000f)<=6f,"Spread remains bounded");

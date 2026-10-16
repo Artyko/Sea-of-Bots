@@ -67,12 +67,13 @@ public class NavalFloodGrid
     }
     private void Exchange(int a,int b,float edge,float dt,float[] floor,float up,float sill)
     {
-        if(float.IsPositiveInfinity(sill))return;
+        if(float.IsPositiveInfinity(sill)||(Water[a]<=0f&&Water[b]<=0f))return;
         up=Math.Max(0.2f,up);
         float headA=floor[a]+Water[a]/CellArea*up, headB=floor[b]+Water[b]/CellArea*up;
         int from=headA>headB?a:b, to=from==a?b:a;
         float high=Math.Max(headA,headB), low=Math.Max(Math.Min(headA,headB),Math.Max(sill,Math.Max(floor[a],floor[b])));
         float difference=Math.Max(0f,high-low);
+        if(difference<=0f||Water[from]<=0f)return;
         float depth=Math.Min(Water[from]/CellArea,difference);
         float amount=0.9f*edge*depth*(float)Math.Sqrt(19.62f*difference)*dt;
         // At most four neighbours: these bounds preserve positivity even when

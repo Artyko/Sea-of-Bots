@@ -12,7 +12,7 @@ public partial class NavalRepairSailor
     private void BailRoute(Vector3 goal)
     {
         route.Clear();stuck=0f;
-        Append(NavalRepairRoutes.Plan(new NavalWalkPoint(feet.x,feet.y,feet.z),new NavalWalkPoint(goal.x,goal.y,goal.z),hull.Definition.Compartments,hull.Definition.StairWidth));
+        PlanTo(goal);
     }
     private bool StartBailing()
     {
@@ -21,11 +21,12 @@ public partial class NavalRepairSailor
         for(int i=0;i<hull.Flood.Water.Length;i++)
         {
             float depth=hull.Flood.Depth(i);if(depth<0.015f)continue;
-            Vector3 point=new Vector3(hull.Flood.X(i)<0f?-2f:2f,BoatDimensions.HoldFloor,Mathf.Clamp(hull.Flood.Z(i),-5f,5f));
+            Vector3 point=new Vector3(hull.Flood.X(i)<0f?-2f:2f,hull.Floor,Mathf.Clamp(hull.Flood.Z(i),-5f,5f));
             if(Mathf.Abs(point.x-hull.Flood.X(i))>1.2f)continue;
+            float score=depth/(1f+Vector3.Distance(feet,point));
+            if(score<=best)continue;
             Vector3 bottom=boat.TransformPoint(point)+boat.up*0.5f;
             if(Physics.CheckCapsule(bottom,bottom+boat.up*1.3f,0.38f,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore))continue;
-            float score=depth/(1f+Vector3.Distance(feet,point));
             if(score>best){best=score;pickup=point;}
         }
         if(best<0f){bailRetry=Time.time+3f;return false;}
@@ -47,20 +48,16 @@ public partial class NavalRepairSailor
             {
                 // Give repair jobs first choice; accepted patches retain their priority.
                 if(Time.time<scanAt&&hull.HasActiveLeaks)return false;
-                FindLeak();if(leak!=null)return false;
+                TryFindLeak();if(leak!=null)return false;
             }
             feet=boat.InverseTransformPoint(robot.transform.position-boat.up*footOffset);
             if(!StartBailing())return false;
         }
-        robot.DisableAI();HoldPosition();
+        robot.DisableAI();if(route.Count==0)HoldPosition();
         if(route.Count>0)
         {
-            Vector3 target=route[0];float before=Vector3.Distance(feet,target);
-            Move(target,dt,route.Count==1);
-            float after=Vector3.Distance(feet,target);
-            if(NavalRouteArrival.Reached(feet.x,feet.y,feet.z,target.x,target.y,target.z,route.Count==1)){route.RemoveAt(0);stuck=0f;}
-            else if(before-after<dt*0.1f)stuck+=dt;else stuck=0f;
-            if(stuck>4f||feet.y<BoatDimensions.HoldFloor-0.7f)
+            RouteResult movement=FollowRoute(dt,4f);
+            if(movement==RouteResult.Blocked||movement==RouteResult.Fell)
             {CancelBailing();route.Clear();bailRetry=Time.time+8f;BeginReturn();return true;}
         }
         else

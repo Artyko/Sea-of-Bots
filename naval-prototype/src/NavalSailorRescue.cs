@@ -36,7 +36,7 @@ public partial class NavalSailorRescue : MonoBehaviour
         else if(maintenanceSubmergedAt<0f)maintenanceSubmergedAt=Time.time;
         // A short repair/pump task may finish using the existing 30-second air
         // reserve. Do not interrupt it immediately just because the head dips.
-        if(worker.MaintenanceDuty&&InteriorShip(foot)!=null&&(standing||worker.RepairAccessActive)&&
+        if(worker.MaintenanceDuty&&InteriorShip(foot)!=null&&standing&&
             (depth<worker.FootOffset+headOffset||maintenanceSubmergedAt>=0f&&Time.time-maintenanceSubmergedAt<10f))return;
         worker.BeginRescue();if(boarder!=null)boarder.SuspendForRescue();scanAt=0f;climbing=false;chosen=null;
         NavalHull interior=InteriorShip(foot);if(interior!=null)BeginHoldEscape(interior);

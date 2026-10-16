@@ -19,7 +19,7 @@ public partial class NavalSailorRescue
     {
         if(ship==null||ship.Root==null)return false;
         Vector3 local=ship.Root.InverseTransformPoint(point);
-        return NavalHoldEscapeRules.InHold(local.x,local.y,local.z);
+        return NavalHoldEscapeRules.InHold(local.x,local.y,local.z,ship.Floor);
     }
     private void BeginHoldEscape(NavalHull ship)
     {
@@ -30,7 +30,7 @@ public partial class NavalSailorRescue
     private void PlanHoldEscape()
     {
         escapeRoute.Clear();
-        escapeRoute.AddRange(NavalRepairRoutes.Plan(new NavalWalkPoint(escapeFeet.x,escapeFeet.y,escapeFeet.z),new NavalWalkPoint(1.65f,0.825f,1.1f),escapeShip.Definition.Compartments,escapeShip.Definition.StairWidth));
+        escapeRoute.AddRange(NavalRepairRoutes.Plan(new NavalWalkPoint(escapeFeet.x,escapeFeet.y,escapeFeet.z),new NavalWalkPoint(1.65f,0.825f,1.1f),escapeShip.Definition.Compartments,escapeShip.Definition.StairWidth,escapeShip.Floor));
     }
     private void EscapeHold(float dt)
     {
@@ -45,7 +45,7 @@ public partial class NavalSailorRescue
         Vector3 offset=ship.TransformVector(movementTarget-escapeFeet),before=escapeFeet;
         Vector3 look=offset;look.y=0f;
         if(look.sqrMagnitude>.01f)robot.transform.rotation=Quaternion.RotateTowards(robot.transform.rotation,Quaternion.LookRotation(look),360f*dt);
-        bool stairs=NavalWalkRoutes.InStairwell(escapeFeet.x,escapeFeet.y,escapeFeet.z,escapeShip.Definition.StairWidth*.5f+.175f)||NavalWalkRoutes.InStairwell(target.x,target.y,target.z,escapeShip.Definition.StairWidth*.5f+.175f);
+        bool stairs=NavalWalkRoutes.InStairwell(escapeFeet.x,escapeFeet.y,escapeFeet.z,escapeShip.Definition.StairWidth*.5f+.175f,escapeShip.Floor)||NavalWalkRoutes.InStairwell(target.x,target.y,target.z,escapeShip.Definition.StairWidth*.5f+.175f,escapeShip.Floor);
         float speed=worker.DeckWalkSpeed*(stairs?0.8f:0.65f);
         Vector3 step=Vector3.ClampMagnitude(offset,speed*dt);
         CharacterController body=robot.GetComponentInChildren<CharacterController>();
@@ -69,10 +69,10 @@ public partial class NavalSailorRescue
         }
         else
         {
-            if(Vector3.Distance(before,target)-Vector3.Distance(escapeFeet,target)<dt*.05f)escapeStuck+=dt;else escapeStuck=0f;
+            escapeStuck=NavalRouteProgress.Step(escapeStuck,ship.TransformVector(target-before).magnitude,ship.TransformVector(target-escapeFeet).magnitude,dt,false,worker.WorkingOnPassage);
             if(escapeStuck>3f){escapeStuck=0f;escapeRetry=Time.time+1f;PlanHoldEscape();}
             // A genuine fall through the hull switches back to sea rescue.
-            if(!NavalHoldEscapeRules.InHold(escapeFeet.x,Mathf.Min(escapeFeet.y,0.59f),escapeFeet.z))
+            if(!NavalHoldEscapeRules.InHold(escapeFeet.x,Mathf.Min(escapeFeet.y,0.59f),escapeFeet.z,escapeShip.Floor))
             {escapeShip=null;escapeRoute.Clear();worker.BoardingWalk(false);scanAt=0f;}
         }
     }

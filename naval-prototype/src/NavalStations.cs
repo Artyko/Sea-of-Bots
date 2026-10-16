@@ -30,9 +30,22 @@ public partial class NavalStations : MonoBehaviour
     public int TargetSide(Vector3 point)
     {return boat.InverseTransformPoint(point).x<0f?1:2;}
     public int GunCount {get{return hull.Definition.GunCount;}}
-    public int WorkingGuns {get{int n=0;for(int i=1;i<=GunCount;i++)if(Functional(i))n++;return n;}}
+    private int gunAvailabilityRevision=-1,portWorking,starboardWorking;
+    private void UpdateGunAvailability()
+    {
+        if(gunAvailabilityRevision==hull.Revision)return;
+        portWorking=starboardWorking=0;
+        for(int station=1;station<=GunCount;station++)if(Functional(station))
+        {if(station%2==1)portWorking++;else starboardWorking++;}
+        gunAvailabilityRevision=hull.Revision;
+    }
+    public int WorkingGuns {get{UpdateGunAvailability();return portWorking+starboardWorking;}}
+    public float CombatOrbitSign(float preferred)
+    {UpdateGunAvailability();return NavalBroadsideMath.OrbitSign(portWorking,starboardWorking,preferred);}
+    public int CombatSideToward(Vector3 point)
+    {UpdateGunAvailability();return NavalBroadsideMath.CombatSide(TargetSide(point),portWorking,starboardWorking);}
     public void PauseInput(){ForwardInput=0f;TurnInput=0f;}
-    public bool AllGunsBroken {get{for(int i=1;i<=GunCount;i++)if(Functional(i))return false;return true;}}
+    public bool AllGunsBroken {get{return WorkingGuns==0;}}
     public Vector3 Post(int station)
     {return station==0?new Vector3(0f,.825f,NavalShipDefinition.HelmZ(hull.Definition)):new Vector3(NavalShipDefinition.GunSide(station-1)*1.35f,.825f,NavalShipDefinition.GunZ(station-1));}
     public Vector3 CrewPosition(int station){return boat.TransformPoint(Post(station));}
@@ -201,7 +214,7 @@ public partial class NavalStations : MonoBehaviour
     private void OnGUI()
     {
         DrawReloadBars();
-        if(EnemyControlled)return;
+        if(EnemyControlled||NavalTestWorld.Active!=null&&NavalTestWorld.Active.Spectating)return;
         string text = active == 0 ? "HELM: W/S or arrows = sail; A/D = turn; E = leave" :
             (active > 0 ? "CANNON: A/D or arrows = aim +/-30; W/S = elevation -5..45; LMB/Space = fire; E = leave\nReload: " +
                 Mathf.Max(0f, readyAt[active - 1] - Time.time).ToString("F1") + " s" :
@@ -237,9 +250,11 @@ public class NavalCannonball : MonoBehaviour
     { velocity = speed; boat = ship; hull = shell; owner = player; ocean = sea; splash = material; expires = end; born = Time.time; attackId = nextAttackId++; hostile=enemy;attacker=robot!=null?robot:player; }
     private void Update()
     {
-        if (boat == null || owner == null || Time.time >= expires) { Destroy(gameObject); return; }
-        if (Time.timeScale == 0f || !owner.IsPlayerInputEnabled()) return;
+        if (boat == null || Time.time >= expires) { Destroy(gameObject); return; }
+        NavalTestWorld world=NavalTestWorld.Active;
+        if (Time.timeScale == 0f || (world!=null?!world.SimulationActive:owner==null||!owner.IsPlayerInputEnabled())) return;
         float remaining=Mathf.Min(Time.deltaTime,0.05f);
+        float clearance=submerged?0f:WaterClearance(transform.position);
         while(remaining>0.00001f)
         {
             float dt=Mathf.Min(remaining,0.008f);
@@ -247,19 +262,20 @@ public class NavalCannonball : MonoBehaviour
             if(submerged)velocity*=NavalProjectileWaterMath.Damping(dt);
             Vector3 step=velocity*dt;
             Vector3 start=transform.position,next=start+step;
-            if(!submerged&&(start.y<=ocean.Height(start.x,start.z)||next.y<=ocean.Height(next.x,next.z)))
+            float nextClearance=submerged?0f:WaterClearance(next);
+            if(!submerged&&NavalProjectileWaterMath.EntersWater(clearance,nextClearance))
             {
                 float low=0f,high=1f;
-                if(start.y>ocean.Height(start.x,start.z))
+                if(clearance>0f)
                     for(int i=0;i<10;i++)
                     {
                         float middle=(low+high)*0.5f;Vector3 p=start+step*middle;
-                        if(p.y>ocean.Height(p.x,p.z))low=middle;else high=middle;
+                        if(WaterClearance(p)>0f)low=middle;else high=middle;
                     }
                 else high=0f;
                 if(HitSolid(step*high))return;
                 transform.position=start+step*high;
-                Vector3 surface=transform.position;surface.y=ocean.Height(surface.x,surface.z);
+                Vector3 surface=transform.position;surface.y=WaterLevel(surface);
                 NavalWaterSplash.Create(transform.parent,surface,ocean);
                 submerged=true;velocity*=NavalProjectileWaterMath.EntrySpeedScale;
                 remaining-=dt*high;
@@ -267,7 +283,7 @@ public class NavalCannonball : MonoBehaviour
             }
             if(submerged)step=Vector3.ClampMagnitude(step,NavalProjectileWaterMath.MaxTravel-underwaterTravel);
             if(HitSolid(step))return;
-            transform.position+=step;
+            transform.position+=step;clearance=nextClearance;
             if(submerged)
             {
                 underwaterTravel+=step.magnitude;
@@ -277,13 +293,34 @@ public class NavalCannonball : MonoBehaviour
             remaining-=dt;
         }
     }
+    private float WaterLevel(Vector3 point)
+    {
+        // The ocean surface does not extend through a dry hull. Use the same
+        // local flood column as swimming, including heel and full submergence.
+        NavalTestWorld world=NavalTestWorld.Active;
+        return world!=null?world.WaterLevelAt(point):ocean.Height(point.x,point.z);
+    }
+    private float WaterClearance(Vector3 point){return point.y-WaterLevel(point);}
+    private static RaycastHit[] impactHits=new RaycastHit[256];
+    private sealed class ImpactOrder:System.Collections.Generic.IComparer<RaycastHit>
+    {public int Compare(RaycastHit a,RaycastHit b){return a.distance.CompareTo(b.distance);}}
+    private static readonly ImpactOrder impactOrder=new ImpactOrder();
     private bool HitSolid(Vector3 step)
     {
         if(step.sqrMagnitude<0.00000001f)return false;
-        RaycastHit[] hits = Physics.SphereCastAll(transform.position, 0.12f, step.normalized, step.magnitude, ~0, QueryTriggerInteraction.Collide);
-        System.Array.Sort(hits, delegate(RaycastHit a, RaycastHit b) { return a.distance.CompareTo(b.distance); });
-        foreach (RaycastHit hit in hits)
+        // Shared scratch storage: projectile updates run sequentially on the Unity thread.
+        // A full buffer must be grown and queried again: NonAlloc hits are unsorted.
+        int count;
+        while(true)
         {
+            count=Physics.SphereCastNonAlloc(transform.position,.12f,step.normalized,impactHits,step.magnitude,~0,QueryTriggerInteraction.Collide);
+            if(count<impactHits.Length)break;
+            System.Array.Resize(ref impactHits,impactHits.Length*2);
+        }
+        System.Array.Sort(impactHits,0,count,impactOrder);
+        for(int index=0;index<count;index++)
+        {
+            RaycastHit hit=impactHits[index];
             Vector3 hitPoint=hit.distance<=0.0001f?hit.collider.ClosestPoint(transform.position):hit.point;
             Character hitRobot=hit.collider.GetComponentInParent<Character>();
             if (hitRobot == attacker || (!hostile && hitRobot == owner)) continue;
@@ -298,8 +335,7 @@ public class NavalCannonball : MonoBehaviour
                 // actual surface, then place the compact damage sphere just inside the plank.
                 Vector3 toCentre=voxel.transform.position-hitPoint;
                 Vector3 damagePoint=hitPoint+toCentre*NavalCannonImpactMath.InsetFraction(toCentre.magnitude);
-                voxel.Owner.Damage(voxel.Owner.Root.InverseTransformPoint(damagePoint), NavalRigImpactMath.CannonRadius*RadiusScale);
-                if (!voxel.Missing) voxel.SetMissing(true);
+                voxel.Owner.Damage(voxel.Owner.Root.InverseTransformPoint(damagePoint), NavalRigImpactMath.CannonRadius*RadiusScale,true,voxel,submerged?NavalProjectileWaterMath.DamagePower:1f);
             }
             else
             {

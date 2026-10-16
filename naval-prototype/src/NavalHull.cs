@@ -8,9 +8,12 @@ public class NavalHullVoxel : MonoBehaviour
     public bool Missing;
     public bool HydraulicShell = true;
     public bool InternalBarrier;
+    public bool RepairableEquipment;
     public bool ManagedRig;
     public bool MovableEquipment;
     public bool RigFabric;
+    public bool MastTimber;
+    public float CannonWear;
     public bool Detached;
     public bool Batched;
     public NavalHull Owner;
@@ -23,6 +26,7 @@ public class NavalHullVoxel : MonoBehaviour
     public NavalLeakStream Stream;
     public void SetMissing(bool value)
     {
+        if(!value){CannonWear=0f;InflowRate=0f;if(Stream!=null)Stream.gameObject.SetActive(false);}
         if (Missing == value) return;
         Missing = value;
         LastWetAt=float.NegativeInfinity;LastWetFlow=0f;
@@ -38,24 +42,39 @@ public class NavalHull
     public int Revision;
     public readonly List<NavalRepairSailor> RepairWorkers=new List<NavalRepairSailor>();
     public readonly List<NavalHullVoxel> Voxels = new List<NavalHullVoxel>();
+    private int damagedRevision=-1;
+    private readonly List<NavalHullVoxel> damagedVoxels=new List<NavalHullVoxel>();
+    public List<NavalHullVoxel> GetDamagedVoxels()
+    {
+        if(damagedRevision!=Revision)
+        {
+            damagedVoxels.Clear();
+            foreach(NavalHullVoxel cell in Voxels)if(cell.Missing||cell.Detached)damagedVoxels.Add(cell);
+            damagedRevision=Revision;
+        }
+        return damagedVoxels;
+    }
     public int HoleCount { get; private set; }
     public float SubmergedArea { get; private set; }
     public float Inflow { get; private set; }
     public readonly NavalShipDefinition Definition;
     public NavalBilgeSystem Bilge;
+    public float Floor {get{return Definition.HoldFloor;}}
     public float WorldScale {get{return Definition.Scale;}}
     public float AreaScale {get{return Definition.AreaScale;}}
     public float VolumeScale {get{return Definition.VolumeScale;}}
     public readonly NavalFloodGrid Flood;
     public NavalHull():this(NavalShipDefinition.Sloop){}
     public NavalHull(NavalShipDefinition definition)
-    {Definition=definition;Flood=new NavalFloodGrid(12,24,BoatDimensions.HoldWidth,BoatDimensions.HoldLength,definition.Scale,definition.RimY-BoatDimensions.HoldFloor);}
+    {Definition=definition;Flood=new NavalFloodGrid(12,24,BoatDimensions.HoldWidth,BoatDimensions.HoldLength,definition.Scale,definition.RimY-definition.HoldFloor);}
     private readonly float[] floodFloors = new float[12*24];
     public float LeftWater { get { return SideWater(true); } }
     public float RightWater { get { return SideWater(false); } }
     private float SideWater(bool port){float total=Flood.Side(port);foreach(NavalRepairSailor worker in RepairWorkers)if(worker!=null&&(worker.CarriedSide<0f)==port)total+=worker.BucketWater;return total;}
     public float Volume { get { float total=Flood.Total;foreach(NavalRepairSailor worker in RepairWorkers)if(worker!=null)total+=worker.BucketWater;return total; } }
     public float WaterDepthAt(Vector3 local) { return Flood.Depth(Flood.Index(local.x,local.z)); }
+    private readonly NavalCombatEmergency combatEmergency=new NavalCombatEmergency();
+    public bool CombatCritical {get{return combatEmergency.Critical;}}
     public bool Sunk;
     public bool FloodEffectsHidden;
     public bool HasActiveLeaks;
@@ -88,9 +107,11 @@ public class NavalHull
     private void Add(Transform boat, Material material, Vector3 center)
     {
         if (CannonPort(center.x, center.y, center.z, Cell * 0.5f, Cell * 0.5f, Cell * 0.5f)) return;
-        float low=Definition.AboveDeckY(center.y-Cell*.5f),high=Definition.AboveDeckY(center.y+Cell*.5f);
+        bool bottom=center.y<BoatDimensions.HoldFloor;
+        float low=Definition.HullY(center.y-Cell*.5f),high=Definition.HullY(center.y+Cell*.5f);
         center.y=(low+high)*.5f;
-        AddVoxel(boat, material, center, new Vector3(Cell,high-low,Cell), true, true);
+        NavalHullVoxel voxel=AddVoxel(boat, material, center, new Vector3(Cell,high-low,Cell), true, true);
+        voxel.OpeningArea=bottom?Cell*Cell:Cell*(high-low);
     }
     public NavalHullVoxel AddVoxel(Transform boat, Material material, Vector3 center, Vector3 size, bool shell, bool solid)
     {
@@ -128,7 +149,7 @@ public class NavalHull
             AddVoxel(boat, material, point, cell, false, solid);
         }
     }
-    public int Damage(Vector3 localPoint, float radius)
+    public int Damage(Vector3 localPoint, float radius,bool cannon=false,NavalHullVoxel direct=null,float cannonPower=1f)
     {
         int removed = 0;
         foreach (NavalHullVoxel voxel in Voxels)
@@ -136,7 +157,20 @@ public class NavalHull
             if(voxel.Missing)continue;
             Vector3 position=root.InverseTransformPoint(voxel.transform.position);
             float distance=(position-localPoint).magnitude;
-            if(distance<=radius){voxel.SetMissing(true);removed++;}
+            if(distance<=radius||voxel==direct)
+            {
+                if(cannon&&voxel.MastTimber)
+                {
+                    voxel.CannonWear=NavalMastDurability.Accumulate(voxel.CannonWear,cannonPower);
+                    if(!NavalMastDurability.Broken(voxel.CannonWear))
+                    {
+                        voxel.ScorchStrength=Mathf.Max(voxel.ScorchStrength,.45f);
+                        style.Scorch(voxel.gameObject,voxel.ScorchStrength);
+                        continue;
+                    }
+                }
+                voxel.SetMissing(true);removed++;
+            }
             else if(distance<radius+0.57f)
             {
                 // Stable irregular, voxel-shaped rim. It colours the actual
@@ -154,6 +188,7 @@ public class NavalHull
     {
         foreach (NavalHullVoxel voxel in Voxels)
         {
+            voxel.CannonWear=0f;
             if (voxel.Missing) voxel.SetMissing(false);
             if(voxel.ScorchStrength>0f)
             {voxel.GetComponent<Renderer>().sharedMaterial=voxel.OriginalSurface;voxel.ScorchStrength=0f;}
@@ -164,7 +199,7 @@ public class NavalHull
         FloodEffectsHidden=NavalFloodVisibilityMath.HideEffects(NavalFloodAppearance.Clearance(boat,ocean));
         HoleCount = 0; SubmergedArea = 0f; Inflow = 0f;HasActiveLeaks=false;
         int visibleStreams = 0;
-        foreach (NavalHullVoxel voxel in Voxels)
+        foreach (NavalHullVoxel voxel in GetDamagedVoxels())
         {
             voxel.InflowRate=0f;
             if (!voxel.Missing && !voxel.Detached) continue;
@@ -173,7 +208,7 @@ public class NavalHull
             Vector3 point = boat.TransformPoint(voxel.LocalCenter);
             int cellIndex = Flood.Index(voxel.LocalCenter.x,voxel.LocalCenter.z);
             float internalY = boat.TransformPoint(new Vector3(Flood.X(cellIndex),
-                BoatDimensions.HoldFloor + Flood.Depth(cellIndex),Flood.Z(cellIndex))).y;
+                Floor + Flood.Depth(cellIndex),Flood.Z(cellIndex))).y;
             float sea = ocean.Height(point.x, point.z);
             // Partial submergence of a voxel opening changes its effective wet area.
             Vector3 cellSize=voxel.transform.lossyScale;
@@ -199,7 +234,7 @@ public class NavalHull
                 }
                 voxel.Stream.gameObject.SetActive(true);
                 Vector3 origin = point; origin.y = Mathf.Min(point.y, sea - 0.02f);
-                Vector3 inward = voxel.LocalCenter.y < BoatDimensions.HoldFloor ? Vector3.up :
+                Vector3 inward = voxel.LocalCenter.y < Floor ? Vector3.up :
                     (Mathf.Abs(voxel.LocalCenter.x) > 2.9f ? new Vector3(-Mathf.Sign(voxel.LocalCenter.x), 0f, 0f) :
                     new Vector3(0f, 0f, -Mathf.Sign(voxel.LocalCenter.z)));
                 voxel.Stream.Animate(boat.InverseTransformPoint(origin), inward, amount / dt, Time.time);
@@ -215,10 +250,11 @@ public class NavalHull
             float accepted=Flood.Add(Flood.Index(x,z),flow*dt);Inflow+=accepted/dt;
         }
         for(int i=0;i<Flood.Water.Length;i++)
-            floodFloors[i]=boat.TransformPoint(new Vector3(Flood.X(i),BoatDimensions.HoldFloor,Flood.Z(i))).y;
+            floodFloors[i]=boat.TransformPoint(new Vector3(Flood.X(i),Floor,Flood.Z(i))).y;
         if(Bilge!=null)Bilge.UpdateBarriers();
         Flood.Spread(dt,floodFloors,boat.up.y);
         if(pump)Flood.Pump(BoatDimensions.PumpRate*AreaScale*dt);
+        combatEmergency.Step(Volume/(BoatDimensions.SinkVolume*VolumeScale),Mathf.DeltaAngle(0f,boat.eulerAngles.z));
         if (Volume >= BoatDimensions.SinkVolume * VolumeScale) Sunk = true;
         if (Sunk) SinkDepth = Mathf.Min(5f, SinkDepth + dt * 0.2f);
     }

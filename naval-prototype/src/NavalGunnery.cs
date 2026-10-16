@@ -9,11 +9,13 @@ public partial class NavalStations
     private Vector3[] aimLocal;
     private Vector2[] shotError;
     private int[] aimKind,lastKind;
-    private float[] aimRetry;
+    private float[] aimRetry,visibilityAt;
+    private bool[] visibilityCache;
     private NavalHullVoxel[] aimCell;
     private void InitializeGunnery(int count)
     {
         aimShip=new Transform[count];aimLocal=new Vector3[count];shotError=new Vector2[count];
+        visibilityAt=new float[count];visibilityCache=new bool[count];
         aimKind=new int[count];lastKind=new int[count];aimRetry=new float[count];aimCell=new NavalHullVoxel[count];
         for(int i=0;i<count;i++){aimKind[i]=lastKind[i]=-1;}
     }
@@ -82,6 +84,13 @@ public partial class NavalStations
         return false;
     }
     private bool LockedTargetVisible(int gun,Transform target)
+    {
+        // During reload reuse LOS briefly; recheck every ready frame before firing.
+        if(Time.time<readyAt[gun]&&Time.time<visibilityAt[gun])return visibilityCache[gun];
+        visibilityCache[gun]=ComputeLockedTargetVisible(gun,target);visibilityAt[gun]=Time.time+.2f;
+        return visibilityCache[gun];
+    }
+    private bool ComputeLockedTargetVisible(int gun,Transform target)
     {
         if(aimKind[gun]!=1&&aimKind[gun]!=3)return true;
         NavalStations victim;if(!ships.TryGet(target,out victim)||victim==null||aimCell[gun]==null)return false;
@@ -160,7 +169,7 @@ public partial class NavalStations
             }
             if(chosen<0)return false;
         }
-        aimKind[gun]=chosen;aimCell[gun]=cells[chosen];aimShip[gun]=target;
+        aimKind[gun]=chosen;aimCell[gun]=cells[chosen];aimShip[gun]=target;visibilityAt[gun]=0f;
         aimLocal[gun]=target.InverseTransformPoint(cells[chosen].transform.position);
         // Draw once per shot, so aiming stays stable while the cannon reloads.
         float distance=Vector3.Distance(boat.position,target.position);

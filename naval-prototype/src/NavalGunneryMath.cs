@@ -1,11 +1,12 @@
-using System;
+﻿using System;
 public static class NavalGunneryMath
 {
     public const float ReloadSeconds=5f;
+    private static readonly float[] weights={4f,3f,.5f,1.5f};
     // Waterline, guns, mast, wheel. Avoid repeating the last type when possible.
     public static int Choose(float roll,int previous,bool[] available)
     {
-        float[] weights={4f,3f,2f,1.5f};float total=0f;int count=0;
+        float total=0f;int count=0;
         for(int i=0;i<4;i++)if(available[i])count++;
         for(int i=0;i<4;i++)if(available[i]&&(count==1||i!=previous))total+=weights[i];
         if(total==0f)return -1;

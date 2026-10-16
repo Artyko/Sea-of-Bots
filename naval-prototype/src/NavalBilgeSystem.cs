@@ -8,32 +8,52 @@ public partial class NavalBilgeSystem : MonoBehaviour
     private NavalHull hull;
     private FirstPersonMover player;
     private Transform crank;
-    private int cachedRevision=-1;
-    private readonly Dictionary<int,float> apertures=new Dictionary<int,float>();
+    private int cachedRevision=-1,pumpRevision=-1;
+    private bool pumpFunctional;
+    private readonly Dictionary<int,Vector3> apertures=new Dictionary<int,Vector3>();
+    private readonly List<NavalHullVoxel> damagedWalls=new List<NavalHullVoxel>();
     public NavalRepairSailor Operator;
     public bool PlayerInteracting {get;private set;}
     private bool playerPump;
     private float pumpLastWork=-100f,pumpPhase;
     private bool lastTransfer;
     private int mode; // 0 automatic, 1 overboard, 2 port->starboard, 3 reverse
-    public readonly Vector3 PumpPost=new Vector3(0f,BoatDimensions.HoldFloor,-4.9f);
+    public Vector3 PumpPost {get{return new Vector3(0f,hull.Floor,-4.9f);}}
     public string Status {get;private set;}
-    public bool Functional {get{foreach(NavalHullVoxel c in pumpCells)if(c==null||c.Missing||c.Detached)return false;return true;}}
+    public bool Functional
+    {
+        get
+        {
+            if(pumpRevision==hull.Revision)return pumpFunctional;
+            pumpRevision=hull.Revision;pumpFunctional=pumpCells.Count>0;
+            foreach(NavalHullVoxel cell in pumpCells)
+                if(cell==null||cell.Missing||cell.Detached){pumpFunctional=false;break;}
+            return pumpFunctional;
+        }
+    }
+    private void StopBrokenPump()
+    {
+        ReleasePlayer();pumpLastWork=-100f;Status="Pump damaged";
+        if(Operator!=null){NavalRepairSailor worker=Operator;Operator=null;worker.CancelPumpDuty();}
+        if(crank!=null)crank.localRotation=Quaternion.identity;
+    }
     public bool WantsOperator {get{return Functional&&!hull.Sunk&&hull.Flood.Total>1f;}}
     public void Initialize(NavalHull owner,FirstPersonMover observer,Material wood,Material trim,Material metal)
     {
         hull=owner;player=observer;owner.Bilge=this;
         if(!owner.Definition.Compartments)return;
+        float partition=NavalCompartmentMath.PartitionHeight(hull.WorldScale);
+        int rows=Mathf.CeilToInt(partition/.25f);float rowHeight=partition/rows;
         for(int side=-1;side<=1;side+=2)
         {
-            for(int z=0;z<48;z++)for(int y=0;y<11;y++)
+            for(int z=0;z<48;z++)for(int y=0;y<rows;y++)
             {
-                float pz=-5.875f+z*.25f,py=BoatDimensions.HoldFloor+(y+.5f)*.25f;
-                bool doorway=(Mathf.Abs(pz-NavalCompartmentMath.DoorZ)<.625f||Mathf.Abs(pz+NavalCompartmentMath.DoorZ)<.625f)&&py<BoatDimensions.HoldFloor+1.5f;
-                if(!doorway)Wall(new Vector3(side*NavalCompartmentMath.WallX,py,pz),new Vector3(.14f,.25f,.25f),wood);
+                float pz=-5.875f+z*.25f,py=hull.Floor+(y+.5f)*rowHeight;
+                bool opening=Mathf.Abs(Mathf.Abs(pz)-NavalCompartmentMath.DoorZ)<.625f;
+                if(!opening)Wall(new Vector3(side*NavalCompartmentMath.WallX,py,pz),new Vector3(.14f,rowHeight,.25f),wood);
             }
-            for(int x=0;x<6;x++)for(int y=0;y<11;y++)
-                Wall(new Vector3(side*(NavalCompartmentMath.WallX+(x+.5f)*(BoatDimensions.HoldWidth*.5f-NavalCompartmentMath.WallX)/6f),BoatDimensions.HoldFloor+(y+.5f)*.25f,0f),new Vector3(.25f,.25f,.14f),wood);
+            for(int x=0;x<6;x++)for(int y=0;y<rows;y++)
+                Wall(new Vector3(side*(NavalCompartmentMath.WallX+(x+.5f)*(BoatDimensions.HoldWidth*.5f-NavalCompartmentMath.WallX)/6f),hull.Floor+(y+.5f)*rowHeight,0f),new Vector3(.25f,rowHeight,.14f),wood);
             // Low wooden coamings retain shallow water; stepped approaches allow ordinary walking.
             for(int end=-1;end<=1;end+=2)
             {
@@ -41,11 +61,11 @@ public partial class NavalBilgeSystem : MonoBehaviour
                 for(int z=0;z<5;z++)
                 {
                     float pz=end*NavalCompartmentMath.DoorZ-.625f+(z+.5f)*.25f;
-                    Wall(new Vector3(side*NavalCompartmentMath.WallX,BoatDimensions.HoldFloor+height*.5f,pz),new Vector3(.14f,height,.25f),trim);
+                    Wall(new Vector3(side*NavalCompartmentMath.WallX,hull.Floor+height*.5f,pz),new Vector3(.14f,height,.25f),trim);
                     for(int face=-1;face<=1;face+=2)for(int step=1;step<=3;step++)
                     {
                         float rise=height*(4-step)/4f;
-                        hull.AddDecorationBox(transform,trim,new Vector3(side*NavalCompartmentMath.WallX+face*(.07f+(step-.5f)*.06f),BoatDimensions.HoldFloor+rise*.5f,pz),new Vector3(.06f,rise,.25f),true);
+                        hull.AddDecorationBox(transform,trim,new Vector3(side*NavalCompartmentMath.WallX+face*(.07f+(step-.5f)*.06f),hull.Floor+rise*.5f,pz),new Vector3(.06f,rise,.25f),true);
                     }
                 }
             }
@@ -54,12 +74,13 @@ public partial class NavalBilgeSystem : MonoBehaviour
         int first=hull.Voxels.Count;
         hull.AddDecorationBox(transform,metal,PumpPost+new Vector3(0f,.3f,NavalMaintenanceMath.PumpOffsetZ),new Vector3(.5f,.6f,.5f),true);
         hull.AddDecorationBox(transform,trim,PumpPost+new Vector3(0f,.65f,NavalMaintenanceMath.PumpOffsetZ),new Vector3(.8f,.12f,.15f),true);
-        for(int i=first;i<hull.Voxels.Count;i++)pumpCells.Add(hull.Voxels[i]);
         crank=new GameObject("Bilge pump handle").transform;crank.SetParent(transform,false);crank.localPosition=PumpPost+new Vector3(0f,.65f,NavalMaintenanceMath.PumpOffsetZ);
-        foreach(NavalHullVoxel cell in pumpCells)if(cell.LocalCenter.y>BoatDimensions.HoldFloor+.6f)cell.transform.SetParent(crank,true);
         // Two visible pipes lead from the pump toward side compartment inlets.
         for(int side=-1;side<=1;side+=2)
-            hull.AddDecorationBox(transform,metal,new Vector3(side*1.4f,BoatDimensions.HoldFloor+.13f,-5.45f),new Vector3(2.8f,.12f,.12f),true);
+            hull.AddDecorationBox(transform,metal,new Vector3(side*1.4f,hull.Floor+.13f,-5.45f),new Vector3(2.8f,.12f,.12f),true);
+        // Body, handle and inlet pipes are one damageable mechanism.
+        for(int i=first;i<hull.Voxels.Count;i++){hull.Voxels[i].RepairableEquipment=true;pumpCells.Add(hull.Voxels[i]);}
+        foreach(NavalHullVoxel cell in pumpCells)if(cell.LocalCenter.y>hull.Floor+.6f)cell.transform.SetParent(crank,true);
     }
     private NavalHullVoxel Wall(Vector3 point,Vector3 size,Material material)
     {NavalHullVoxel c=hull.AddVoxel(transform,material,point,size,false,true);c.InternalBarrier=true;walls.Add(c);return c;}
@@ -76,11 +97,11 @@ public partial class NavalBilgeSystem : MonoBehaviour
         NavalFloodGrid g=hull.Flood;
         if(NavalCompartmentMath.Region(g.X(a),g.Z(a))==NavalCompartmentMath.Region(g.X(b),g.Z(b)))return float.NegativeInfinity;
         float x=(g.X(a)+g.X(b))*.5f,z=(g.Z(a)+g.Z(b))*.5f;
-        float lowest=Passage(x,z)?ShieldSill(x,z):float.PositiveInfinity;
-        foreach(NavalHullVoxel cell in walls)
+        float lowest=Passage(x,z)?ShieldSill(x,z):hull.Floor+NavalCompartmentMath.PartitionHeight(hull.WorldScale);
+        foreach(NavalHullVoxel cell in damagedWalls)
         {
             Vector3 p=cell.LocalCenter;
-            if((cell.Missing||cell.Detached)&&Mathf.Abs(p.x-x)<.3f&&Mathf.Abs(p.z-z)<.3f)lowest=Mathf.Min(lowest,p.y-.125f);
+            if((cell.Missing||cell.Detached)&&Mathf.Abs(p.x-x)<.3f&&Mathf.Abs(p.z-z)<.3f)lowest=Mathf.Min(lowest,p.y-cell.transform.localScale.y*.5f);
         }
         return lowest;
     }
@@ -92,23 +113,30 @@ public partial class NavalBilgeSystem : MonoBehaviour
         if(changed)
         {
             apertures.Clear();cachedRevision=hull.Revision;
+            damagedWalls.Clear();foreach(NavalHullVoxel cell in walls)if(cell.Missing||cell.Detached)damagedWalls.Add(cell);
             NavalFloodGrid g=hull.Flood;
             for(int i=0;i<g.Water.Length;i++)
-            {if(i%g.Columns+1<g.Columns)apertures[i*2]=Sill(i,i+1);if(i/g.Columns+1<g.Rows)apertures[i*2+1]=Sill(i,i+g.Columns);}
+            {if(i%g.Columns+1<g.Columns)CacheSill(i,i+1,true);if(i/g.Columns+1<g.Rows)CacheSill(i,i+g.Columns,false);}
         }
-        foreach(NavalHullVoxel cell in walls)
+        foreach(NavalHullVoxel cell in damagedWalls)
         {
-            if(!cell.Missing&&!cell.Detached)continue;
             int index=hull.Flood.Index(cell.LocalCenter.x,cell.LocalCenter.z);
-            if(hull.Flood.Depth(index)>cell.LocalCenter.y-BoatDimensions.HoldFloor+.05f)
+            if(hull.Flood.Depth(index)>cell.LocalCenter.y-hull.Floor+.05f)
             {cell.InflowRate=.05f;cell.LastWetAt=Time.time;cell.LastWetFlow=.05f;}
         }
-        foreach(KeyValuePair<int,float> edge in apertures)
+        Matrix4x4 toWorld=transform.localToWorldMatrix;
+        foreach(KeyValuePair<int,Vector3> edge in apertures)
         {
-            int i=edge.Key/2;bool right=edge.Key%2==0;int j=i+(right?1:hull.Flood.Columns);float sill=edge.Value;
-            if(!float.IsInfinity(sill))sill=transform.TransformPoint(new Vector3((hull.Flood.X(i)+hull.Flood.X(j))*.5f,sill,(hull.Flood.Z(i)+hull.Flood.Z(j))*.5f)).y;
-            if(right)hull.Flood.RightSill[i]=sill;else hull.Flood.ForwardSill[i]=sill;
+            int i=edge.Key/2;float sill=toWorld.MultiplyPoint3x4(edge.Value).y;
+            if(edge.Key%2==0)hull.Flood.RightSill[i]=sill;else hull.Flood.ForwardSill[i]=sill;
         }
+    }
+    private void CacheSill(int a,int b,bool right)
+    {
+        NavalFloodGrid grid=hull.Flood;float sill=Sill(a,b);
+        if(float.IsInfinity(sill))
+        {if(right)grid.RightSill[a]=sill;else grid.ForwardSill[a]=sill;return;}
+        apertures[a*2+(right?0:1)]=new Vector3((grid.X(a)+grid.X(b))*.5f,sill,(grid.Z(a)+grid.Z(b))*.5f);
     }
     private int Wettest(int region)
     {
@@ -119,6 +147,7 @@ public partial class NavalBilgeSystem : MonoBehaviour
     }
     public void Pump(float dt,bool automatic)
     {
+        if(!Functional){StopBrokenPump();return;}
         if(!WantsOperator)return;
         float processed=0f;
         int selectedMode=automatic?0:mode;
@@ -132,8 +161,8 @@ public partial class NavalBilgeSystem : MonoBehaviour
             if(source>=0)
             {
                 int destination=hull.Flood.Index(fromPort?2.2f:-2.2f,hull.Flood.Z(source));
-                float maximum=selectedMode==0?Mathf.Abs(hull.LeftWater-hull.RightWater)*.5f:8f*dt;
-                float moved=NavalCompartmentMath.Move(hull.Flood,source,destination,Mathf.Min(8f*dt,maximum));
+                float maximum=selectedMode==0?Mathf.Abs(hull.LeftWater-hull.RightWater)*.5f:NavalMaintenanceMath.PumpTransferRate*dt;
+                float moved=NavalCompartmentMath.Move(hull.Flood,source,destination,Mathf.Min(NavalMaintenanceMath.PumpTransferRate*dt,maximum));
                 processed=moved;
                 if(moved<=.00001f)transfer=false;
                 Status="Transfer "+(fromPort?"port -> starboard":"starboard -> port")+" | "+(moved/Mathf.Max(.001f,dt)).ToString("F1")+" m3/s";
@@ -142,9 +171,9 @@ public partial class NavalBilgeSystem : MonoBehaviour
         }
         if(!transfer)
         {
-            float budget=6f*dt;
+            float budget=NavalMaintenanceMath.PumpOutRate*dt;
             for(int n=0;n<8&&budget>0f;n++){int i=Wettest(-1);if(i<0)break;budget+=hull.Flood.Add(i,-budget);}
-            processed=6f*dt-budget;
+            processed=NavalMaintenanceMath.PumpOutRate*dt-budget;
             Status="Pumping overboard";
         }
         if(processed>.00001f){pumpLastWork=Time.time;pumpPhase=Mathf.Repeat(pumpPhase+dt/1.2f,1f);lastTransfer=transfer;}
@@ -153,6 +182,7 @@ public partial class NavalBilgeSystem : MonoBehaviour
     private void Update()
     {
         PlayerInteracting=false;
+        bool working=Functional;if(!working)StopBrokenPump();
         if(player==null||!player.IsAlive()||!player.IsPlayerInputEnabled()||Time.timeScale==0f||NavalTestWorld.Active!=null&&NavalTestWorld.Active.ShipMenuOpen)return;
         Vector3 feet=transform.InverseTransformPoint(player.transform.position-Vector3.up*1f);
         bool near=Vector3.Distance(feet,PumpPost)<1.2f;
@@ -160,7 +190,7 @@ public partial class NavalBilgeSystem : MonoBehaviour
         if(Input.GetKeyDown(KeyCode.E))
         {
             if(playerPump){playerPump=false;return;}
-            if(near){playerPump=true;if(Operator!=null){Operator.CancelPumpDuty();Operator=null;}}
+            if(near&&working){playerPump=true;if(Operator!=null){Operator.CancelPumpDuty();Operator=null;}}
         }
         if(playerPump)
         {
@@ -169,13 +199,19 @@ public partial class NavalBilgeSystem : MonoBehaviour
             if(Input.GetKey(KeyCode.T))Pump(Mathf.Min(Time.deltaTime,.05f),false);
         }
     }
+    public void ReleasePlayer(){playerPump=false;PlayerInteracting=false;}
     public bool PlayerUsing {get{return playerPump;}}
     private void OnGUI()
     {
         NavalTestWorld world=NavalTestWorld.Active;
-        if(world!=null&&world.PlayerHull==hull&&player!=null&&player.IsAlive()&&player.IsPlayerInputEnabled()&&!hull.Sunk&&Functional&&Time.time-pumpLastWork<.2f)
-            NavalWorldProgressBar.Draw(player.GetPlayerCamera(),transform.TransformPoint(PumpPost+new Vector3(0f,1.15f,NavalMaintenanceMath.PumpOffsetZ)),pumpPhase,true,false,lastTransfer?"Перекачка":"Откачка");
+        if(world!=null&&world.PlayerHull==hull&&world.SimulationActive&&world.ViewCamera!=null&&!hull.Sunk&&Functional&&Time.time-pumpLastWork<.2f)
+            NavalWorldProgressBar.Draw(world.ViewCamera,transform.TransformPoint(PumpPost+new Vector3(0f,1.15f,NavalMaintenanceMath.PumpOffsetZ)),pumpPhase,true,false,lastTransfer?"Перекачка":"Откачка");
         if(!PlayerInteracting)return;
+        if(!Functional)
+        {
+            GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,620f),Screen.height-245f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,620f),30f),"Помпа повреждена — восстановите её детали (удерживать R)");
+            return;
+        }
         GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,620f),Screen.height-245f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,620f),30f),playerPump?"PUMP: hold T | Q: "+new string[]{"Auto","Overboard","Port -> starboard","Starboard -> port"}[mode]+" | E: leave | "+Status:"E: bilge pump");
     }
 }

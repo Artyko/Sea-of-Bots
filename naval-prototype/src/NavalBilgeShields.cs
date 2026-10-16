@@ -24,9 +24,9 @@ public partial class NavalBilgeSystem
         for(int side=-1;side<=1;side+=2)for(int end=-1;end<=1;end+=2)
         {
             FloodShield s=new FloodShield();
-            s.Opening=new Vector3(side*NavalCompartmentMath.WallX,BoatDimensions.HoldFloor,end*NavalCompartmentMath.DoorZ);
+            s.Opening=new Vector3(side*NavalCompartmentMath.WallX,hull.Floor,end*NavalCompartmentMath.DoorZ);
             s.Rack=s.Opening+new Vector3(side*.16f,0f,1.45f);
-            s.Post=new Vector3(side*.95f,BoatDimensions.HoldFloor,s.Opening.z);
+            s.Post=new Vector3(side*.95f,hull.Floor,s.Opening.z);
             s.Region=NavalCompartmentMath.Region(side*2f,s.Opening.z);
             s.Panel=new GameObject("Removable wooden flood boards").transform;s.Panel.SetParent(transform,false);
             float bottom=NavalCompartmentMath.CoamingHeight(hull.WorldScale),height=1.5f/hull.WorldScale-bottom;
@@ -54,8 +54,8 @@ public partial class NavalBilgeSystem
     private bool RoomOccupied(FloodShield s)
     {
         float side=Mathf.Sign(s.Opening.x),end=Mathf.Sign(s.Opening.z);
-        Vector3 center=new Vector3(side*2.2f,BoatDimensions.HoldFloor+.9f,end*3f);
-        Vector3 half=Vector3.Scale(new Vector3(.78f,1.1f,2.95f),transform.lossyScale);
+        Vector3 center=new Vector3(side*2.2f,hull.Floor+1.2f/hull.WorldScale,end*3f);
+        Vector3 half=Vector3.Scale(new Vector3(.78f,1.3f/hull.WorldScale,2.95f),transform.lossyScale);
         foreach(Collider c in Physics.OverlapBox(transform.TransformPoint(center),half,transform.rotation))
             if(c.GetComponentInParent<Character>()!=null)return true;
         foreach(NavalRepairSailor w in hull.RepairWorkers)
@@ -79,7 +79,7 @@ public partial class NavalBilgeSystem
             int region=NavalCompartmentMath.Region(hull.Flood.X(i),hull.Flood.Z(i));
             shieldDepth[region]=Mathf.Max(shieldDepth[region],hull.Flood.Depth(i)*hull.WorldScale);
         }
-        foreach(NavalHullVoxel c in hull.Voxels)if(c.HydraulicShell&&(c.Missing||c.Detached))
+        foreach(NavalHullVoxel c in hull.GetDamagedVoxels())if(c.HydraulicShell&&(c.Missing||c.Detached))
             shieldInflow[NavalCompartmentMath.Region(c.LocalCenter.x,c.LocalCenter.z)]+=c.InflowRate;
         foreach(FloodShield s in shields)
         {
@@ -123,10 +123,10 @@ public partial class NavalBilgeSystem
     }
     private float ShieldSill(float x,float z)
     {
-        float bottom=BoatDimensions.HoldFloor+NavalCompartmentMath.CoamingHeight(hull.WorldScale);
+        float bottom=hull.Floor+NavalCompartmentMath.CoamingHeight(hull.WorldScale);
         foreach(FloodShield s in shields)if(s.Installed&&Mathf.Abs(x-s.Opening.x)<.2f&&Mathf.Abs(z-s.Opening.z)<.625f)
         {
-            float level=BoatDimensions.HoldFloor+1.5f/hull.WorldScale;
+            float level=hull.Floor+1.5f/hull.WorldScale;
             foreach(NavalHullVoxel c in s.Cells)if((c.Missing||c.Detached)&&Mathf.Abs(c.LocalCenter.z-z)<.3f)
                 level=Mathf.Min(level,c.LocalCenter.y-c.transform.localScale.y*.5f);
             return Mathf.Max(bottom,level);
@@ -135,7 +135,7 @@ public partial class NavalBilgeSystem
     }
     private Vector3 ShieldPassage(Vector3 feet,Vector3 goal,NavalRepairSailor worker,float dt)
     {
-        if(feet.y>BoatDimensions.HoldFloor+1.6f/hull.WorldScale)return goal;
+        if(feet.y>hull.Floor+1.6f/hull.WorldScale)return goal;
         foreach(FloodShield s in shields)
         {
             if(!s.Installed||!NavalFloodResponseMath.Crosses(feet.x,feet.z,goal.x,goal.z,s.Opening.x,s.Opening.z))continue;
@@ -148,9 +148,9 @@ public partial class NavalBilgeSystem
                     s.Worker=worker;s.Removing=true;
                     worker.ShieldPassageWork();WorkShield(s,worker,dt);
                 }
-                if(s.Installed)return feet;
+                if(s.Installed){worker.WaitForPassage();return feet;}
             }
-            else if(Mathf.Abs(feet.x-s.Opening.x)<.65f)return feet;
+            else if(Mathf.Abs(feet.x-s.Opening.x)<.65f){if(worker!=null)worker.WaitForPassage();return feet;}
         }
         return goal;
     }

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 class ProjectileWaterChecks
 {
     static void Check(bool ok,string name){if(!ok)throw new Exception(name);}
@@ -11,6 +11,11 @@ class ProjectileWaterChecks
     }
     static void Main()
     {
+        Check(!NavalProjectileWaterMath.EntersWater(float.PositiveInfinity,float.PositiveInfinity),"Dry hold below ocean stays air");
+        Check(!NavalProjectileWaterMath.EntersWater(2f,.1f),"Shot above local flood surface stays air");
+        Check(NavalProjectileWaterMath.EntersWater(.1f,-.1f),"Entering actual compartment water attenuates shot");
+        Check(NavalProjectileWaterMath.EntersWater(float.PositiveInfinity,-.1f),"Leaving hull through hole into sea detects water");
+        Check(NavalProjectileWaterMath.EntersWater(-.1f,-.2f),"Shot initially in water is detected");
         Check(NavalProjectileWaterMath.DamagePower==0.5f,"Half underwater impact strength");
         float radius=NavalProjectileWaterMath.DamageRadiusScale;
         Check(Math.Abs(radius*radius-0.5f)<0.00001f,"Half hole area in thin shell");
