@@ -5,6 +5,8 @@ public class NavalSeaLadder : MonoBehaviour
     public static readonly List<NavalSeaLadder> All=new List<NavalSeaLadder>();
     private readonly List<NavalHullVoxel>[] cells={new List<NavalHullVoxel>(),new List<NavalHullVoxel>()};
     public NavalHull Hull;
+    private int usableRevision=-1;
+    private readonly bool[] usable=new bool[2];
     public void Initialize(NavalHull hull,Material material)
     {
         Hull=hull;All.Add(this);
@@ -28,9 +30,18 @@ public class NavalSeaLadder : MonoBehaviour
     }
     public bool Usable(int side)
     {
-        if(Hull.Sunk)return false;int intact=0;
-        foreach(NavalHullVoxel cell in cells[side])if(cell!=null&&!cell.Missing&&!cell.Detached)intact++;
-        return intact>=cells[side].Count*0.75f;
+        if(Hull.Sunk||side<0||side>=2)return false;
+        if(usableRevision!=Hull.Revision)
+        {
+            for(int index=0;index<2;index++)
+            {
+                int intact=0;
+                foreach(NavalHullVoxel cell in cells[index])if(cell!=null&&!cell.Missing&&!cell.Detached)intact++;
+                usable[index]=intact>=cells[index].Count*.75f;
+            }
+            usableRevision=Hull.Revision;
+        }
+        return usable[side];
     }
     private void OnDestroy(){All.Remove(this);}
 }

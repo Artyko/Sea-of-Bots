@@ -7,6 +7,11 @@ public sealed class NavalHelmRecovery
     public float BackwardDistance {get{return backed;}}
     private float stalled,age,backed;
     public void Reset(){Phase=0;stalled=age=backed=0f;}
+    public bool BeginReverse()
+    {
+        if(Phase!=0)return false;
+        Phase=1;age=backed=stalled=0f;Side=Side==0?1:-Side;return true;
+    }
     public bool Step(float dt,float travel,float backwardTravel,bool driving,bool shoreRisk,float shipScale)
     {
         dt=Math.Max(0f,dt);
@@ -20,6 +25,6 @@ public sealed class NavalHelmRecovery
         if(Phase==2){age+=dt;if(age>=4f){Phase=0;age=stalled=0f;}return false;}
         if(shoreRisk&&travel<dt*.12f)stalled+=dt;else stalled=0f;
         if(stalled<2.5f)return false;
-        Phase=1;age=backed=stalled=0f;Side=Side==0?1:-Side;return true;
+        return BeginReverse();
     }
 }

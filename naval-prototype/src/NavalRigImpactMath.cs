@@ -1,7 +1,10 @@
-using System;
+﻿using System;
 public static class NavalRigImpactMath
 {
     public const float CannonRadius=0.4f;
+    // Preserve even the conservative cell-AABB-in-hull-space predicate of TouchesHull.
+    public static float BroadphasePadding(float halfX,float halfY,float halfZ)
+    {return (float)Math.Sqrt(3.0*((double)halfX*halfX+(double)halfY*halfY+(double)halfZ*halfZ))+.002f;}
     public static int SweepSteps(float distance,float angle)
     {return Math.Max(1,(int)Math.Ceiling(Math.Max(distance/0.2f,angle/0.5f)));}
     // World-space hull volume, including rails but excluding the mast and sail.

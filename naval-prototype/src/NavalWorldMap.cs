@@ -68,7 +68,7 @@ public class NavalWorldMap : MonoBehaviour
     {
         if(collider==null||collider.transform.IsChildOf(transform.parent))return false;
         if(knownLand.Contains(collider))return true;
-        if(collider.GetComponent<NavalHullVoxel>()!=null||collider.GetComponentInParent<Character>()!=null)return false;
+        if(collider.GetComponent<NavalHullVoxel>()!=null||collider.GetComponent<NavalMergedCollider>()!=null||collider.GetComponentInParent<Character>()!=null)return false;
         knownLand.Add(collider);return true;
     }
     public bool CanSail(Vector3 point,Quaternion heading,Transform ship)

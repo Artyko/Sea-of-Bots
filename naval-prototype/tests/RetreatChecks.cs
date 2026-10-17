@@ -4,13 +4,13 @@ class RetreatChecks
  static void Check(bool value,string name){if(!value)throw new Exception(name);}
  static void Main(){
  var state=new NavalRetreatState();
- state.Step(.1f,false,true,true);Check(!state.Active,"Manned guns do not trigger retreat");
+ state.Step(.1f,false,true,true);Check(!state.Active,"No repair need does not trigger retreat");
  state.Step(.1f,true,false,true);Check(!state.Active,"No flooding: no repair retreat");
  state.Step(.1f,true,true,false);Check(!state.Active,"No opponent: no retreat");
- state.Step(.1f,true,true,true);Check(state.Active,"Unmanned guns and repairs trigger retreat");
+ state.Step(.1f,true,true,true);Check(state.Active,"Repair need and danger trigger retreat");
  for(int i=0;i<200;i++)state.Step(.1f,false,true,true);
  Check(state.Active,"Continue until flooding is handled even if a gun is remanned");
- state.Step(.1f,false,false,true);Check(!state.Active,"Immediately resume combat when critical danger clears");
+ state.Step(.1f,false,false,true);Check(!state.Active,"Immediately resume combat when retreat danger clears");
  state.Step(.1f,true,true,true);Check(state.Active,"A new emergency can start another retreat");
  state.Step(.1f,true,true,false);Check(!state.Active,"Lost threat or manual helm immediately clears autopilot retreat");
  var emergency=new NavalCombatEmergency();
@@ -26,6 +26,19 @@ class RetreatChecks
  emergency.Step(.3f,12f);Check(!emergency.Critical,"Recall once heel recovers");
  emergency.Step(.1f,21f);Check(!emergency.Critical,"A wave-induced roll with little water does not strip the guns");
  Check(!NavalCombatEmergency.ReleaseGunner(0,true),"No phantom gunner to release");
+ var early=new NavalCombatEmergency();
+ early.Step(.49f,5f);Check(!early.RepairRetreat&&!early.Critical,"Minor flood stays in combat without buckets");
+ early.Step(.5f,5f);Check(early.RepairRetreat&&!early.Critical,"Repair retreat starts before critical bucket emergency");
+ var helm=new NavalRetreatState();helm.Step(.1f,true,early.RepairRetreat,true);Check(helm.Active,"Danger retreat can begin with guns still crewed");
+ early.Step(.45f,5f);Check(early.RepairRetreat,"Retreat has separate hysteresis");
+ early.Step(.4f,12f);Check(!early.RepairRetreat,"Resume combat after earlier safe threshold");
+ helm.Step(.1f,true,early.RepairRetreat,true);Check(!helm.Active,"Repair retreat stops at safe threshold");
+ early.Step(.3f,16f);Check(early.RepairRetreat&&!early.Critical,"Moderate flood and heel trigger earlier escape, not buckets");
+ early.Step(.3f,13f);Check(early.RepairRetreat,"Do not toggle escape at a wave crest");
+ early.Step(.3f,12f);Check(!early.RepairRetreat,"Heel recovery ends escape");
+ early.Step(.1f,22f);Check(!early.RepairRetreat&&!early.Critical,"A dry wave roll triggers neither retreat nor buckets");
+ early.Step(.75f,5f);Check(early.RepairRetreat&&early.Critical,"Severe flood activates both stages");
+ early.Step(.6f,5f);Check(early.RepairRetreat&&!early.Critical,"Stop new bucket trips before retreat finishes");
  var sloop=NavalShipDefinition.Sloop;
  Check(sloop.Compartments&&sloop.GunCount==2&&sloop.CrewCount==2,"Sloop gets systems with original crew and guns");
  Check(NavalCompartmentMath.WallX-sloop.StairWidth*.5f>.8f,"Sloop stair leaves side corridors clear");

@@ -1,10 +1,12 @@
 ﻿using UnityEngine;
+using System.Collections.Generic;
 
 public partial class NavalStations
 {
     private static readonly NavalShipRegistry<Transform,NavalStations> ships=new NavalShipRegistry<Transform,NavalStations>();
     private void RegisterShip(){ships.Register(boat,this);}
     private void UnregisterShip(){if(!object.ReferenceEquals(boat,null))ships.Remove(boat,this);}
+    private static readonly string[] targetNames={"waterline","cannon","mast","wheel"};
     private Transform[] aimShip;
     private Vector3[] aimLocal;
     private Vector2[] shotError;
@@ -12,6 +14,27 @@ public partial class NavalStations
     private float[] aimRetry,visibilityAt;
     private bool[] visibilityCache;
     private NavalHullVoxel[] aimCell;
+    private readonly bool[] featureAvailable=new bool[4];
+    private readonly NavalHullVoxel[] featureCells=new NavalHullVoxel[4];
+    private readonly List<NavalHullVoxel> shellTargets=new List<NavalHullVoxel>(),mastTargets=new List<NavalHullVoxel>();
+    private int targetIndexCount=-1;
+    private static RaycastHit[] sightHits=new RaycastHit[64];
+    private struct FeatureCandidate {public NavalHullVoxel Cell;public int Station;public float Score;}
+    private sealed class CandidateOrder:IComparer<FeatureCandidate>
+    {public int Compare(FeatureCandidate a,FeatureCandidate b){return a.Score.CompareTo(b.Score);}}
+    private static readonly CandidateOrder candidateOrder=new CandidateOrder();
+    private readonly List<FeatureCandidate> featureCandidates=new List<FeatureCandidate>();
+    private void PrepareTargetIndex()
+    {
+        if(targetIndexCount==hull.Voxels.Count)return;
+        targetIndexCount=hull.Voxels.Count;shellTargets.Clear();mastTargets.Clear();
+        foreach(NavalHullVoxel cell in hull.Voxels)
+        {
+            if(cell.HydraulicShell)shellTargets.Add(cell);
+            Vector3 p=cell.LocalCenter;
+            if(cell.ManagedRig&&!cell.RigFabric&&Mathf.Abs(p.x)<=.3f&&NearMast(p.z)&&p.y>=1.1f)mastTargets.Add(cell);
+        }
+    }
     private void InitializeGunnery(int count)
     {
         aimShip=new Transform[count];aimLocal=new Vector3[count];shotError=new Vector2[count];
@@ -72,13 +95,27 @@ public partial class NavalStations
         Vector3 view=victim.boat.InverseTransformPoint(muzzle);
         if(!NavalTargetVisibility.Broadside(view.x,view.z))return false;
         Vector3 offset=cell.transform.position-muzzle;
-        RaycastHit[] hits=Physics.RaycastAll(muzzle,offset.normalized,offset.magnitude+.05f,
-            PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore);
-        System.Array.Sort(hits,delegate(RaycastHit a,RaycastHit b){return a.distance.CompareTo(b.distance);});
-        foreach(RaycastHit hit in hits)
+        int count;
+        while(true)
         {
-            if(hit.collider.transform.IsChildOf(boat))continue;
-            NavalHullVoxel first=hit.collider.GetComponent<NavalHullVoxel>();
+            count=Physics.RaycastNonAlloc(muzzle,offset.normalized,sightHits,offset.magnitude+.05f,
+                PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore);
+            if(count<sightHits.Length)break;
+            sightHits=new RaycastHit[sightHits.Length*2];
+        }
+        int nearest=-1;float distance=float.PositiveInfinity;
+        for(int i=0;i<count;i++)
+        {
+            RaycastHit hit=sightHits[i];
+            if(hit.collider.transform.IsChildOf(boat)||hit.distance>=distance)continue;
+            distance=hit.distance;nearest=i;
+        }
+        if(nearest>=0)
+        {
+            // Merged boxes contain fixed hull only; moving/repairable mechanisms are excluded.
+            // An obstruction from this set cannot be the selected cannon or helm.
+            if(sightHits[nearest].collider.GetComponent<NavalMergedCollider>()!=null)return false;
+            NavalHullVoxel first=NavalVoxelHit.Resolve(sightHits[nearest].collider,sightHits[nearest].point);
             return first!=null&&victim.mechanisms[station].Contains(first)&&!first.Missing&&!first.Detached;
         }
         return false;
@@ -102,11 +139,12 @@ public partial class NavalStations
     {foreach(float mast in hull.Definition.MastZ)if(Mathf.Abs(z-mast)<.35f)return true;return false;}
     private bool Feature(int gun,NavalStations victim,int kind,out NavalHullVoxel selected)
     {
-        selected=null;float best=float.MaxValue;
+        selected=null;float best=float.MaxValue;victim.PrepareTargetIndex();
         if(kind==1||kind==3)
         {
             int targetSide=victim.TargetSide(boat.position),preferred=targetSide+(victim.GunCount>2&&Random.value>.5f?2:0);
             int first=kind==3?0:targetSide,last=kind==3?0:victim.GunCount;
+            featureCandidates.Clear();
             for(int station=first;station<=last;station+=2)
             {
                 if(!victim.Functional(station))continue;
@@ -114,14 +152,17 @@ public partial class NavalStations
                     if(cell!=null&&!cell.Missing&&!cell.Detached)
                     {
                         float distance=(cell.transform.position-boat.position).sqrMagnitude*(station==preferred?.7f:1f);
-                        if(distance<best&&VisibleMechanism(gun,victim,station,cell)){best=distance;selected=cell;}
+                        featureCandidates.Add(new FeatureCandidate{Cell=cell,Station=station,Score=distance});
                     }
             }
-            return selected!=null;
+            featureCandidates.Sort(candidateOrder);
+            foreach(FeatureCandidate candidate in featureCandidates)
+                if(VisibleMechanism(gun,victim,candidate.Station,candidate.Cell)){selected=candidate.Cell;return true;}
+            return false;
         }
         float along=Random.Range(-4.8f,4.8f),height=Random.Range(1.5f,6.5f);
         float side=victim.boat.InverseTransformPoint(boat.position).x<0f?-1f:1f;
-        foreach(NavalHullVoxel cell in victim.hull.Voxels)
+        foreach(NavalHullVoxel cell in kind==0?victim.shellTargets:victim.mastTargets)
         {
             if(cell==null||cell.Missing||cell.Detached)continue;
             Vector3 p=cell.LocalCenter;float score;
@@ -144,7 +185,8 @@ public partial class NavalStations
     private bool SelectAim(int gun,Transform target,Vector3 velocity)
     {
         NavalStations victim;if(!ships.TryGet(target,out victim)||victim==null)return false;
-        bool[] available=new bool[4];NavalHullVoxel[] cells=new NavalHullVoxel[4];
+        bool[] available=featureAvailable;NavalHullVoxel[] cells=featureCells;
+        System.Array.Clear(available,0,available.Length);System.Array.Clear(cells,0,cells.Length);
         for(int kind=0;kind<4;kind++)
         {
             if(!Feature(gun,victim,kind,out cells[kind]))continue;
@@ -157,7 +199,7 @@ public partial class NavalStations
             // At the edge of range the randomly chosen feature may be farther
             // away than the nearest waterline plank. Try reachable hull cells.
             float nearest=float.MaxValue;
-            foreach(NavalHullVoxel cell in victim.hull.Voxels)
+            foreach(NavalHullVoxel cell in victim.shellTargets)
             {
                 if(cell==null||cell.Missing||cell.Detached||!cell.HydraulicShell)continue;
                 Vector3 world=cell.transform.position;
@@ -178,6 +220,8 @@ public partial class NavalStations
     }
     public bool AimAtShipAndFire(int gun,Transform target,Vector3 velocity,float dt,Character sailor)
     {
+        using(NavalPerformance.Measure(NavalPerfArea.Gunnery))
+        {
         if(target==null||!Functional(gun+1)||PlayerStation==gun+1)return false;
         if(aimShip[gun]!=target||aimCell[gun]==null||aimCell[gun].Missing||aimCell[gun].Detached||!LockedTargetVisible(gun,target))
         {
@@ -193,7 +237,8 @@ public partial class NavalStations
         }
         if(!AimAndFire(gun,point,dt,sailor))return false;
         lastKind[gun]=aimKind[gun];aimShip[gun]=null;aimRetry[gun]=0f;
-        Debug.Log("[NavalPrototype] AI target: "+new string[]{"waterline","cannon","mast","wheel"}[lastKind[gun]]);
+        Debug.Log("[NavalPrototype] AI target: "+targetNames[lastKind[gun]]);
         return true;
+            }
     }
 }

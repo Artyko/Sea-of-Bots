@@ -1,10 +1,10 @@
 ﻿{
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v81.dll",
+  "MainDLLFileName": "NavalPrototype-v92.dll",
   "Author": "Kirill",
-  "Version": 81,
-  "Description": "Batched compartment flood rendering, sparse barrier updates and dry-cell hydraulic fast paths; conserved flooding and crew mechanics retained.",
+  "Version": 92,
+  "Description": "Single maintenance hand for minor flooding; parallel repair and pumping only when water, heel or rising flood demand escalation.",
   "ModDependencies": [],
   "Tags": []
 }

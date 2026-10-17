@@ -23,6 +23,7 @@ public class NavalPlayerRepair : MonoBehaviour
             if(next!=target){target=next;elapsed=0f;}
         }
         if(target==null||!target.Missing&&!target.Detached){elapsed=0f;return;}
+        if(target.RepairMechanism!=null&&!target.RepairMechanism.CanRepair){elapsed=0f;return;}
         if(!Input.GetKey(KeyCode.R)){elapsed=0f;return;}
         elapsed+=Time.deltaTime;
         if(elapsed<4f)return;
@@ -55,6 +56,8 @@ public class NavalPlayerRepair : MonoBehaviour
     private void OnGUI()
     {
         if(!Available()||target==null)return;
+        if(target.RepairMechanism!=null&&!target.RepairMechanism.CanRepair)
+        {GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,500f),Screen.height-205f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,500f),28f),target.RepairMechanism.Name+": восстановление невозможно");return;}
         GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,500f),Screen.height-205f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,500f),28f),"Hold R: repair aimed hole (4 sec) | "+Mathf.RoundToInt(elapsed/4f*100f)+"%");
     }
 }

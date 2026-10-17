@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections.Generic;
 public class NavalRamDamage : MonoBehaviour
 {
@@ -8,6 +8,7 @@ public class NavalRamDamage : MonoBehaviour
     public float LastContact=float.NegativeInfinity;
     private float lastDamage=float.NegativeInfinity;
     private float lastRigDamage=float.NegativeInfinity;
+    public readonly NavalRigSnapshot RigSnapshot=new NavalRigSnapshot();
     public readonly List<NavalHullVoxel> RigCells=new List<NavalHullVoxel>();
     public NavalRamDamage Opponent;
     public Vector3 ContactLocal;

@@ -16,7 +16,7 @@ public partial class NavalRepairSailor
     }
     private bool StartBailing()
     {
-        if(hull.Flood.Total<0.12f||Time.time<bailRetry)return false;
+        if(!hull.CombatCritical||hull.Flood.Total<0.12f||Time.time<bailRetry)return false;
         float best=-1f;Vector3 pickup=Vector3.zero;
         for(int i=0;i<hull.Flood.Water.Length;i++)
         {
@@ -31,19 +31,26 @@ public partial class NavalRepairSailor
         }
         if(best<0f){bailRetry=Time.time+3f;return false;}
         bailPickup=pickup;bailOutlet=new Vector3(pickup.x<0f?-2.05f:2.05f,0.825f,2.6f);
-        returning=false;changingPost=false;bailState=1;bailTime=0f;BailRoute(pickup);
+        waitingForRepair=false;returning=false;changingPost=false;bailState=1;bailTime=0f;BailRoute(pickup);
         if(bucket==null){bucket=gameObject.AddComponent<NavalBucketVisual>();bucket.Initialize();}
         if(hammer!=null)hammer.gameObject.SetActive(false);
         return true;
     }
     private bool TickBailing(float dt,bool allowed)
     {
+        // Start no new bucket trips outside the shared critical state. A full
+        // bucket already being carried is poured out before resuming other work.
+        if(!hull.CombatCritical&&BucketWater<=0f)
+        {
+            if(bailState!=0){CancelBailing();route.Clear();BeginReturn();}
+            return false;
+        }
         if(bailState==0)
         {
             if(!allowed||leak!=null)return false;
             bool otherRepair=false;
-            foreach(NavalRepairSailor worker in hull.RepairWorkers)if(worker!=null&&worker!=this&&worker.HasJob)otherRepair=true;
-            bool urgent=hull.Volume>BoatDimensions.SinkVolume*hull.VolumeScale*0.5f&&otherRepair;
+            foreach(NavalRepairSailor worker in hull.RepairWorkers)if(worker!=null&&worker!=this&&worker.RepairingLeak)otherRepair=true;
+            bool urgent=hull.CombatCritical&&otherRepair;
             if(!urgent)
             {
                 // Give repair jobs first choice; accepted patches retain their priority.
@@ -75,7 +82,7 @@ public partial class NavalRepairSailor
             {
                 bucketLoad.Dump();CancelBailing();route.Clear();returning=false;
                 // Look for another leak or bucket immediately from the current position.
-                if(!TickBailing(0f,allowed))BeginReturn();return true;
+                if(!TickBailing(0f,allowed)&&leak==null)BeginReturn();return true;
             }
         }
         if(bucket!=null)

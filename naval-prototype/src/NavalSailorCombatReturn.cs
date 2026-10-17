@@ -5,8 +5,9 @@ public partial class NavalRepairSailor
     private Vector3 combatReturnPost;
     public bool ReturnToGun(Vector3 post)
     {
-        if(robot==null||!robot.IsAlive()||stranded||Defending||Rescuing||Assaulting)return false;
+        if(robot==null||!robot.IsAlive()||stranded||Defending||Rescuing||Assaulting||BucketWater>0f)return false;
         combatReturnPost=post;combatReturnPending=true;
+        if(!NavalRepairDispatch.CanRecall(leak!=null&&(leak.Missing||leak.Detached),hull.HasRepairDemand,OtherLeakRepairer(),BucketWater))return false;
         ResumeCombatPost();
         return true;
     }

@@ -16,13 +16,13 @@ class MaintenanceAccessChecks
             }
             Check(ship.HoldClearance>=3.5f,"Player camera and robot have comfortable headroom");
         }
-        Check(NavalMaintenanceMath.FreeWorkersNeeded(true,false,true,false)==2,"Repair and pump each need a sailor");
-        Check(NavalMaintenanceMath.FreeWorkersNeeded(true,true,true,false)==1,"Existing repairer leaves one pump vacancy");
+        Check(NavalMaintenanceMath.FreeWorkersNeeded(true,false,true,false,false,false,false,false,true)==2,"Repair and pump each need a sailor");
+        Check(NavalMaintenanceMath.FreeWorkersNeeded(true,true,true,false,false,false,false,false,true)==1,"Existing repairer leaves one pump vacancy");
         Check(NavalMaintenanceMath.FreeWorkersNeeded(true,true,true,true)==0,"Assigned jobs do not reserve extra sailors");
-        Check(NavalMaintenanceMath.NeedPump(true,false,false,10f,100f),"Unreachable leak cannot block pump");
-        Check(!NavalMaintenanceMath.NeedPump(true,false,true,10f,100f),"Accessible leak gets first repairer");
-        Check(NavalMaintenanceMath.NeedPump(true,true,true,10f,100f),"Second sailor can pump during repairs");
-        Check(NavalMaintenanceMath.NeedPump(true,false,true,150f,100f),"Dangerous flooding permits urgent pump");
+        Check(NavalMaintenanceMath.NeedPump(true,false,false),"Unreachable leak cannot block pump");
+        Check(!NavalMaintenanceMath.NeedPump(true,false,true),"Accessible leak gets first repairer");
+        Check(NavalMaintenanceMath.NeedPump(true,true,true,true),"Second sailor can pump during repairs");
+        Check(!NavalMaintenanceMath.NeedPump(true,false,true),"Reachable unassigned leak retains first priority even in danger");
         float pumpFront=NavalMaintenanceMath.PumpOffsetZ+.25f;
         Check(-pumpFront*3f>.38f,"Pump operator stands clear of pump body");
         for(int i=0;i<=50;i++)

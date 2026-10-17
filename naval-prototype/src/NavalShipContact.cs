@@ -1,7 +1,7 @@
-using UnityEngine;
+﻿using UnityEngine;
 public static class NavalShipContact
 {
-    // Ships are moved by transforms, so Unity's static voxel colliders cannot stop them.
+    // Ship poses are authoritative/kinematic; native contacts cannot stop their commanded movement.
     // Sweep the solid hull footprint before committing either translation or rotation.
     public static bool Constrain(Vector3 start,Quaternion rotation,ref Vector3 next,ref Quaternion nextRotation,Transform other,Transform self=null)
     {

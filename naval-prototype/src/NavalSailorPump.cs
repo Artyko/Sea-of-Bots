@@ -11,11 +11,19 @@ public partial class NavalRepairSailor
     {
         NavalBilgeSystem system=hull.Bilge;
         if(system==null)return false;
+        if(!system.Functional)
+        {
+            if(pumpDuty){ReleasePump();BeginReturn();}
+            if(allowed&&leak==null&&bailState==0)TryFindLeak();
+            return false;
+        }
+        if(pumpDuty&&!hull.ParallelMaintenance&&OtherMaintenanceWorker())
+        {ReleasePump();BeginReturn();return false;}
         if(pumpDuty&&(!system.WantsOperator||system.PlayerUsing))
         {ReleasePump();BeginReturn();return false;}
         bool otherRepair=false;
-        foreach(NavalRepairSailor worker in hull.RepairWorkers)if(worker!=null&&worker!=this&&worker.HasJob)otherRepair=true;
-        if(pumpDuty&&hull.HasActiveLeaks&&!otherRepair&&Time.time>=pumpReview)
+        foreach(NavalRepairSailor worker in hull.RepairWorkers)if(worker!=null&&worker!=this&&worker.RepairingLeak)otherRepair=true;
+        if(pumpDuty&&hull.HasRepairDemand&&!otherRepair&&Time.time>=pumpReview)
         {
             pumpReview=Time.time+1f;HoldPosition();TryFindLeak();
             if(leak!=null){ReleasePump();return false;}
@@ -24,11 +32,10 @@ public partial class NavalRepairSailor
         {
             if(!allowed||leak!=null||bailState!=0||system.Operator!=null||system.PlayerUsing||!system.WantsOperator||Time.time<pumpRetry)return false;
             bool repairAvailable=false;
-            float dangerVolume=BoatDimensions.SinkVolume*hull.VolumeScale*.25f;
-            if(hull.HasActiveLeaks&&!otherRepair&&hull.Volume<dangerVolume)
+            if(hull.HasRepairDemand&&!otherRepair)
             {TryFindLeak();repairAvailable=leak!=null;if(repairAvailable)return false;}
-            if(!NavalMaintenanceMath.NeedPump(hull.HasActiveLeaks,otherRepair,repairAvailable,hull.Volume,dangerVolume))return false;
-            system.Operator=this;pumpDuty=true;pumpArrived=false;pumpReview=Time.time+1f;
+            if(!NavalMaintenanceMath.NeedPump(hull.HasRepairDemand,otherRepair,repairAvailable,hull.ParallelMaintenance))return false;
+            waitingForRepair=false;system.Operator=this;pumpDuty=true;pumpArrived=false;pumpReview=Time.time+1f;
             Debug.Log("[NavalPrototype] Crew assigned to bilge pump");returning=false;changingPost=false;route.Clear();stuck=0f;
             feet=boat.InverseTransformPoint(robot.transform.position-boat.up*footOffset);PlanTo(system.PumpPost);
         }

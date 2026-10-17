@@ -1,17 +1,36 @@
-using UnityEngine;
+﻿using UnityEngine;
+using System.Collections.Generic;
 
 // Shared subdued world-anchored indicator for guns, pumps and future equipment.
 public static class NavalWorldProgressBar
 {
     private static GUIStyle label;
-    public static void Draw(Camera camera,Vector3 anchor,float progress,bool functional,bool ready,string text)
+    private struct Sight {public Vector3 Eye,Anchor;public Quaternion Rotation;public float Until;public int Frame,Revision;public bool Blocked;}
+    private static readonly Dictionary<int,Sight> sights=new Dictionary<int,Sight>();
+    public static void Reset(){sights.Clear();}
+    private static bool Occluded(Camera camera,Vector3 anchor,int key)
     {
-        if(camera==null)return;
+        Vector3 eye=camera.transform.position;
+        int revision=NavalTestWorld.Active!=null&&NavalTestWorld.Active.PlayerHull!=null?NavalTestWorld.Active.PlayerHull.Revision:0;
+        Sight sight;
+        if(key!=0&&sights.TryGetValue(key,out sight)&&Time.time<sight.Until&&sight.Frame<=Time.frameCount&&sight.Revision==revision&&
+            (eye-sight.Eye).sqrMagnitude<.04f&&(anchor-sight.Anchor).sqrMagnitude<.04f&&Quaternion.Angle(camera.transform.rotation,sight.Rotation)<2f)return sight.Blocked;
+        Vector3 delta=anchor-eye;
+        bool blocked=Physics.Raycast(eye,delta.normalized,Mathf.Max(0f,delta.magnitude-.2f),PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore);
+        if(key!=0)
+        {
+            if(sights.Count>128)sights.Clear();
+            sights[key]=new Sight{Eye=eye,Anchor=anchor,Rotation=camera.transform.rotation,Until=Time.time+.1f,Frame=Time.frameCount,Revision=revision,Blocked=blocked};
+        }
+        return blocked;
+    }
+    public static void Draw(Camera camera,Vector3 anchor,float progress,bool functional,bool ready,string text,int key=0)
+    {
+        if(Event.current.type!=EventType.Repaint||camera==null)return;
         float distance=Vector3.Distance(camera.transform.position,anchor);if(distance>160f)return;
         Vector3 screen=camera.WorldToScreenPoint(anchor);
         if(screen.z<=0f||screen.x<0f||screen.x>Screen.width||screen.y<0f||screen.y>Screen.height)return;
-        Vector3 delta=anchor-camera.transform.position;
-        if(Physics.Raycast(camera.transform.position,delta.normalized,Mathf.Max(0f,delta.magnitude-.2f),PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore))return;
+        if(Occluded(camera,anchor,key))return;
         if(label==null){label=new GUIStyle(GUI.skin.label);label.alignment=TextAnchor.MiddleCenter;label.fontSize=9;label.normal.textColor=new Color(.76f,.75f,.7f,.85f);}
         Color previous=GUI.color;
         float width=Mathf.Clamp(60f-distance*.2f,32f,56f),x=screen.x-width*.5f,y=Screen.height-screen.y;

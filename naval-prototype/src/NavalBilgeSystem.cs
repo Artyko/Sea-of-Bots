@@ -8,8 +8,8 @@ public partial class NavalBilgeSystem : MonoBehaviour
     private NavalHull hull;
     private FirstPersonMover player;
     private Transform crank;
-    private int cachedRevision=-1,pumpRevision=-1;
-    private bool pumpFunctional;
+    private int cachedRevision=-1;
+    private NavalRepairableMechanism pumpMechanism;
     private readonly Dictionary<int,Vector3> apertures=new Dictionary<int,Vector3>();
     private readonly List<NavalHullVoxel> damagedWalls=new List<NavalHullVoxel>();
     public NavalRepairSailor Operator;
@@ -20,20 +20,11 @@ public partial class NavalBilgeSystem : MonoBehaviour
     private int mode; // 0 automatic, 1 overboard, 2 port->starboard, 3 reverse
     public Vector3 PumpPost {get{return new Vector3(0f,hull.Floor,-4.9f);}}
     public string Status {get;private set;}
-    public bool Functional
-    {
-        get
-        {
-            if(pumpRevision==hull.Revision)return pumpFunctional;
-            pumpRevision=hull.Revision;pumpFunctional=pumpCells.Count>0;
-            foreach(NavalHullVoxel cell in pumpCells)
-                if(cell==null||cell.Missing||cell.Detached){pumpFunctional=false;break;}
-            return pumpFunctional;
-        }
-    }
+    public bool Functional {get{return pumpMechanism!=null&&pumpMechanism.Functional;}}
+    public bool NeedsRepair {get{return pumpMechanism!=null&&pumpMechanism.NeedsRepair;}}
     private void StopBrokenPump()
     {
-        ReleasePlayer();pumpLastWork=-100f;Status="Pump damaged";
+        ReleasePlayer();pumpLastWork=-100f;Status=pumpMechanism!=null&&pumpMechanism.Destroyed?"Pump destroyed":"Pump damaged";
         if(Operator!=null){NavalRepairSailor worker=Operator;Operator=null;worker.CancelPumpDuty();}
         if(crank!=null)crank.localRotation=Quaternion.identity;
     }
@@ -81,6 +72,7 @@ public partial class NavalBilgeSystem : MonoBehaviour
         // Body, handle and inlet pipes are one damageable mechanism.
         for(int i=first;i<hull.Voxels.Count;i++){hull.Voxels[i].RepairableEquipment=true;pumpCells.Add(hull.Voxels[i]);}
         foreach(NavalHullVoxel cell in pumpCells)if(cell.LocalCenter.y>hull.Floor+.6f)cell.transform.SetParent(crank,true);
+        pumpMechanism=new NavalRepairableMechanism(hull,pumpCells,true);
     }
     private NavalHullVoxel Wall(Vector3 point,Vector3 size,Material material)
     {NavalHullVoxel c=hull.AddVoxel(transform,material,point,size,false,true);c.InternalBarrier=true;walls.Add(c);return c;}
@@ -205,11 +197,11 @@ public partial class NavalBilgeSystem : MonoBehaviour
     {
         NavalTestWorld world=NavalTestWorld.Active;
         if(world!=null&&world.PlayerHull==hull&&world.SimulationActive&&world.ViewCamera!=null&&!hull.Sunk&&Functional&&Time.time-pumpLastWork<.2f)
-            NavalWorldProgressBar.Draw(world.ViewCamera,transform.TransformPoint(PumpPost+new Vector3(0f,1.15f,NavalMaintenanceMath.PumpOffsetZ)),pumpPhase,true,false,lastTransfer?"Перекачка":"Откачка");
+            NavalWorldProgressBar.Draw(world.ViewCamera,transform.TransformPoint(PumpPost+new Vector3(0f,1.15f,NavalMaintenanceMath.PumpOffsetZ)),pumpPhase,true,false,lastTransfer?"Перекачка":"Откачка",GetInstanceID());
         if(!PlayerInteracting)return;
         if(!Functional)
         {
-            GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,620f),Screen.height-245f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,620f),30f),"Помпа повреждена — восстановите её детали (удерживать R)");
+            GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,620f),Screen.height-245f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,620f),30f),NeedsRepair?"Помпа повреждена — восстановите её детали (удерживать R)":"Помпа разрушена — восстановление невозможно");
             return;
         }
         GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,620f),Screen.height-245f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,620f),30f),playerPump?"PUMP: hold T | Q: "+new string[]{"Auto","Overboard","Port -> starboard","Starboard -> port"}[mode]+" | E: leave | "+Status:"E: bilge pump");

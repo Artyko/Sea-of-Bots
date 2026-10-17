@@ -7,6 +7,8 @@ public partial class NavalStations : MonoBehaviour
     private FirstPersonMover player;
     private NavalWater ocean;
     private Transform helm;
+    private NavalRepairableMechanism helmMechanism;
+    public bool HelmNeedsRepair {get{return helmMechanism!=null&&helmMechanism.NeedsRepair;}}
     private Transform[] guns;
     private Transform[] barrels;
     private float[] yaw;
@@ -118,6 +120,7 @@ public partial class NavalStations : MonoBehaviour
             foreach (NavalHullVoxel voxel in hull.Voxels)
                 if (voxel.transform.IsChildOf(mechanism)) mechanisms[i].Add(voxel);
         }
+        helmMechanism=new NavalRepairableMechanism(hull,mechanisms[0],false);
     }
     private Transform Root(string name, Vector3 position)
     {
@@ -179,6 +182,7 @@ public partial class NavalStations : MonoBehaviour
     private void Aim(int gun) { barrels[gun].localRotation = Quaternion.Euler(-pitch[gun], (gun % 2 == 0 ? -90f : 90f) + yaw[gun], 0f); }
     private bool Functional(int station)
     {
+        if(station==0&&helmMechanism!=null)return helmMechanism.Functional;
         if (mechanisms==null||station<0||station>=mechanisms.Length||mechanisms[station] == null) return false;
         if (mechanisms[station].Count == 0) return false;
         foreach (NavalHullVoxel voxel in mechanisms[station]) if (voxel == null || voxel.Missing || voxel.Detached) return false;
@@ -222,6 +226,8 @@ public partial class NavalStations : MonoBehaviour
                     "Approach a cannon or the stern wheel and press E"));
         if(active < 0 && nearest >= 0 && !Functional(nearest))
             text = (nearest == 0 ? "HELM DAMAGED" : "CANNON BARREL DAMAGED") + " - press R to repair";
+        if(active<0&&nearest==0&&helmMechanism!=null&&helmMechanism.Destroyed)
+            text="Штурвал разрушен — восстановление невозможно";
         GUI.Box(new Rect(Screen.width * 0.5f - 350f, Screen.height - 90f, 700f, 70f), text);
     }
     private void OnDestroy()
@@ -325,7 +331,7 @@ public class NavalCannonball : MonoBehaviour
             Character hitRobot=hit.collider.GetComponentInParent<Character>();
             if (hitRobot == attacker || (!hostile && hitRobot == owner)) continue;
             if (hit.collider.transform.IsChildOf(boat) && Time.time < born + 0.12f) continue;
-            NavalHullVoxel voxel = hit.collider.GetComponent<NavalHullVoxel>();
+            NavalHullVoxel voxel = NavalVoxelHit.Resolve(hit.collider,hitPoint);
             if (voxel != null && voxel.Owner != null)
             {
                 Vector3 local=voxel.transform.InverseTransformPoint(hit.point);
@@ -377,36 +383,14 @@ public class NavalCannonball : MonoBehaviour
     }
 }
 
-public class NavalShotPuff : MonoBehaviour
+// One bounded mesh batch per effect parent, shared by muzzle smoke and impacts.
+public static class NavalShotPuff
 {
-    private Vector3 velocity;
-    private float life;
-    private float total;
-    private float size;
-    private Material ownMaterial;
-    public static void Create(Transform parent, Vector3 position, Vector3 speed, Material material, float duration, float radius)
+    public static void Create(Transform parent,Vector3 position,Vector3 speed,Material material,float duration,float radius)
     {
-        GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Cube); obj.name = "NavalPrototype_PixelSmoke";
-        Collider collider = obj.GetComponent<Collider>(); collider.enabled = false; Object.Destroy(collider);
-        obj.transform.SetParent(parent, false); obj.transform.position = position;
-        NavalShotPuff puff = obj.AddComponent<NavalShotPuff>(); puff.velocity = speed; puff.life = duration; puff.total = duration; puff.size = radius;
-        // Solid, axis-aligned blocks keep crisp voxel edges and avoid the
-        // transparent overlapping spheres of the previous smoke effect.
-        puff.ownMaterial = new Material(material);
-        Color tint = material.color * Random.Range(0.8f, 1.18f); tint.a = 1f;
-        puff.ownMaterial.color = tint;
-        obj.GetComponent<Renderer>().sharedMaterial = puff.ownMaterial;
-        obj.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
-        obj.GetComponent<Renderer>().receiveShadows = false;
-        obj.transform.localScale = Vector3.one * radius;
+        if(parent==null||material==null||duration<=0f)return;
+        NavalSmokeBatch batch=parent.GetComponent<NavalSmokeBatch>();
+        if(batch==null)batch=parent.gameObject.AddComponent<NavalSmokeBatch>();
+        batch.Emit(position,speed,material,duration,radius);
     }
-    private void Update()
-    {
-        life -= Time.deltaTime; if (life <= 0f) { Destroy(gameObject); return; }
-        transform.position += velocity * Time.deltaTime;
-        velocity = Vector3.Lerp(velocity, Vector3.up * 0.5f, 1f - Mathf.Exp(-1.6f * Time.deltaTime));
-        float blockSize = size * (1f + (1f - life / total) * 1.3f) * Mathf.Min(1f, life / (total * 0.3f));
-        transform.localScale = Vector3.one * Mathf.Max(0.04f, Mathf.Round(blockSize / 0.04f) * 0.04f);
-    }
-    private void OnDestroy() { if (ownMaterial != null) Destroy(ownMaterial); }
 }

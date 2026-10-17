@@ -13,15 +13,20 @@ public class NavalStructure : MonoBehaviour
     private readonly List<bool> triggers=new List<bool>();
     private readonly List<GameObject> debris=new List<GameObject>();
     private List<int>[] edges;
-    private int revision;
+    private bool dirty;
+    private bool[] absent;
+    private NavalConnectivityWorkspace connectivity;
+    private readonly Dictionary<NavalHullVoxel,int> cellIndices=new Dictionary<NavalHullVoxel,int>();
+    public void MarkDirty(){dirty=true;}
     public void Initialize(NavalHull owner)
     {
         hull=owner;
         foreach(NavalHullVoxel cell in hull.Voxels)if(!cell.ManagedRig&&!cell.MovableEquipment)
         {
+            cell.StructureOwner=this;cellIndices.Add(cell,cells.Count);
             cells.Add(cell); parents.Add(cell.transform.parent);
             positions.Add(cell.transform.localPosition); sizes.Add(cell.transform.localScale);
-            rotations.Add(cell.transform.localRotation); triggers.Add(cell.GetComponent<Collider>().isTrigger);
+            rotations.Add(cell.transform.localRotation); triggers.Add(cell.PhysicsCollider.isTrigger);
         }
         edges=new List<int>[cells.Count];
         Bounds[] bounds=new Bounds[cells.Count];
@@ -47,20 +52,22 @@ public class NavalStructure : MonoBehaviour
         }
         // Pre-existing unconnected decorative islands are removed from the
         // hovering geometry on the first update as well as after damage.
-        revision=-1;
+        absent=new bool[cells.Count];connectivity=new NavalConnectivityWorkspace(cells.Count);dirty=true;
     }
     private static Vector3Int Bucket(Vector3 p)
     {return new Vector3Int(Mathf.FloorToInt(p.x*2f),Mathf.FloorToInt(p.y*2f),Mathf.FloorToInt(p.z*2f));}
     public void Refresh(Vector3 shipVelocity)
     {
-        if(revision==hull.Revision)return;
-        revision=hull.Revision;
-        bool[] absent=new bool[cells.Count];
+        using(NavalPerformance.Measure(NavalPerfArea.Structure))
+        {
+        if(!dirty)return;
+        dirty=false;
         for(int i=0;i<cells.Count;i++)absent[i]=cells[i].Missing||cells[i].Detached;
-        List<List<int>> components=NavalConnectivity.Components(edges,absent);
+        List<List<int>> components=connectivity.Evaluate(edges,absent);
         int main=-1,largest=0;
         for(int i=0;i<components.Count;i++)if(components[i].Count>largest){main=i;largest=components[i].Count;}
         for(int i=0;i<components.Count;i++)if(i!=main)Drop(components[i],shipVelocity);
+            }
     }
     private void Drop(List<int> component,Vector3 velocity)
     {
@@ -72,7 +79,7 @@ public class NavalStructure : MonoBehaviour
         {
             NavalHullVoxel cell=cells[index];cell.Detached=true;
             cell.Batched=false;cell.GetComponent<Renderer>().enabled=!cell.Missing;
-            cell.transform.SetParent(group.transform,true);cell.GetComponent<Collider>().isTrigger=false;
+            cell.transform.SetParent(group.transform,true);cell.NotifyVisualChanged();cell.PhysicsCollider.isTrigger=false;
         }
         Rigidbody body=group.AddComponent<Rigidbody>();
         body.mass=Mathf.Clamp(component.Count*0.4f,0.5f,500f);
@@ -89,21 +96,22 @@ public class NavalStructure : MonoBehaviour
         {
             Transform cell=cells[i].transform;cell.SetParent(parents[i],false);
             cell.localPosition=positions[i];cell.localRotation=rotations[i];cell.localScale=sizes[i];
-            cells[i].Detached=false;cells[i].GetComponent<Collider>().isTrigger=triggers[i];
+            cells[i].Detached=false;cells[i].NotifyVisualChanged();cells[i].PhysicsCollider.isTrigger=triggers[i];
             if(cells[i].Stream!=null)cells[i].Stream.gameObject.SetActive(false);
         }
         foreach(GameObject group in debris)Destroy(group);debris.Clear();
-        hull.Revision++;revision=-1;
+        hull.Revision++;dirty=true;
     }
     public void RestoreCell(NavalHullVoxel voxel)
     {
-        int i=cells.IndexOf(voxel);if(i<0)return;
+        if(voxel.RepairMechanism!=null&&!voxel.RepairMechanism.CanRepair)return;
+        int i;if(!cellIndices.TryGetValue(voxel,out i))return;
         Transform cell=voxel.transform;
         cell.SetParent(parents[i],false);cell.localPosition=positions[i];cell.localRotation=rotations[i];cell.localScale=sizes[i];
-        voxel.Detached=false;cell.GetComponent<Collider>().isTrigger=triggers[i];
+        voxel.Detached=false;voxel.NotifyVisualChanged();voxel.PhysicsCollider.isTrigger=triggers[i];
         voxel.SetMissing(false);voxel.ScorchStrength=0f;
         voxel.LastWetAt=float.NegativeInfinity;voxel.LastWetFlow=0f;
-        cell.GetComponent<Renderer>().sharedMaterial=voxel.OriginalSurface;
+        cell.GetComponent<Renderer>().sharedMaterial=voxel.OriginalSurface;voxel.NotifyVisualChanged();
         if(voxel.Stream!=null)voxel.Stream.gameObject.SetActive(false);
         hull.Revision++;
     }

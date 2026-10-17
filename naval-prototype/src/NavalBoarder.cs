@@ -100,7 +100,7 @@ public class NavalBoarder : MonoBehaviour
         retryAt=Time.time+1.5f;
         NavalRamDamage other=enemy.GetComponent<NavalRamDamage>();if(other==null)return;
         bool occupied=false;
-        foreach(Character candidate in Object.FindObjectsByType<Character>(FindObjectsSortMode.None))if(OnShip(candidate,other.Hull)){occupied=true;break;}
+        foreach(Character candidate in NavalCharacters.Snapshot())if(OnShip(candidate,other.Hull)){occupied=true;break;}
         if(!occupied||!Plan(home,other.Hull))return;
         phase=1;started=Time.time;worker.PrepareBoardingPost(launch);
     }
@@ -192,7 +192,7 @@ public class NavalBoarder : MonoBehaviour
         if(phase==4){RecoverLanding();return;}
         if(phase==1)
         {
-            if(worker.Defending||Time.time-started>16f||!Valid(destination)||home.Sunk||destination.Sunk){CancelApproach();return;}
+            if(worker.Defending||home.HasActiveLeaks||home.RepairRetreat||Time.time-started>16f||!Valid(destination)||home.Sunk||destination.Sunk){CancelApproach();return;}
             if(worker.Busy)return;
             Vector3 feet=home.Root.InverseTransformPoint(robot.transform.position-home.Root.up*worker.FootOffset);
             if((feet-launch).magnitude<0.45f)BeginJump(false);
@@ -225,13 +225,13 @@ public class NavalBoarder : MonoBehaviour
         if(Time.time>=scanAt)
         {
             scanAt=Time.time+0.3f;float nearest=float.MaxValue;opponent=null;
-            foreach(Character candidate in Object.FindObjectsByType<Character>(FindObjectsSortMode.None))
+            foreach(Character candidate in NavalCharacters.Snapshot())
             {
                 if(!OnShip(candidate,current))continue;float distance=(candidate.transform.position-robot.transform.position).sqrMagnitude;
                 if(distance<nearest){nearest=distance;opponent=candidate;}
             }
         }
-        if(current.Sunk){TryReturn();if(phase==5)return;}
+        if(current.Sunk||home.RepairRetreat){TryReturn();if(phase==5)return;}
         AIController ai=AI();
         if(opponent==null)
         {

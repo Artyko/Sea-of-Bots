@@ -16,7 +16,6 @@ public partial class NavalBilgeSystem
     }
     private readonly List<FloodShield> shields=new List<FloodShield>();
     private float shieldReview;
-    private bool shieldPending;
     public string FloodStatus {get;private set;}
     public string ShieldSummary {get;private set;}
     private void BuildShields(Material wood)
@@ -45,8 +44,8 @@ public partial class NavalBilgeSystem
     {
         s.Installed=installed;
         s.Panel.localPosition=installed?Vector3.zero:s.Rack-s.Opening;
-        foreach(NavalHullVoxel c in s.Cells)if(c!=null)c.GetComponent<Collider>().isTrigger=!installed;
-        cachedRevision=-1;Physics.SyncTransforms();
+        foreach(NavalHullVoxel c in s.Cells)if(c!=null)c.PhysicsCollider.isTrigger=!installed;
+        cachedRevision=-1;NavalPerformance.SyncTransforms();
     }
     private readonly float[] shieldDepth=new float[5],shieldInflow=new float[5];
     private float RegionDepth(int region){return shieldDepth[region];}
@@ -62,17 +61,13 @@ public partial class NavalBilgeSystem
             if(w!=null&&w.HasJob&&NavalCompartmentMath.Region(w.JobPoint.x,w.JobPoint.z)==s.Region)return true;
         return false;
     }
-    private bool WantFit(FloodShield s)
-    {
-        return !s.Installed&&Time.time>=s.Retry&&Time.time>s.PassageUntil&&
-            NavalFloodResponseMath.Isolate(RegionDepth(s.Region),RegionDepth(0),RegionInflow(s.Region))&&!RoomOccupied(s);
-    }
-    private bool WantRemove(FloodShield s)
-    {return s.Installed&&(Time.time<s.PassageUntil||Time.time>=s.Retry&&s.DrySince>=0f&&Time.time-s.DrySince>=5f);}
     private void ReviewShields()
     {
         if(Time.time<shieldReview)return;shieldReview=Time.time+.25f;
-        int installed=0;shieldPending=false;
+        int installed=0;bool working=false;
+        foreach(FloodShield shield in shields)if(shield.Installed||shield.Worker!=null){working=true;break;}
+        FloodStatus="Отсеки | "+(hull.HasActiveLeaks?"устранение течей":hull.Volume>.12f?"осушение отсеков":"сухо");
+        if(!working){ShieldSummary="0 / "+shields.Count;return;}
         System.Array.Clear(shieldDepth,0,shieldDepth.Length);System.Array.Clear(shieldInflow,0,shieldInflow.Length);
         for(int i=0;i<hull.Flood.Water.Length;i++)
         {
@@ -87,22 +82,13 @@ public partial class NavalBilgeSystem
             if(s.Installed)installed++;
             bool dry=NavalFloodResponseMath.SafeToRemove(RegionDepth(s.Region),RegionDepth(0),RegionInflow(s.Region));
             if(!dry)s.DrySince=-1f;else if(s.DrySince<0f)s.DrySince=Time.time;
-            if(s.Worker==null&&(WantRemove(s)||WantFit(s)))shieldPending=true;
         }
         ShieldSummary=installed+" / "+shields.Count;
-        FloodStatus="Щиты: "+installed+" / "+shields.Count+" | "+(hull.HasActiveLeaks?"устранение течей":hull.Volume>.12f?"осушение отсеков":"сухо");
+        FloodStatus="Отсеки | "+(hull.HasActiveLeaks?"устранение течей":hull.Volume>.12f?"осушение отсеков":"сухо");
     }
     public bool WantsShieldWorker
     {
-        get{return shieldPending;}
-    }
-    public FloodShield ClaimShield(NavalRepairSailor worker)
-    {
-        // Opening escape routes takes precedence over isolation.
-        for(int pass=0;pass<2;pass++)foreach(FloodShield s in shields)
-            if(s.Worker==null&&(pass==0?WantRemove(s):WantFit(s)))
-            {s.Worker=worker;s.Removing=s.Installed;s.Work=0f;s.Lease=Time.time+1f;return s;}
-        return null;
+        get{return false;} // Existing panels are removed on demand by passage users.
     }
     public void ReleaseShieldClaims(NavalRepairSailor worker)
     {foreach(FloodShield s in shields)ReleaseShield(s,worker,false);}

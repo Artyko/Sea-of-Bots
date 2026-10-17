@@ -9,11 +9,13 @@ public class NavalShipVisuals : MonoBehaviour
     private readonly List<NavalHullVoxel> attachedRig = new List<NavalHullVoxel>();
     private readonly Dictionary<NavalHullVoxel, Vector3> originalSizes = new Dictionary<NavalHullVoxel, Vector3>();
     private readonly List<GameObject> debris = new List<GameObject>();
-    private float[,] mastBounds;
-    private bool[] missingMast;
+    private readonly List<NavalHullVoxel> rigCells=new List<NavalHullVoxel>();
+    private readonly List<NavalHullVoxel> falling=new List<NavalHullVoxel>();
+    private NavalRigSupportGraph supportGraph;
+    private bool[] missingRig;
+    private NavalSailShape sailShape;
+    private bool rigDirty=true;
     private readonly List<NavalHullVoxel> foundationCells=new List<NavalHullVoxel>();
-    private int previousMissing = -1;
-    private int previousHullRevision = -1;
     private readonly List<NavalShipVisuals> secondaryRigs=new List<NavalShipVisuals>();
     private bool buildingRig;
     private float ownPower=1f,mastZ=1.6f;
@@ -105,9 +107,23 @@ public class NavalShipVisuals : MonoBehaviour
                 {cell.MastTimber=true;foundationCells.Add(cell);}
         foreach (NavalHullVoxel cell in attachedRig) originalSizes[cell] = cell.transform.localScale;
         foreach (NavalHullVoxel cell in originalSizes.Keys) cell.ManagedRig = true;
-        mastBounds = new float[mastCells.Count, 6];missingMast=new bool[mastCells.Count];
-        for (int i = 0; i < mastCells.Count; i++) for (int axis = 0; axis < 3; axis++)
-        { mastBounds[i, axis] = mastCells[i].LocalCenter[axis]; mastBounds[i, axis + 3] = originalSizes[mastCells[i]][axis] * 0.5f; }
+        rigCells.AddRange(mastCells);rigCells.AddRange(attachedRig);
+        int n=rigCells.Count;float[,] bounds=new float[n,6];bool[] cloth=new bool[n],vertical=new bool[n];int[] fabricIndex=new int[n];
+        missingRig=new bool[n];
+        for(int i=0;i<n;i++)
+        {
+            NavalHullVoxel cell=rigCells[i];cell.RigOwner=this;cloth[i]=cell.RigFabric;vertical[i]=i<mastCells.Count;fabricIndex[i]=cloth[i]?sail.IndexOf(cell):-1;
+            for(int axis=0;axis<3;axis++){bounds[i,axis]=cell.LocalCenter[axis];bounds[i,axis+3]=originalSizes[cell][axis]*.5f;}
+        }
+        foreach(NavalHullVoxel cell in foundationCells)cell.RigOwner=this;
+        supportGraph=new NavalRigSupportGraph(bounds,cloth,vertical,fabricIndex,22,.825f);
+        float[] sailX=new float[sail.Count],sailY=new float[sail.Count];
+        for(int i=0;i<sail.Count;i++){sailX[i]=sail[i].LocalCenter.x;sailY[i]=sail[i].LocalCenter.y;}
+        sailShape=new NavalSailShape(sailX,sailY);
+        List<NavalHullVoxel> timberCells=new List<NavalHullVoxel>();
+        foreach(NavalHullVoxel cell in rigCells)if(!cell.RigFabric)timberCells.Add(cell);
+        NavalRigRenderBatch.Create(transform,timberCells,false);
+        NavalRigRenderBatch.Create(transform,sail,true);
         SailPowerFactor = 1f;buildingRig=false;
     }
     private void RigBox(Vector3 position, Vector3 size, Material material, List<NavalHullVoxel> target)
@@ -139,46 +155,32 @@ public class NavalShipVisuals : MonoBehaviour
             cell.localPosition = entry.Key.LocalCenter;
             cell.localRotation = Quaternion.identity;
             cell.localScale = entry.Value;
-            entry.Key.GetComponent<Collider>().isTrigger = sail.Contains(entry.Key);
+            entry.Key.Detached=false;entry.Key.PhysicsCollider.isTrigger = entry.Key.RigFabric;entry.Key.NotifyVisualChanged();
         }
         foreach (GameObject group in debris) Destroy(group);
-        debris.Clear(); previousMissing = -1;
+        debris.Clear(); rigDirty=true;
         RefreshRig();
     }
+    public void MarkRigDirty(){rigDirty=true;}
     public void RefreshRig()
     {
         foreach(NavalShipVisuals rig in secondaryRigs)rig.RefreshRig();
-        if(previousMissing>=0&&previousHullRevision==hull.Revision)return;
-        bool[] missing=missingMast;
-        int count = 0;
-        for (int i = 0; i < missing.Length; i++)
-        { missing[i] = mastCells[i].Missing || mastCells[i].transform.parent != transform; if (missing[i]) count++; }
-        if (count != previousMissing || previousHullRevision != hull.Revision)
+        if(!rigDirty||supportGraph==null)return;
+        using(NavalPerformance.Measure(NavalPerfArea.RigSupport))
         {
-            previousMissing = count;
-            previousHullRevision = hull.Revision;
-            bool foundation=false;
-            foreach(NavalHullVoxel cell in foundationCells)
-                if(!cell.Missing&&!cell.Detached&&cell.transform.parent==transform)
-                {foundation=true;break;}
-            bool[] supported = NavalRigMath.Supported(mastBounds, missing, foundation?0.825f:float.MinValue);
-            List<NavalHullVoxel> falling = new List<NavalHullVoxel>();
-            for (int i = 0; i < supported.Length; i++)
+            rigDirty=false;bool foundation=false;
+            foreach(NavalHullVoxel cell in foundationCells)if(!cell.Missing&&!cell.Detached&&cell.transform.parent==transform){foundation=true;break;}
+            for(int i=0;i<rigCells.Count;i++)missingRig[i]=rigCells[i].Missing||rigCells[i].Detached||rigCells[i].transform.parent!=transform;
+            supportGraph.Evaluate(missingRig,foundation);
+            foreach(List<int> component in supportGraph.FallingComponents(missingRig))
             {
-                if (!missing[i] && !supported[i]) falling.Add(mastCells[i]);
+                if(component.Count==0)continue;falling.Clear();
+                foreach(int index in component)falling.Add(rigCells[index]);
+                Drop(falling);
             }
-            if (falling.Count > 0)
-            {
-                float cutHeight = NavalRigMath.BreakHeight(mastBounds, missing, supported);
-                foreach (NavalHullVoxel cell in attachedRig)
-                    if (cell.transform.parent == transform && cell.LocalCenter.y >= cutHeight)
-                        falling.Add(cell);
-            }
-            if (falling.Count > 0) Drop(falling);
+            int remaining=0;foreach(NavalHullVoxel cell in sail)if(!cell.Missing&&!cell.Detached&&cell.transform.parent==transform)remaining++;
+            SailPowerFactor=NavalRigMath.SailPower(remaining,sail.Count,true);
         }
-        int remaining = 0;
-        foreach (NavalHullVoxel cell in sail) if (!cell.Missing && cell.transform.parent == transform) remaining++;
-        SailPowerFactor = NavalRigMath.SailPower(remaining, sail.Count, true);
     }
     private void Drop(List<NavalHullVoxel> cells)
     {
@@ -189,19 +191,19 @@ public class NavalShipVisuals : MonoBehaviour
         group.transform.rotation = transform.rotation;
         foreach (NavalHullVoxel cell in cells)
         {
-            cell.transform.SetParent(group.transform, true);
+            cell.Detached=true;cell.transform.SetParent(group.transform, true);cell.NotifyVisualChanged();
             // Cloth cells become physical debris, so they land even if all
             // wooden supports were removed. Missing cells stay disabled.
-            cell.GetComponent<Collider>().isTrigger = false;
+            cell.PhysicsCollider.isTrigger = false;
         }
         // Cloth below a high cut overlaps the remaining mast. Those contacts
         // used to pin the detached assembly in place instead of letting it fall.
         foreach (NavalHullVoxel cell in cells)
             foreach (NavalHullVoxel support in mastCells)
                 if (!support.Missing && support.transform.parent == transform)
-                    Physics.IgnoreCollision(cell.GetComponent<Collider>(), support.GetComponent<Collider>(), true);
+                    Physics.IgnoreCollision(cell.PhysicsCollider, support.PhysicsCollider, true);
         Rigidbody body = group.AddComponent<Rigidbody>();
-        body.mass = 60f; body.interpolation = RigidbodyInterpolation.Interpolate;
+        body.mass = Mathf.Clamp(cells.Count*.4f,.5f,80f); body.interpolation = RigidbodyInterpolation.Interpolate;
         body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
         body.angularVelocity = transform.right * 0.45f;
         debris.Add(group);hull.Revision++;
@@ -218,22 +220,17 @@ public class NavalShipVisuals : MonoBehaviour
     private void Update()
     {
         RefreshRig();
-        foreach(NavalHullVoxel voxel in sail)
+        if(sailShape==null)return;
+        using(NavalPerformance.Measure(NavalPerfArea.Sail))
         {
-            if(voxel.Missing || voxel.transform.parent != transform)continue;
-            Vector3 p=voxel.LocalCenter;
-            float u=Mathf.Clamp01((p.x+2.625f)/5.25f);
-            float v=Mathf.Clamp01((p.y-3.825f)/3.75f);
-            float envelope=Mathf.Sin(u*Mathf.PI)*Mathf.Sin(v*Mathf.PI);
-            float gust=0.36f+Mathf.Sin(Time.time*0.85f)*0.12f;
-            float phase=Time.time*2.2f+u*5f+v*3f;
-            p.z=mastZ+.02f+envelope*(gust+Mathf.Sin(phase)*0.10f);
-            p.x+=envelope*Mathf.Sin(Time.time*1.3f+v*4f)*0.04f;
-            // Top and bottom rows stay on their yards; the interior billows.
-            voxel.transform.localPosition=p;
-            float slopeX=Mathf.Cos(u*Mathf.PI)*Mathf.Sin(v*Mathf.PI)*gust*Mathf.PI/5.25f;
-            float slopeY=Mathf.Sin(u*Mathf.PI)*Mathf.Cos(v*Mathf.PI)*gust*Mathf.PI/3.75f;
-            voxel.transform.localRotation=Quaternion.FromToRotation(Vector3.forward,new Vector3(-slopeX,-slopeY,1f));
+            sailShape.Prepare(Time.time);
+            for(int i=0;i<sail.Count;i++)
+            {
+                NavalHullVoxel voxel=sail[i];if(voxel.Missing||voxel.Detached||voxel.transform.parent!=transform)continue;
+                NavalSailPose pose=sailShape.At(i);Vector3 point=voxel.LocalCenter;point.x+=pose.X;point.z=mastZ+pose.Z;
+                voxel.transform.localPosition=point;
+                voxel.transform.localRotation=Quaternion.FromToRotation(Vector3.forward,new Vector3(-pose.SlopeX,-pose.SlopeY,1f));
+            }
         }
     }
 }

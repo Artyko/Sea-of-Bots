@@ -25,7 +25,9 @@ public class NavalWater : MonoBehaviour
     private float nextMeshAt;
     private readonly List<int> firstPass = new List<int>(65000);
     private Matrix4x4 waterToClip,clipToWater;
-    private Vector3 clipCenter;
+    private Vector3 clipMin,clipMax;
+    private Bounds surfaceBounds;
+    private bool clipActive;
     private readonly System.Diagnostics.Stopwatch buildWatch=new System.Diagnostics.Stopwatch();
     public float BuildMilliseconds { get; private set; }
     private float simulationTime;
@@ -89,6 +91,8 @@ public class NavalWater : MonoBehaviour
 
     public void RenderWaves(Transform boat, float speed)
     {
+        using(NavalPerformance.Measure(NavalPerfArea.Ocean))
+        {
         simulationTime += Mathf.Min(Time.deltaTime, 0.05f);
         if(Time.time<nextMeshAt)return;nextMeshAt=Time.time+1f/30f;
         buildWatch.Restart();
@@ -97,6 +101,7 @@ public class NavalWater : MonoBehaviour
         Vector3 waterPosition=transform.position,boatPosition=boat.position;
         Matrix4x4 toBoat=boat.worldToLocalMatrix;
         waveField.Prepare(-Half*Spacing+offsetX,-Half*Spacing+offsetZ,Spacing,Amplitude,simulationTime);
+        float minY=float.PositiveInfinity,maxY=float.NegativeInfinity;
         for (int i = 0; i < vertices.Length; i++)
         {
             vertices[i].x = (i % Count - Half) * Spacing + offsetX;
@@ -113,7 +118,9 @@ public class NavalWater : MonoBehaviour
                     * Mathf.Sin(relative.z * 2f + simulationTime * 4f);
             }
             vertices[i].y = h - waterPosition.y;
+            minY=Mathf.Min(minY,vertices[i].y);maxY=Mathf.Max(maxY,vertices[i].y);
         }
+        surfaceBounds=new Bounds(new Vector3(offsetX,(minY+maxY)*.5f,offsetZ),new Vector3(2f*Half*Spacing,maxY-minY,2f*Half*Spacing));
         indices.Clear();
         clippedVertices.Clear(); clippedVertices.AddRange(vertices);
         PrepareClip(boat);
@@ -124,9 +131,9 @@ public class NavalWater : MonoBehaviour
         }
         // Water remains visible when viewed upward from below the surface.
         int frontCount = indices.Count;
-        if(AdditionalHull!=null)
+        if(AdditionalHull!=null&&PrepareClip(AdditionalHull))
         {
-            firstPass.Clear();firstPass.AddRange(indices);indices.Clear();PrepareClip(AdditionalHull);
+            firstPass.Clear();firstPass.AddRange(indices);indices.Clear();
             for(int i=0;i<firstPass.Count;i+=3)AddTriangle(firstPass[i],firstPass[i+1],firstPass[i+2],AdditionalHull);
         }
         frontCount=indices.Count;
@@ -134,18 +141,20 @@ public class NavalWater : MonoBehaviour
         for (int i = 0; i < frontVertices; i++) clippedVertices.Add(clippedVertices[i]);
         for (int i = 0; i < frontCount; i += 3)
         { indices.Add(indices[i + 2] + frontVertices); indices.Add(indices[i + 1] + frontVertices); indices.Add(indices[i] + frontVertices); }
-        mesh.Clear(); mesh.SetVertices(clippedVertices); mesh.SetTriangles(indices, 0);
+        mesh.Clear(); mesh.SetVertices(clippedVertices); mesh.SetTriangles(indices, 0, false);
         mesh.RecalculateNormals(); mesh.RecalculateBounds();
         buildWatch.Stop();BuildMilliseconds=(float)buildWatch.Elapsed.TotalMilliseconds;
+            }
     }
 
     private void AddTriangle(int a, int b, int c, Transform boat)
     {
         Vector3 pa=clippedVertices[a],pb=clippedVertices[b],pc=clippedVertices[c];
-        if((pa.x<clipCenter.x-20f&&pb.x<clipCenter.x-20f&&pc.x<clipCenter.x-20f)||
-           (pa.x>clipCenter.x+20f&&pb.x>clipCenter.x+20f&&pc.x>clipCenter.x+20f)||
-           (pa.z<clipCenter.z-20f&&pb.z<clipCenter.z-20f&&pc.z<clipCenter.z-20f)||
-           (pa.z>clipCenter.z+20f&&pb.z>clipCenter.z+20f&&pc.z>clipCenter.z+20f))
+        if(!clipActive||
+           (pa.x<clipMin.x&&pb.x<clipMin.x&&pc.x<clipMin.x)||
+           (pa.x>clipMax.x&&pb.x>clipMax.x&&pc.x>clipMax.x)||
+           (pa.z<clipMin.z&&pb.z<clipMin.z&&pc.z<clipMin.z)||
+           (pa.z>clipMax.z&&pb.z>clipMax.z&&pc.z>clipMax.z))
         {indices.Add(a);indices.Add(b);indices.Add(c);return;}
         Vector3 va = waterToClip.MultiplyPoint3x4(pa);
         Vector3 vb = waterToClip.MultiplyPoint3x4(pb);
@@ -166,8 +175,35 @@ public class NavalWater : MonoBehaviour
         // Remaining polygon lies inside the boat below the rim and is intentionally discarded.
     }
     private float clipRim=BoatDimensions.Rim;
-    private void PrepareClip(Transform boat)
-    {NavalSeaLadder equipment=boat.GetComponent<NavalSeaLadder>();clipRim=equipment!=null?equipment.Hull.Definition.RimY:BoatDimensions.Rim;waterToClip=boat.worldToLocalMatrix*transform.localToWorldMatrix;clipToWater=transform.worldToLocalMatrix*boat.localToWorldMatrix;clipCenter=transform.InverseTransformPoint(boat.position);}
+    private bool PrepareClip(Transform boat)
+    {
+        NavalSeaLadder equipment=boat.GetComponent<NavalSeaLadder>();
+        clipRim=equipment!=null?equipment.Hull.Definition.RimY:BoatDimensions.Rim;
+        waterToClip=boat.worldToLocalMatrix*transform.localToWorldMatrix;
+        clipToWater=transform.worldToLocalMatrix*boat.localToWorldMatrix;
+        Vector3 low=new Vector3(float.PositiveInfinity,float.PositiveInfinity,float.PositiveInfinity),high=-low;
+        for(int corner=0;corner<8;corner++)
+        {
+            Vector3 p=waterToClip.MultiplyPoint3x4(Corner(surfaceBounds.min,surfaceBounds.max,corner));
+            low=Vector3.Min(low,p);high=Vector3.Max(high,p);
+        }
+        clipActive=low.x<BoatDimensions.HalfWidth&&high.x>-BoatDimensions.HalfWidth&&
+            low.z<BoatDimensions.HalfLength&&high.z>-BoatDimensions.HalfLength&&low.y<clipRim;
+        if(!clipActive)return false;
+        // Limit the infinite downward mask to the actual ocean AABB, then project it back.
+        Vector3 maskLow=new Vector3(-BoatDimensions.HalfWidth,low.y-.001f,-BoatDimensions.HalfLength);
+        Vector3 maskHigh=new Vector3(BoatDimensions.HalfWidth,clipRim,BoatDimensions.HalfLength);
+        clipMin=new Vector3(float.PositiveInfinity,float.PositiveInfinity,float.PositiveInfinity);clipMax=-clipMin;
+        for(int corner=0;corner<8;corner++)
+        {
+            Vector3 p=clipToWater.MultiplyPoint3x4(Corner(maskLow,maskHigh,corner));
+            clipMin=Vector3.Min(clipMin,p);clipMax=Vector3.Max(clipMax,p);
+        }
+        clipMin-=Vector3.one*.001f;clipMax+=Vector3.one*.001f;
+        return true;
+    }
+    private static Vector3 Corner(Vector3 low,Vector3 high,int corner)
+    {return new Vector3((corner&1)==0?low.x:high.x,(corner&2)==0?low.y:high.y,(corner&4)==0?low.z:high.z);}
 
     private float Distance(Vector3 p, int plane)
     {

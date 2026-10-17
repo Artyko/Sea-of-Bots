@@ -24,7 +24,7 @@ public class NavalDeckDefense
             PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore)&&hit.collider.transform.IsChildOf(hull.Root)&&
             hull.Root.InverseTransformPoint(hit.point).y>=0.55f;
     }
-    public void Tick()
+    public void Tick(int[] roles,bool helmUseful)
     {
         int sample=-1;for(int i=0;i<crew.Length;i++)if(Alive(i)){sample=i;break;}
         if(sample<0||hull.Sunk){Stop();return;}
@@ -32,15 +32,23 @@ public class NavalDeckDefense
         if(Time.time>=scanAt)
         {
             scanAt=Time.time+0.35f;
-            if(intruder==null)foreach(Character candidate in Object.FindObjectsByType<Character>(FindObjectsSortMode.None))
-                if(candidate.IsPlayerTeam!=crew[sample].IsPlayerTeam&&OnDeck(candidate))
+            if(intruder==null)foreach(Character candidate in NavalCharacters.Snapshot())
+                if(candidate!=null&&candidate.IsPlayerTeam!=crew[sample].IsPlayerTeam&&OnDeck(candidate))
                 {intruder=candidate;break;}
         }
         if(intruder==null){Stop();return;}
         if(!Alive(Guard))
         {
             Stop();
-            int chosen=-1;for(int pass=0;pass<2&&chosen<0;pass++)for(int i=0;i<crew.Length;i++)if(Alive(i)&&(pass>0||!workers[i].RepairDuty)){chosen=i;break;}
+            int guns=0;foreach(int role in roles)if(role>0)guns++;
+            int chosen=-1;float best=float.MaxValue;
+            for(int i=0;i<crew.Length;i++)if(Alive(i))
+            {
+                int role=roles[i]==0&&!helmUseful?-1:roles[i];
+                float score=NavalCrewPriorities.DefenseCost(role,guns,workers[i].RepairDuty,workers[i].HasJob,hull.CombatCritical,
+                    Vector3.Distance(crew[i].transform.position,intruder.transform.position));
+                if(score<best){best=score;chosen=i;}
+            }
             if(chosen<0)return;
             Guard=chosen;workers[Guard].BeginDefense();crew[Guard].ActivateAI();
             previousBoat=hull.Root.localToWorldMatrix;

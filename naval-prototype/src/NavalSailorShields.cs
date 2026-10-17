@@ -35,46 +35,4 @@ public partial class NavalRepairSailor
         if(hull!=null&&hull.Bilge!=null)hull.Bilge.ReleaseShieldClaims(this);
         shieldJob=null;shieldStage=0;ShowBoards(false);passageWorkUntil=0f;
     }
-    private bool TickShields(float dt,bool allowed)
-    {
-        NavalBilgeSystem system=hull.Bilge;
-        if(system==null)return false;
-        if(shieldJob==null)
-        {
-            if((!allowed&&!(returning&&!changingPost))||leak!=null||pumpDuty||bailState!=0)return false;
-            if(!system.WantsShieldWorker)return false;
-            shieldJob=system.ClaimShield(this);if(shieldJob==null)return false;
-            shieldStage=shieldJob.Removing?2:1;
-            feet=boat.InverseTransformPoint(robot.transform.position-boat.up*footOffset);
-            returning=false;changingPost=false;route.Clear();stuck=0f;
-            Vector3 point=shieldJob.Post;if(shieldStage==1)point.z=shieldJob.Rack.z;
-            PlanTo(point);
-        }
-        if(shieldJob.Worker!=this){ReleaseShieldJob();BeginReturn();return false;}
-        shieldJob.Lease=Time.time+1f;robot.DisableAI();
-        if(route.Count>0)
-        {
-            RouteResult movement=FollowRoute(dt,5f);
-            if(movement==RouteResult.Blocked||movement==RouteResult.Fell)
-            {system.ReleaseShield(shieldJob,this,true);ReleaseShieldJob();BeginReturn();}
-            return true;
-        }
-        Walking(false,dt);HoldPosition();
-        if(shieldStage==1)
-        {
-            ShowBoards(true);shieldStage=2;PlanTo(shieldJob.Post);return true;
-        }
-        shieldStage=3;ShowBoards(false);
-        Vector3 face=boat.TransformPoint(shieldJob.Opening)-robot.transform.position;face.y=0f;
-        if(face.sqrMagnitude>.01f)robot.transform.rotation=Quaternion.LookRotation(face);
-        if(hammer!=null)hammer.localRotation=hammerRest*Quaternion.Euler(Mathf.Sin(Time.time*12f)*35f,0f,0f);
-        if(!system.WorkShield(shieldJob,this,dt))
-        {system.ReleaseShield(shieldJob,this,true);ReleaseShieldJob();BeginReturn();return true;}
-        if(shieldJob.Worker!=this)
-        {
-            Debug.Log("[NavalPrototype] Flood boards "+(shieldJob.Installed?"installed":"removed")+" in compartment "+shieldJob.Region);
-            ReleaseShieldJob();BeginReturn();
-        }
-        return true;
-    }
 }

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -7,9 +7,10 @@ using UnityEngine.Rendering;
 public class NavalVoxelBatch : MonoBehaviour
 {
     private class Chunk
-    {public readonly List<NavalHullVoxel> Cells=new List<NavalHullVoxel>();public GameObject Object;public Mesh Mesh;public int Signature;public bool Built;}
+    {public readonly List<NavalHullVoxel> Cells=new List<NavalHullVoxel>();public GameObject Object;public Mesh Mesh;public bool Dirty;}
     private NavalHull hull;
-    private int revision=-1;
+    private readonly List<Chunk> chunkList=new List<Chunk>(),dirty=new List<Chunk>();
+    private readonly List<Mesh> scratch=new List<Mesh>();
     private readonly Dictionary<Vector3Int,Chunk> chunks=new Dictionary<Vector3Int,Chunk>();
     public void Initialize(NavalHull owner)
     {
@@ -18,25 +19,33 @@ public class NavalVoxelBatch : MonoBehaviour
         {
             Vector3 p=cell.transform.localPosition;Vector3Int key=new Vector3Int(Mathf.FloorToInt(p.x/2f),Mathf.FloorToInt(p.y/2f),Mathf.FloorToInt(p.z/2f));
             Chunk chunk;if(!chunks.TryGetValue(key,out chunk))
-            {chunk=new Chunk();chunk.Object=new GameObject("HullRenderChunk");chunk.Object.transform.SetParent(transform,false);chunk.Object.AddComponent<MeshFilter>();chunk.Object.AddComponent<MeshRenderer>();chunks.Add(key,chunk);}
-            chunk.Cells.Add(cell);
+            {chunk=new Chunk();chunk.Object=new GameObject("HullRenderChunk");chunk.Object.transform.SetParent(transform,false);chunk.Object.AddComponent<MeshFilter>();chunk.Object.AddComponent<MeshRenderer>();chunks.Add(key,chunk);chunkList.Add(chunk);}
+            chunk.Cells.Add(cell);cell.BatchOwner=this;
+            cell.RenderChunk=chunkList.IndexOf(chunk);
         }
+        foreach(Chunk chunk in chunkList)MarkDirty(chunk);
         LateUpdate();
         Debug.Log("[NavalPrototype] Hull rendering batched into "+chunks.Count+" spatial chunks; individual damage retained.");
     }
+    public void MarkDirty(NavalHullVoxel cell)
+    {if(cell.RenderChunk>=0&&cell.RenderChunk<chunkList.Count)MarkDirty(chunkList[cell.RenderChunk]);}
+    private void MarkDirty(Chunk chunk){if(!chunk.Dirty){chunk.Dirty=true;dirty.Add(chunk);}}
     private void LateUpdate()
     {
-        if(hull==null||revision==hull.Revision)return;revision=hull.Revision;
-        foreach(Chunk chunk in chunks.Values)
+        if(hull==null||dirty.Count==0)return;
+        using(NavalPerformance.Measure(NavalPerfArea.Chunks))
         {
-            int hash=17;
-            foreach(NavalHullVoxel cell in chunk.Cells)
+            for(int i=0;i<dirty.Count;i++)
             {
-                bool attached=!cell.Detached&&cell.transform.parent==transform;
-                cell.Batched=attached;cell.GetComponent<Renderer>().enabled=!attached&&!cell.Missing;
-                unchecked{hash=hash*31+(cell.Missing?1:0)+(attached?2:0);hash=hash*31+cell.GetComponent<Renderer>().sharedMaterial.GetInstanceID();}
+                Chunk chunk=dirty[i];chunk.Dirty=false;
+                foreach(NavalHullVoxel cell in chunk.Cells)
+                {
+                    bool attached=!cell.Detached&&cell.transform.parent==transform;
+                    cell.Batched=attached;cell.GetComponent<Renderer>().enabled=!attached&&!cell.Missing;
+                }
+                Rebuild(chunk);
             }
-            if(!chunk.Built||hash!=chunk.Signature){chunk.Signature=hash;chunk.Built=true;Rebuild(chunk);}
+            dirty.Clear();
         }
     }
     private void Rebuild(Chunk chunk)
@@ -49,17 +58,17 @@ public class NavalVoxelBatch : MonoBehaviour
             CombineInstance part=new CombineInstance();part.mesh=cell.GetComponent<MeshFilter>().sharedMesh;
             part.transform=Matrix4x4.TRS(cell.transform.localPosition,cell.transform.localRotation,cell.transform.localScale);list.Add(part);
         }
-        List<Material> materials=new List<Material>();List<CombineInstance> combined=new List<CombineInstance>();List<Mesh> temporary=new List<Mesh>();
+        List<Material> materials=new List<Material>();List<CombineInstance> combined=new List<CombineInstance>();int scratchIndex=0;
         foreach(KeyValuePair<Material,List<CombineInstance>> pair in groups)
         {
-            Mesh mesh=new Mesh();mesh.indexFormat=IndexFormat.UInt32;mesh.CombineMeshes(pair.Value.ToArray(),true,true);temporary.Add(mesh);materials.Add(pair.Key);
+            if(scratchIndex==scratch.Count){Mesh temporary=new Mesh();temporary.indexFormat=IndexFormat.UInt32;scratch.Add(temporary);}
+            Mesh mesh=scratch[scratchIndex++];mesh.Clear();mesh.CombineMeshes(pair.Value.ToArray(),true,true);materials.Add(pair.Key);
             CombineInstance part=new CombineInstance();part.mesh=mesh;part.transform=Matrix4x4.identity;combined.Add(part);
         }
-        if(chunk.Mesh!=null)Destroy(chunk.Mesh);
-        chunk.Mesh=new Mesh();chunk.Mesh.indexFormat=IndexFormat.UInt32;
+        if(chunk.Mesh==null){chunk.Mesh=new Mesh();chunk.Mesh.indexFormat=IndexFormat.UInt32;}else chunk.Mesh.Clear();
         if(combined.Count>0)chunk.Mesh.CombineMeshes(combined.ToArray(),false,true);
         chunk.Object.GetComponent<MeshFilter>().sharedMesh=chunk.Mesh;chunk.Object.GetComponent<Renderer>().sharedMaterials=materials.ToArray();
-        chunk.Object.SetActive(combined.Count>0);foreach(Mesh mesh in temporary)Destroy(mesh);
+        chunk.Object.SetActive(combined.Count>0);
     }
-    private void OnDestroy(){foreach(Chunk chunk in chunks.Values)if(chunk.Mesh!=null)Destroy(chunk.Mesh);}
+    private void OnDestroy(){foreach(Chunk chunk in chunks.Values)if(chunk.Mesh!=null)Destroy(chunk.Mesh);foreach(Mesh mesh in scratch)Destroy(mesh);}
 }

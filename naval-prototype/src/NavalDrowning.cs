@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 [DefaultExecutionOrder(400)]
@@ -13,12 +13,12 @@ public class NavalDrowning : MonoBehaviour
     {player=owner;waterLevel=level;}
     private void LateUpdate()
     {
-        if(player==null||!player.IsAlive()||!player.IsPlayerInputEnabled()||Time.timeScale==0f)return;
+        if(NavalTestWorld.Active==null||!NavalTestWorld.Active.SimulationActive)return;
         if(Time.time>=scanAt)
         {
             scanAt=Time.time+0.5f;
-            foreach(Character robot in UnityEngine.Object.FindObjectsByType<Character>(FindObjectsSortMode.None))
-                if(robot.IsAlive()&&!breaths.ContainsKey(robot))breaths.Add(robot,new NavalBreathClock());
+            foreach(Character robot in NavalCharacters.Snapshot())
+                if(robot!=null&&robot.IsAlive()&&!breaths.ContainsKey(robot))breaths.Add(robot,new NavalBreathClock());
         }
         removed.Clear();
         foreach(KeyValuePair<Character,NavalBreathClock> entry in breaths)

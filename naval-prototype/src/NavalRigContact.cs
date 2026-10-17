@@ -1,13 +1,13 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections.Generic;
 public static class NavalRigContact
 {
     private struct Hit
     {public NavalHullVoxel Cell;public Vector3 Point;public bool Attached;}
     private static readonly List<Hit> hits=new List<Hit>();
-    private static bool Touches(Vector3 ship,Quaternion rotation,Vector3 centre,Quaternion cellRotation,Vector3 halfSize,float bodyScale)
+    private static bool Touches(Vector3 ship,Quaternion inverse,Vector3 centre,Quaternion cellRotation,Vector3 halfSize,float bodyScale)
     {
-        Quaternion inverse=Quaternion.Inverse(rotation),relative=inverse*cellRotation;
+        Quaternion relative=inverse*cellRotation;
         Vector3 p=inverse*(centre-ship);
         Vector3 right=relative*Vector3.right,up=relative*Vector3.up,forward=relative*Vector3.forward;
         Vector3 extent=new Vector3(Mathf.Abs(right.x)*halfSize.x+Mathf.Abs(up.x)*halfSize.y+Mathf.Abs(forward.x)*halfSize.z,
@@ -18,27 +18,31 @@ public static class NavalRigContact
     private static void Scan(NavalRamDamage rig,Vector3 bodyPosition,Quaternion bodyRotation,
         Vector3 rigPosition,Quaternion rigRotation,bool movingRig,float bodyScale)
     {
-        Quaternion delta=rigRotation*Quaternion.Inverse(rig.transform.rotation);
-        foreach(NavalHullVoxel cell in rig.RigCells)
+        NavalRigSnapshot snapshot=rig.RigSnapshot;
+        if(!snapshot.PrepareGroups(bodyPosition,bodyRotation,bodyScale,rigPosition,rigRotation,movingRig))return;
+        Quaternion delta=snapshot.Delta(rigRotation),bodyInverse=Quaternion.Inverse(bodyRotation);
+        foreach(NavalRigSnapshot.CellPose pose in snapshot.Cells)
         {
-            if(cell==null||cell.Missing)continue;
-            bool attached=cell.transform.parent==rig.transform;
-            // Detached assemblies move through their Rigidbody, not through the old ship transform.
-            if(movingRig&&!attached)continue;
-            Vector3 centre=cell.transform.position;Quaternion rotation=cell.transform.rotation;
-            if(movingRig){centre=rigPosition+delta*(centre-rig.transform.position);rotation=delta*rotation;}
-            if(!Touches(bodyPosition,bodyRotation,centre,rotation,cell.transform.lossyScale*0.5f,bodyScale))continue;
-            hits.Add(new Hit{Cell=cell,Point=centre,Attached=attached});
+            NavalHullVoxel cell=pose.Cell;
+            if(!snapshot.Included(pose.Group)||cell==null||cell.Missing)continue;
+            Vector3 centre=pose.Center;Quaternion rotation=pose.Rotation;
+            if(movingRig){centre=snapshot.Predict(centre,rigPosition,delta);rotation=delta*rotation;}
+            if(!Touches(bodyPosition,bodyInverse,centre,rotation,pose.HalfSize,bodyScale))continue;
+            hits.Add(new Hit{Cell=cell,Point=centre,Attached=pose.Attached});
         }
     }
+
     public static float Resolve(NavalRamDamage mover,Vector3 start,Quaternion rotation,ref Vector3 next,ref Quaternion nextRotation,NavalRamDamage other)
     {
+        using(NavalPerformance.Measure(NavalPerfArea.RigContact))
+        {
         if(mover==null||other==null)return 1f;
         Vector3 separation=other.transform.position-start;separation.y=0f;
         if(separation.sqrMagnitude>50f*50f)return 1f;
         Vector3 relative=mover.Velocity-other.Velocity;relative.y=0f;
         float speed=relative.magnitude+Mathf.Abs(mover.AngularRate-other.AngularRate)*Mathf.Deg2Rad*6f;
         if(speed<0.05f)return 1f; // Wave bobbing alone must not shred a stationary rig.
+        mover.RigSnapshot.Capture(mover,false);other.RigSnapshot.Capture(other,true);
         int steps=NavalRigImpactMath.SweepSteps(Vector3.Distance(start,next),Quaternion.Angle(rotation,nextRotation));
         float retained=1f;bool stopped=false;
         for(int i=0;i<=steps;i++)
@@ -71,5 +75,6 @@ public static class NavalRigContact
         }
         // A mast arrests this frame's advance, then its unsupported top can fall clear.
         return stopped?Mathf.Min(retained,0.72f):retained;
+        }
     }
 }

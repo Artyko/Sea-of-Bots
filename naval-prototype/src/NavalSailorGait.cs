@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 // Sample actual animation clips after all ship/crew movement. This avoids
 // relying on a disabled Animator evaluating its state machine automatically.
@@ -14,6 +14,7 @@ public class NavalSailorGait : MonoBehaviour
     private Quaternion[] idleRotation;
     private readonly NavalGaitClock clock=new NavalGaitClock();
     private float stride,weight,lastMove=-100f;
+    private bool idleApplied;
     public void Initialize(Character sailor,CharacterModel body)
     {
         robot=sailor;model=body;
@@ -48,6 +49,8 @@ public class NavalSailorGait : MonoBehaviour
         if(robot==null||!robot.IsAlive()){Restore();enabled=false;return;}
         if(root==null||walk==null)return;
         weight=Mathf.MoveTowards(weight,Time.time-lastMove<0.08f?1f:0f,Time.deltaTime*6f);
+        if(weight==0f&&idleApplied)return;
+        idleApplied=weight==0f;
         model.SetManualLegsAnimationEnabled(true);
         Vector3 position=root.localPosition;Quaternion rotation=root.localRotation;
         walk.SampleAnimation(root.gameObject,clock.Phase*walk.length);
@@ -61,6 +64,6 @@ public class NavalSailorGait : MonoBehaviour
     }
     private void Restore()
     {if(model!=null){model.SetManualLegsAnimationEnabled(false);if(model.LegsAnimator!=null)model.LegsAnimator.speed=1f;}}
-    private void OnDisable(){Restore();}
+    private void OnDisable(){idleApplied=false;Restore();}
     private void OnDestroy(){Restore();}
 }

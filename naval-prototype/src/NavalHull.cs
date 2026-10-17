@@ -9,6 +9,7 @@ public class NavalHullVoxel : MonoBehaviour
     public bool HydraulicShell = true;
     public bool InternalBarrier;
     public bool RepairableEquipment;
+    public NavalRepairableMechanism RepairMechanism;
     public bool ManagedRig;
     public bool MovableEquipment;
     public bool RigFabric;
@@ -16,6 +17,20 @@ public class NavalHullVoxel : MonoBehaviour
     public float CannonWear;
     public bool Detached;
     public bool Batched;
+    public NavalVoxelBatch BatchOwner;
+    public int RenderChunk=-1;
+    public NavalShipVisuals RigOwner;
+    public NavalRigRenderBatch RigBatchOwner;
+    public NavalStructure StructureOwner;
+    public NavalHullColliders ColliderBatchOwner;
+    public int ColliderChunk=-1;
+    public bool ColliderBatched;
+    public bool DamageIndexed;
+    public void NotifyMaterialChanged(){if(BatchOwner!=null)BatchOwner.MarkDirty(this);if(RigBatchOwner!=null)RigBatchOwner.MarkDirty();}
+    public void NotifyVisualChanged()
+    {if(ColliderBatchOwner!=null)ColliderBatchOwner.MarkDirty(this);if(Owner!=null){Owner.NoteCellMoved(this);if(Owner.PhysicsBody!=null)Owner.PhysicsBody.MarkDirty(this);}if(BatchOwner!=null)BatchOwner.MarkDirty(this);if(RigOwner!=null)RigOwner.MarkRigDirty();if(StructureOwner!=null)StructureOwner.MarkDirty();if(RigBatchOwner!=null)RigBatchOwner.MarkDirty();}
+    private Collider cachedCollider;
+    public Collider PhysicsCollider {get{if(cachedCollider==null)cachedCollider=GetComponent<Collider>();return cachedCollider;}}
     public NavalHull Owner;
     public Material OriginalSurface;
     public float ScorchStrength;
@@ -28,11 +43,11 @@ public class NavalHullVoxel : MonoBehaviour
     {
         if(!value){CannonWear=0f;InflowRate=0f;if(Stream!=null)Stream.gameObject.SetActive(false);}
         if (Missing == value) return;
-        Missing = value;
+        Missing = value;NotifyVisualChanged();
         LastWetAt=float.NegativeInfinity;LastWetFlow=0f;
         if (Owner != null) Owner.Revision++;
         GetComponent<Renderer>().enabled = !value && !Batched;
-        GetComponent<Collider>().enabled = !value;
+        PhysicsCollider.enabled = !value;
         if (!value && Stream != null) Stream.gameObject.SetActive(false);
     }
 }
@@ -54,6 +69,38 @@ public class NavalHull
         }
         return damagedVoxels;
     }
+    private readonly NavalPointIndex damageIndex=new NavalPointIndex();
+    private readonly List<int> damageQuery=new List<int>();
+    private readonly List<NavalHullVoxel> dynamicDamageCells=new List<NavalHullVoxel>(),damageCandidates=new List<NavalHullVoxel>();
+    private int damageIndexCount=-1;
+    public void NoteCellMoved(NavalHullVoxel cell)
+    {
+        if(cell.DamageIndexed&&cell.transform.parent!=root)
+        {cell.DamageIndexed=false;dynamicDamageCells.Add(cell);}
+    }
+    private List<NavalHullVoxel> DamageCandidates(Vector3 point,float radius,NavalHullVoxel direct)
+    {
+        if(damageIndexCount!=Voxels.Count)
+        {
+            damageIndexCount=Voxels.Count;damageIndex.Clear();dynamicDamageCells.Clear();
+            for(int i=0;i<Voxels.Count;i++)
+            {
+                NavalHullVoxel cell=Voxels[i];
+                cell.DamageIndexed=cell.transform.parent==root&&!cell.ManagedRig&&!cell.MovableEquipment&&!cell.Detached;
+                if(cell.DamageIndexed)
+                {
+                    Vector3 p=root.InverseTransformPoint(cell.transform.position);damageIndex.Add(i,p.x,p.y,p.z);
+                }
+                else dynamicDamageCells.Add(cell);
+            }
+        }
+        damageCandidates.Clear();
+        damageIndex.Query(point.x,point.y,point.z,Mathf.Max(0f,radius)+.571f,damageQuery);
+        foreach(int index in damageQuery)if(Voxels[index].DamageIndexed)damageCandidates.Add(Voxels[index]);
+        damageCandidates.AddRange(dynamicDamageCells);
+        if(direct!=null&&direct.Owner==this&&!damageCandidates.Contains(direct))damageCandidates.Add(direct);
+        return damageCandidates;
+    }
     public int HoleCount { get; private set; }
     public float SubmergedArea { get; private set; }
     public float Inflow { get; private set; }
@@ -74,21 +121,27 @@ public class NavalHull
     public float Volume { get { float total=Flood.Total;foreach(NavalRepairSailor worker in RepairWorkers)if(worker!=null)total+=worker.BucketWater;return total; } }
     public float WaterDepthAt(Vector3 local) { return Flood.Depth(Flood.Index(local.x,local.z)); }
     private readonly NavalCombatEmergency combatEmergency=new NavalCombatEmergency();
+    private readonly NavalMaintenanceEscalation maintenanceEscalation=new NavalMaintenanceEscalation();
+    public bool ParallelMaintenance {get{return maintenanceEscalation.Parallel;}}
     public bool CombatCritical {get{return combatEmergency.Critical;}}
+    public bool RepairRetreat {get{return combatEmergency.RepairRetreat;}}
     public bool Sunk;
     public bool FloodEffectsHidden;
     public bool HasActiveLeaks;
+    public bool HasRepairDemand;
     public float SinkDepth;
     private const float Cell = 0.25f;
     private Material streamMaterial;
     private Transform root;
     public Transform Root { get { return root; } }
     private NavalVoxelStyle style;
+    public NavalShipPhysics PhysicsBody {get;private set;}
 
     public void Build(Transform boat, Material wood, Material waterMaterial, Material floorMaterial)
     {
         streamMaterial = waterMaterial;
         root = boat;
+        PhysicsBody=boat.gameObject.AddComponent<NavalShipPhysics>();PhysicsBody.Initialize(this);
         style = boat.gameObject.AddComponent<NavalVoxelStyle>();
         // One cell through the shell: a removed cell is an actual through-hole.
         for (int z = 0; z < 48; z++) for (int y = 0; y < 16; y++)
@@ -128,7 +181,7 @@ public class NavalHull
         voxel.LocalCenter = center; voxel.OpeningArea = Cell * Cell;
         voxel.HydraulicShell = shell;
         // Decorative cells still receive ray hits; sail cells do not block the robot.
-        if (!solid) obj.GetComponent<Collider>().isTrigger = true;
+        if (!solid) voxel.PhysicsCollider.isTrigger = true;
         Voxels.Add(voxel);
         return voxel;
     }
@@ -151,10 +204,12 @@ public class NavalHull
     }
     public int Damage(Vector3 localPoint, float radius,bool cannon=false,NavalHullVoxel direct=null,float cannonPower=1f)
     {
-        int removed = 0;
-        foreach (NavalHullVoxel voxel in Voxels)
+        using(NavalPerformance.Measure(NavalPerfArea.HullDamage))
         {
-            if(voxel.Missing)continue;
+        int removed = 0;
+        foreach (NavalHullVoxel voxel in DamageCandidates(localPoint,radius,direct))
+        {
+            if(voxel==null||voxel.Missing)continue;
             Vector3 position=root.InverseTransformPoint(voxel.transform.position);
             float distance=(position-localPoint).magnitude;
             if(distance<=radius||voxel==direct)
@@ -165,7 +220,7 @@ public class NavalHull
                     if(!NavalMastDurability.Broken(voxel.CannonWear))
                     {
                         voxel.ScorchStrength=Mathf.Max(voxel.ScorchStrength,.45f);
-                        style.Scorch(voxel.gameObject,voxel.ScorchStrength);
+                        style.Scorch(voxel.gameObject,voxel.ScorchStrength);voxel.NotifyMaterialChanged();
                         continue;
                     }
                 }
@@ -179,25 +234,31 @@ public class NavalHull
                 float band=0.35f+noise*0.22f;
                 float strength=Mathf.Clamp01(1f-(distance-radius)/band);
                 if(strength>0.05f&&strength>voxel.ScorchStrength)
-                {voxel.ScorchStrength=strength;style.Scorch(voxel.gameObject,strength);}
+                {voxel.ScorchStrength=strength;style.Scorch(voxel.gameObject,strength);voxel.NotifyMaterialChanged();}
             }
         }
         return removed;
+            }
     }
     public void Repair()
     {
+        HashSet<NavalRepairableMechanism> equipment=new HashSet<NavalRepairableMechanism>();
         foreach (NavalHullVoxel voxel in Voxels)
         {
+            if(voxel.RepairMechanism!=null)equipment.Add(voxel.RepairMechanism);
             voxel.CannonWear=0f;
             if (voxel.Missing) voxel.SetMissing(false);
             if(voxel.ScorchStrength>0f)
-            {voxel.GetComponent<Renderer>().sharedMaterial=voxel.OriginalSurface;voxel.ScorchStrength=0f;}
+            {voxel.GetComponent<Renderer>().sharedMaterial=voxel.OriginalSurface;voxel.ScorchStrength=0f;voxel.NotifyVisualChanged();}
         }
+        foreach(NavalRepairableMechanism mechanism in equipment)mechanism.Reset(); // Explicit debug full restoration only.
     }
     public void Step(Transform boat, NavalWater ocean, float dt, bool pump)
     {
+        using(NavalPerformance.Measure(NavalPerfArea.Flood))
+        {
         FloodEffectsHidden=NavalFloodVisibilityMath.HideEffects(NavalFloodAppearance.Clearance(boat,ocean));
-        HoleCount = 0; SubmergedArea = 0f; Inflow = 0f;HasActiveLeaks=false;
+        HoleCount = 0; SubmergedArea = 0f; Inflow = 0f;HasActiveLeaks=false;HasRepairDemand=false;
         int visibleStreams = 0;
         foreach (NavalHullVoxel voxel in GetDamagedVoxels())
         {
@@ -220,6 +281,7 @@ public class NavalHull
             voxel.InflowRate=Mathf.Max(0f,amount/dt);
             if(voxel.InflowRate>0.00001f)HasActiveLeaks=true;
             if(area>0f&&flow>0.00001f){voxel.LastWetAt=Time.time;voxel.LastWetFlow=Mathf.Max(0.001f,flow);}
+            if(NavalLeakPriority.Score(voxel.InflowRate,voxel.LastWetAt,voxel.LastWetFlow,Time.time)>0f)HasRepairDemand=true;
             Inflow += amount / dt;
             bool show = !FloodEffectsHidden && amount > 0.00001f && area > 0f && visibleStreams < 32;
             if (show)
@@ -254,8 +316,11 @@ public class NavalHull
         if(Bilge!=null)Bilge.UpdateBarriers();
         Flood.Spread(dt,floodFloors,boat.up.y);
         if(pump)Flood.Pump(BoatDimensions.PumpRate*AreaScale*dt);
-        combatEmergency.Step(Volume/(BoatDimensions.SinkVolume*VolumeScale),Mathf.DeltaAngle(0f,boat.eulerAngles.z));
+        float floodFraction=Volume/(BoatDimensions.SinkVolume*VolumeScale),heel=Mathf.DeltaAngle(0f,boat.eulerAngles.z);
+        combatEmergency.Step(floodFraction,heel);
+        maintenanceEscalation.Step(dt,floodFraction,heel,CombatCritical);
         if (Volume >= BoatDimensions.SinkVolume * VolumeScale) Sunk = true;
         if (Sunk) SinkDepth = Mathf.Min(5f, SinkDepth + dt * 0.2f);
+            }
     }
 }
