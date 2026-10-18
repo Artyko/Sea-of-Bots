@@ -12,6 +12,29 @@ public class NavalRamDamage : MonoBehaviour
     public readonly List<NavalHullVoxel> RigCells=new List<NavalHullVoxel>();
     public NavalRamDamage Opponent;
     public Vector3 ContactLocal;
+    private readonly NavalShipMomentum momentum=new NavalShipMomentum();
+    private float lastImpulse=float.NegativeInfinity;
+    public Vector3 Drift {get{return new Vector3(momentum.DriftX,0f,momentum.DriftZ);}}
+    public void StepMomentum(float dt,ref float speed)
+    {float response=1f/(1f+Hull.Volume/(BoatDimensions.HoldArea*Hull.AreaScale));momentum.Step(transform.forward.x,transform.forward.z,dt,ref speed,response);}
+    public void StopMomentum(){momentum.Stop();}
+    public void PushContact(NavalRamDamage other)
+    {
+        if(other==null||Time.time-Mathf.Max(lastImpulse,other.lastImpulse)<.075f)return;
+        float nx,nz;
+        NavalShipImpulseMath.Normal(transform.position.x,transform.position.z,transform.eulerAngles.y,
+            other.transform.position.x,other.transform.position.z,other.transform.eulerAngles.y,
+            Hull.WorldScale*.5f,other.Hull.WorldScale*.5f,out nx,out nz);
+        Vector3 normal=new Vector3(nx,0f,nz);
+        float closing=Vector3.Dot(Velocity-other.Velocity,normal);
+        float massA=Hull.Sunk?1000000f:Mathf.Pow(Hull.WorldScale,3f),massB=other.Hull.Sunk?1000000f:Mathf.Pow(other.Hull.WorldScale,3f);
+        float impulse=NavalShipImpulseMath.Impulse(closing,massA,massB);
+        if(impulse<=0f)return;
+        lastImpulse=other.lastImpulse=Time.time;
+        Vector3 deltaA=-normal*(impulse/massA),deltaB=normal*(impulse/massB);
+        momentum.Add(deltaA.x,deltaA.z);other.momentum.Add(deltaB.x,deltaB.z);
+        Velocity+=deltaA;other.Velocity+=deltaB;
+    }
     public void Initialize(NavalHull hull)
     {Hull=hull;foreach(NavalHullVoxel cell in hull.Voxels)if(cell.ManagedRig)RigCells.Add(cell);}
     public void RigImpact(Vector3 point,float speed)

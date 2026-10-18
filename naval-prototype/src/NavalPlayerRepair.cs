@@ -41,7 +41,8 @@ public class NavalPlayerRepair : MonoBehaviour
         foreach(NavalHullVoxel cell in hull.Voxels)
         {
             if(!(cell.HydraulicShell||cell.InternalBarrier||cell.RepairableEquipment)||!cell.Missing&&!cell.Detached)continue;
-            Vector3 point=hull.Root.TransformPoint(cell.LocalCenter);
+            Vector3 stand=hull.Root.InverseTransformPoint(ray.origin)-Vector3.up*(1.2f/hull.WorldScale);
+            Vector3 point=hull.Root.TransformPoint(hull.RepairAccess(cell,stand));
             Vector3 offset=point-ray.origin;float along=Vector3.Dot(offset,ray.direction);
             if(along<0f||offset.sqrMagnitude>36f)continue;
             float distance=(offset-ray.direction*along).sqrMagnitude;

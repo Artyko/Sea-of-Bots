@@ -11,6 +11,7 @@ public class NavalBoarder : MonoBehaviour
     // 0 duty, 1 outbound approach, 2 outbound jump, 3 melee,
     // 4 overboard, 5 return approach, 6 return jump.
     private int phase;
+    private bool finalAttack;
     private float started,jumpTime,duration,retryAt,scanAt,quietSince=-1f,height,returnAt;
     private Matrix4x4 previousBoat;
     private Character opponent;
@@ -19,6 +20,7 @@ public class NavalBoarder : MonoBehaviour
     private static readonly MethodInfo SetOpponent=typeof(AIController).GetMethod("SetTargetOpponentCharacter",BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic);
     private static readonly FieldInfo Velocity=typeof(FirstPersonMover).GetField("_velocity",BindingFlags.Instance|BindingFlags.NonPublic);
     public bool Busy {get{return phase!=0;}}
+    public bool Departed {get{return phase==2||phase==4||phase==3&&current!=home;}}
     public bool InFlight {get{return phase==2||phase==6;}}
     public string Status {get{return phase==1?"Preparing boarding":phase==5?"Returning to own ship":phase==6?"Jumping home":phase==2?"Boarding jump":phase==3?"Boarding melee":"Overboard";}}
     public void Initialize(Character sailor,NavalRepairSailor repair,NavalHull ship)
@@ -34,9 +36,9 @@ public class NavalBoarder : MonoBehaviour
         return point;
     }
     private float Radius()
-    {CharacterController body=robot.GetComponentInChildren<CharacterController>();return body!=null?Mathf.Clamp(body.radius*Mathf.Abs(body.transform.lossyScale.x),0.25f,0.45f):0.32f;}
+    {CharacterController body=worker.BodyController;return body!=null?Mathf.Clamp(body.radius*Mathf.Abs(body.transform.lossyScale.x),0.25f,0.45f):0.32f;}
     private float BodyHeight()
-    {CharacterController body=robot.GetComponentInChildren<CharacterController>();return body!=null?Mathf.Max(1.8f,body.height*Mathf.Abs(body.transform.lossyScale.y)):2.4f;}
+    {CharacterController body=worker.BodyController;return body!=null?Mathf.Max(1.8f,body.height*Mathf.Abs(body.transform.lossyScale.y)):2.4f;}
     private bool ClearDeck(NavalHull ship,Vector3 point)
     {
         Vector3 world=ship.Root.TransformPoint(point);RaycastHit hit;
@@ -94,8 +96,9 @@ public class NavalBoarder : MonoBehaviour
         }
         return false;
     }
-    public void TryStart(Transform enemy)
+    public void TryStart(Transform enemy,bool lastAttack=false)
     {
+        if(lastAttack)finalAttack=true;
         if(Busy||Time.time<retryAt||enemy==null||worker.Defending||worker.Rescuing||worker.Stranded||!robot.IsAlive())return;
         retryAt=Time.time+1.5f;
         NavalRamDamage other=enemy.GetComponent<NavalRamDamage>();if(other==null)return;
@@ -108,7 +111,7 @@ public class NavalBoarder : MonoBehaviour
     {FirstPersonMover mover=robot as FirstPersonMover;if(mover!=null&&Velocity!=null)Velocity.SetValue(mover,Vector3.zero);}
     private void PlaceRoot(Vector3 position)
     {
-        CharacterController controller=robot.GetComponentInChildren<CharacterController>();
+        CharacterController controller=worker.BodyController;
         bool enabled=controller!=null&&controller.enabled;if(enabled)controller.enabled=false;
         robot.transform.position=position;if(enabled)controller.enabled=true;
     }
@@ -132,8 +135,8 @@ public class NavalBoarder : MonoBehaviour
     private void BuildReturnRoute()
     {
         route.Clear();Vector3 feet=current.Root.InverseTransformPoint(robot.transform.position-current.Root.up*worker.FootOffset);
-        foreach(NavalWalkPoint point in NavalRepairRoutes.Plan(new NavalWalkPoint(feet.x,feet.y,feet.z),
-            new NavalWalkPoint(launch.x,launch.y,launch.z),current.Definition.Compartments,current.Definition.StairWidth,current.Floor))
+        foreach(NavalWalkPoint point in NavalBallastRoutes.Plan(new NavalWalkPoint(feet.x,feet.y,feet.z),
+            new NavalWalkPoint(launch.x,launch.y,launch.z),current.Definition.Partitions,current.Definition.StairWidth,current.Floor,current.WorldScale))
             route.Add(new Vector3(point.X,point.Y,point.Z));
     }
     private void TryReturn()
@@ -170,7 +173,7 @@ public class NavalBoarder : MonoBehaviour
         bool stairs=NavalWalkRoutes.InStairwell(feet.x,feet.y,feet.z,current.Definition.StairWidth*.5f+.175f,current.Floor)||NavalWalkRoutes.InStairwell(route[0].x,route[0].y,route[0].z,current.Definition.StairWidth*.5f+.175f,current.Floor);
         float wanted=NavalCrewMovement.TargetSpeed(worker.DeckWalkSpeed,alignment,delta.magnitude,route.Count==1,stairs);
         returnMoveSpeed=NavalCrewMovement.Accelerate(returnMoveSpeed,wanted,dt);
-        CharacterController body=robot.GetComponentInChildren<CharacterController>();Vector3 step=Vector3.ClampMagnitude(delta,returnMoveSpeed*dt)+Vector3.down*0.3f*dt;
+        CharacterController body=worker.BodyController;Vector3 step=Vector3.ClampMagnitude(delta,returnMoveSpeed*dt)+Vector3.down*0.3f*dt;
         if(body!=null&&body.enabled)body.Move(step);else robot.transform.position+=step;
         Vector3 travel=robot.transform.position-before;travel.y=0f;worker.BoardingMoved(travel.magnitude);
         feet=current.Root.InverseTransformPoint(robot.transform.position-current.Root.up*worker.FootOffset);
@@ -192,7 +195,7 @@ public class NavalBoarder : MonoBehaviour
         if(phase==4){RecoverLanding();return;}
         if(phase==1)
         {
-            if(worker.Defending||home.HasActiveLeaks||home.RepairRetreat||Time.time-started>16f||!Valid(destination)||home.Sunk||destination.Sunk){CancelApproach();return;}
+            if(worker.Defending||!finalAttack&&(home.HasActiveLeaks||home.RepairRetreat)||Time.time-started>16f||!Valid(destination)||home.Sunk||destination.Sunk){CancelApproach();return;}
             if(worker.Busy)return;
             Vector3 feet=home.Root.InverseTransformPoint(robot.transform.position-home.Root.up*worker.FootOffset);
             if((feet-launch).magnitude<0.45f)BeginJump(false);
@@ -231,7 +234,7 @@ public class NavalBoarder : MonoBehaviour
                 if(distance<nearest){nearest=distance;opponent=candidate;}
             }
         }
-        if(current.Sunk||home.RepairRetreat){TryReturn();if(phase==5)return;}
+        if(current.Sunk||!finalAttack&&home.RepairRetreat){TryReturn();if(phase==5)return;}
         AIController ai=AI();
         if(opponent==null)
         {

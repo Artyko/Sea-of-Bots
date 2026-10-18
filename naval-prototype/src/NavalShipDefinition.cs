@@ -12,10 +12,11 @@ public sealed class NavalShipDefinition
     public readonly int GunCount,CrewCount;
     public readonly float[] MastZ;
     public readonly bool Compartments;
+    public readonly bool Partitions;
     public float AreaScale {get{return Scale*Scale;}}
     public float VolumeScale {get{return Scale*Scale*Scale;}}
-    public NavalShipDefinition(string name,float scale,int guns,int crew,float[] masts,bool compartments,float ladderZ=0f,float stairWidth=1.1f,float holdFloor=BoatDimensions.HoldFloor)
-    {Name=name;Scale=scale;GunCount=guns;CrewCount=crew;MastZ=masts;Compartments=compartments;LadderZ=ladderZ;StairWidth=stairWidth;HoldFloor=holdFloor;}
+    public NavalShipDefinition(string name,float scale,int guns,int crew,float[] masts,bool compartments,float ladderZ=0f,float stairWidth=1.1f,float holdFloor=BoatDimensions.HoldFloor,bool partitions=false)
+    {Name=name;Scale=scale;GunCount=guns;CrewCount=crew;MastZ=masts;Compartments=compartments;Partitions=partitions;LadderZ=ladderZ;StairWidth=stairWidth;HoldFloor=holdFloor;}
     public static readonly NavalShipDefinition Sloop=new NavalShipDefinition("Sloop",2f,2,2,new float[]{1.6f},true,3.8f,1.1f);
     public static readonly NavalShipDefinition Brigantine=new NavalShipDefinition("Brigantine",3f,4,4,new float[]{1.6f,-3.8f},true,0f,1.1f,.575f-Sloop.HoldClearance/3f);
     public static float GunZ(int gun){return gun<2?-1f:3.3f;}

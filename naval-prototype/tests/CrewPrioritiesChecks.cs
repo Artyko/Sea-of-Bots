@@ -24,16 +24,23 @@ class CrewPrioritiesChecks
   Check(idle<extraGun&&extraGun<lastGun&&lastGun<pump&&pump<helm,"Defender prefers idle then extra gun, protecting pumping and helm");
   Check(helm<criticalRepair,"Last reachable lifesaving patch is protected even over helm");
   Check(NavalCrewPriorities.CanBoard(true,false,false,false),"Dry disarmed ship may board");
-  Check(!NavalCrewPriorities.CanBoard(true,true,false,false),"Active leaks block boarding");
-  Check(!NavalCrewPriorities.CanBoard(true,false,true,false),"Required pumping blocks boarding");
-  Check(!NavalCrewPriorities.CanBoard(true,false,false,true),"Repair retreat blocks boarding");
+  Check(NavalCrewPriorities.CanBoard(true,true,false,false),"Last attack overrides leaks");
+  Check(NavalCrewPriorities.CanBoard(true,false,true,false),"Last attack overrides pumping");
+  Check(NavalCrewPriorities.CanBoard(true,false,false,true),"Last attack overrides repair retreat");
   Check(!NavalCrewPriorities.CanBoard(false,false,false,false),"Working guns retain normal combat");
-  Check(NavalCrewPriorities.ShouldWithdraw(false,true,true),"Disarmed ship withdraws while maintenance prevents boarding");
+  Check(!NavalCrewPriorities.ShouldWithdraw(false,true,true),"Disarmed ship commits to last attack despite maintenance");
   Check(!NavalCrewPriorities.ShouldWithdraw(false,true,false),"Dry disarmed ship may approach for boarding");
   Check(!NavalCrewPriorities.ShouldWithdraw(false,false,true),"Ordinary repair with working guns preserves early-retreat threshold");
   Check(NavalCrewPriorities.ShouldWithdraw(true,false,false),"Shared flood danger always overrides attack");
   Check(NavalMaintenanceMath.FreeWorkersNeeded(true,false,false,false,false,false,true,false,true)==2,"Leak and broken pump reserve separate repairers");
   Check(NavalMaintenanceMath.FreeWorkersNeeded(true,true,false,false,true,false,true,true)==1,"Already assigned leak/pump repair leaves only a bucket vacancy");
-  Console.WriteLine("PASS: patch/pump/bucket staffing, scarce crew, last survivor, defender priorities and safe boarding.");
+  for(int mask=0;mask<8;mask++)
+  {
+   bool leaks=(mask&1)!=0,pumpNeeded=(mask&2)!=0,danger=(mask&4)!=0;
+   Check(NavalCrewPriorities.CanBoard(true,leaks,pumpNeeded,danger),"Disarmed crew boards at every flood severity");
+   Check(!NavalCrewPriorities.ShouldWithdraw(danger,true,leaks||pumpNeeded),"Final attack never withdraws for repairs");
+   Check(!NavalCrewPriorities.CanBoard(false,leaks,pumpNeeded,danger),"One remaining working cannon preserves normal combat");
+  }
+  Console.WriteLine("PASS: patch/pump/bucket staffing, scarce crew, last survivor, defender priorities and last-attack overrides.");
  }
 }

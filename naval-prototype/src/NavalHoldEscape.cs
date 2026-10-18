@@ -6,7 +6,7 @@ public partial class NavalSailorRescue
     public string Status {get{return escapeShip!=null?"Escaping flooded hold":"Swimming to ladder";}}
     private NavalHull escapeShip;
     private Vector3 escapeFeet;
-    private float escapeStuck,escapeRetry;
+    private float escapeStuck,escapeRetry,escapeDrySince=-1f;
     private readonly List<NavalWalkPoint> escapeRoute=new List<NavalWalkPoint>();
     private NavalHull InteriorShip(Vector3 point)
     {
@@ -23,14 +23,14 @@ public partial class NavalSailorRescue
     }
     private void BeginHoldEscape(NavalHull ship)
     {
-        escapeShip=ship;chosen=null;climbing=false;escapeStuck=0f;escapeRetry=0f;
+        escapeShip=ship;chosen=null;climbing=false;escapeStuck=0f;escapeRetry=0f;escapeDrySince=-1f;
         escapeFeet=ship.Root.InverseTransformPoint(robot.transform.position-ship.Root.up*worker.FootOffset);
         PlanHoldEscape();worker.BoardingWalk(true);
     }
     private void PlanHoldEscape()
     {
         escapeRoute.Clear();
-        escapeRoute.AddRange(NavalRepairRoutes.Plan(new NavalWalkPoint(escapeFeet.x,escapeFeet.y,escapeFeet.z),new NavalWalkPoint(1.65f,0.825f,1.1f),escapeShip.Definition.Compartments,escapeShip.Definition.StairWidth,escapeShip.Floor));
+        escapeRoute.AddRange(NavalBallastRoutes.Plan(new NavalWalkPoint(escapeFeet.x,escapeFeet.y,escapeFeet.z),new NavalWalkPoint(1.65f,0.825f,1.1f),escapeShip.Definition.Partitions,escapeShip.Definition.StairWidth,escapeShip.Floor,escapeShip.WorldScale));
     }
     private void EscapeHold(float dt)
     {
@@ -38,6 +38,12 @@ public partial class NavalSailorRescue
         // Carry with the hull, then use the controller for every route step.
         // Do not apply open-sea buoyancy under a solid upper deck.
         Place(ship.TransformPoint(escapeFeet)+ship.up*worker.FootOffset);
+        NavalTestWorld world=NavalTestWorld.Active;
+        bool under=HeadUnder(world);
+        if(under)escapeDrySince=-1f;else if(escapeDrySince<0f)escapeDrySince=Time.time;
+        bool stable=Mathf.Abs(escapeFeet.y-escapeShip.Floor)<.2f||escapeFeet.y>=.65f;
+        if(NavalHoldSafety.CanResume(under,escapeShip.Sunk,AirRemaining(world),escapeDrySince<0f?0f:Time.time-escapeDrySince,stable))
+        {FinishHoldEscape();return;}
         if(Time.time<escapeRetry)return;
         if(escapeRoute.Count==0)PlanHoldEscape();
         NavalWalkPoint waypoint=escapeRoute[0];Vector3 target=new Vector3(waypoint.X,waypoint.Y,waypoint.Z);
@@ -46,9 +52,9 @@ public partial class NavalSailorRescue
         Vector3 look=offset;look.y=0f;
         if(look.sqrMagnitude>.01f)robot.transform.rotation=Quaternion.RotateTowards(robot.transform.rotation,Quaternion.LookRotation(look),360f*dt);
         bool stairs=NavalWalkRoutes.InStairwell(escapeFeet.x,escapeFeet.y,escapeFeet.z,escapeShip.Definition.StairWidth*.5f+.175f,escapeShip.Floor)||NavalWalkRoutes.InStairwell(target.x,target.y,target.z,escapeShip.Definition.StairWidth*.5f+.175f,escapeShip.Floor);
-        float speed=worker.DeckWalkSpeed*(stairs?0.8f:0.65f);
+        float speed=worker.DeckWalkSpeed*(stairs?0.8f:1f);
         Vector3 step=Vector3.ClampMagnitude(offset,speed*dt);
-        CharacterController body=robot.GetComponentInChildren<CharacterController>();
+        CharacterController body=worker.BodyController;
         if(body!=null&&body.enabled)body.Move(step+Vector3.down*.3f*dt);else robot.transform.position+=step;
         escapeFeet=ship.InverseTransformPoint(robot.transform.position-ship.up*worker.FootOffset);
         worker.BoardingMoved(ship.TransformVector(escapeFeet-before).magnitude);
@@ -57,14 +63,7 @@ public partial class NavalSailorRescue
             escapeRoute.RemoveAt(0);escapeStuck=0f;
             if(escapeRoute.Count==0)
             {
-                NavalHull landed=escapeShip;escapeShip=null;worker.BoardingWalk(false);worker.EndRescue();
-                if(landed!=home)
-                {
-                    NavalBoarder boarder=GetComponent<NavalBoarder>();
-                    if(boarder==null){boarder=gameObject.AddComponent<NavalBoarder>();boarder.Initialize(robot,worker,home);}
-                    boarder.AdoptShip(landed);
-                }
-                scanAt=0f;
+                FinishHoldEscape();
             }
         }
         else
@@ -76,4 +75,16 @@ public partial class NavalSailorRescue
             {escapeShip=null;escapeRoute.Clear();worker.BoardingWalk(false);scanAt=0f;}
         }
     }
+    private void FinishHoldEscape()
+    {
+        NavalHull landed=escapeShip;escapeShip=null;escapeRoute.Clear();worker.BoardingWalk(false);worker.EndRescue();
+        if(landed!=home)
+        {
+            NavalBoarder boarder=GetComponent<NavalBoarder>();
+            if(boarder==null){boarder=gameObject.AddComponent<NavalBoarder>();boarder.Initialize(robot,worker,home);}
+            boarder.AdoptShip(landed);
+        }
+        scanAt=0f;escapeDrySince=-1f;
+    }
+
 }

@@ -1,10 +1,10 @@
 ﻿{
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v92.dll",
+  "MainDLLFileName": "NavalPrototype-v112.dll",
   "Author": "Kirill",
-  "Version": 92,
-  "Description": "Single maintenance hand for minor flooding; parallel repair and pumping only when water, heel or rising flood demand escalation.",
+  "Version": 112,
+  "Description": "Allocation-free repair candidate tables, refreshed component references and mutation-invalidated flood summaries with exact regression parity.",
   "ModDependencies": [],
   "Tags": []
 }

@@ -21,11 +21,11 @@ class HelmTacticsChecks
             Check(NavalHelmTactics.Approach(0,own,other)>=-1.5f,"repulsion bounded");
         }
         Check(NavalHelmTactics.Approach(45,3,3)<NavalHelmTactics.Approach(45,2,2),"brigantines keep more room than sloops");
-        NavalCombatEmergency flood=new NavalCombatEmergency();flood.Step(.499f,0);Check(!flood.RepairRetreat,"below 50 percent stays in battle");
-        flood.Step(.5f,0);Check(flood.RepairRetreat&&!flood.Critical,"50 percent retreats without releasing last gunner/buckets");
-        flood.Step(.401f,0);Check(flood.RepairRetreat,"retreat remains latched above 40 percent");
-        flood.Step(.4f,12);Check(!flood.RepairRetreat,"safe water and heel restore combat");
+        NavalCombatEmergency flood=new NavalCombatEmergency();flood.Step(.349f,0);Check(!flood.RepairRetreat,"below 35 percent stays in battle");
+        flood.Step(.35f,0);Check(flood.RepairRetreat&&!flood.Critical,"35 percent retreats without releasing last gunner/buckets");
+        flood.Step(.251f,0);Check(flood.RepairRetreat,"retreat remains latched above 25 percent");
+        flood.Step(.25f,12);Check(!flood.RepairRetreat,"safe water and heel restore combat");
         flood.Step(.3f,16);Check(flood.RepairRetreat,"dangerous heel still initiates earlier retreat");
-        Console.WriteLine("PASS: immediate bounded contact reverse, repeated-contact stability, alternating retry, control cancellation, scaled separation and 50/40 retreat.");
+        Console.WriteLine("PASS: immediate bounded contact reverse, repeated-contact stability, alternating retry, control cancellation, scaled separation and 35/25 retreat.");
     }
 }

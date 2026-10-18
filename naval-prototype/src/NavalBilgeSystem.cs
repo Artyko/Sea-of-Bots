@@ -17,22 +17,28 @@ public partial class NavalBilgeSystem : MonoBehaviour
     private bool playerPump;
     private float pumpLastWork=-100f,pumpPhase;
     private bool lastTransfer;
-    private int mode; // 0 automatic, 1 overboard, 2 port->starboard, 3 reverse
+    private float nextStatusAt;
+    private int statusKind=-1;
+    private static readonly string[] pumpModes={"Авто","За борт","Левый -> правые ёмкости","Правый -> левые ёмкости","Балласт -> море"};
+    private int mode; // 0 automatic, 1 bilge then ballast overboard, 2 port->starboard, 3 reverse, 4 ballast only overboard
     public Vector3 PumpPost {get{return new Vector3(0f,hull.Floor,-4.9f);}}
     public string Status {get;private set;}
     public bool Functional {get{return pumpMechanism!=null&&pumpMechanism.Functional;}}
     public bool NeedsRepair {get{return pumpMechanism!=null&&pumpMechanism.NeedsRepair;}}
     private void StopBrokenPump()
     {
-        ReleasePlayer();pumpLastWork=-100f;Status=pumpMechanism!=null&&pumpMechanism.Destroyed?"Pump destroyed":"Pump damaged";
+        ReleasePlayer();pumpLastWork=-100f;statusKind=-1;Status=pumpMechanism!=null&&pumpMechanism.Destroyed?"Pump destroyed":"Pump damaged";
         if(Operator!=null){NavalRepairSailor worker=Operator;Operator=null;worker.CancelPumpDuty();}
         if(crank!=null)crank.localRotation=Quaternion.identity;
     }
-    public bool WantsOperator {get{return Functional&&!hull.Sunk&&hull.Flood.Total>1f;}}
+    public bool UrgentTrim {get{return Functional&&hull.UrgentTrim;}}
+    public bool WantsOperator {get{return Functional&&!hull.Sunk&&(UrgentTrim||hull.Flood.Total>1f||BallastVolume>1f&&(trimPlan.WantsTransfer||Mathf.Abs(NavalHullStability.Roll(transform))>6f));}}
     public void Initialize(NavalHull owner,FirstPersonMover observer,Material wood,Material trim,Material metal)
     {
         hull=owner;player=observer;owner.Bilge=this;
         if(!owner.Definition.Compartments)return;
+        if(owner.Definition.Partitions)
+        {
         float partition=NavalCompartmentMath.PartitionHeight(hull.WorldScale);
         int rows=Mathf.CeilToInt(partition/.25f);float rowHeight=partition/rows;
         for(int side=-1;side<=1;side+=2)
@@ -62,6 +68,8 @@ public partial class NavalBilgeSystem : MonoBehaviour
             }
         }
         BuildShields(trim);
+        }
+        BuildBallast(wood,trim);
         int first=hull.Voxels.Count;
         hull.AddDecorationBox(transform,metal,PumpPost+new Vector3(0f,.3f,NavalMaintenanceMath.PumpOffsetZ),new Vector3(.5f,.6f,.5f),true);
         hull.AddDecorationBox(transform,trim,PumpPost+new Vector3(0f,.65f,NavalMaintenanceMath.PumpOffsetZ),new Vector3(.8f,.12f,.15f),true);
@@ -99,7 +107,12 @@ public partial class NavalBilgeSystem : MonoBehaviour
     }
     public void UpdateBarriers()
     {
-        if(!hull.Definition.Compartments)return;
+        FlushBallastSpills();
+        if(!hull.Definition.Partitions)
+        {
+            if(!openBarriers){for(int i=0;i<hull.Flood.Water.Length;i++)hull.Flood.RightSill[i]=hull.Flood.ForwardSill[i]=float.NegativeInfinity;openBarriers=true;}
+            return;
+        }
         ReviewShields();
         bool changed=cachedRevision!=hull.Revision;
         if(changed)
@@ -140,35 +153,37 @@ public partial class NavalBilgeSystem : MonoBehaviour
     public void Pump(float dt,bool automatic)
     {
         if(!Functional){StopBrokenPump();return;}
-        if(!WantsOperator)return;
+        if(automatic?!WantsOperator:hull.Flood.Total+BallastVolume<=.00001f)return;
         float processed=0f;
         int selectedMode=automatic?0:mode;
-        float heel=Mathf.DeltaAngle(0f,transform.eulerAngles.z);
-        bool transfer=selectedMode>=2||selectedMode==0&&!hull.HasActiveLeaks&&NavalCompartmentMath.NeedsTransfer(hull.LeftWater,hull.RightWater,heel);
-        bool fromPort=selectedMode==2||selectedMode==0&&hull.LeftWater>hull.RightWater;
-        int source=transfer?Wettest(fromPort?1:3):-1;
+        float heel=NavalHullStability.Roll(transform);
+        if(selectedMode==0)trimPlan.Update(dt,NavalBroadsideMath.Delta(hull.Stability.WaveRoll,heel),UrgentTrim);
+        bool transfer=(selectedMode==2||selectedMode==3)||selectedMode==0&&trimPlan.WantsTransfer&&NavalBallastTrim.AllowsTransfer(hull.HasActiveLeaks,hull.Inflow,UrgentTrim);
+        bool fromPort=selectedMode==2||selectedMode==0&&trimPlan.FilteredHeel>0;
         if(transfer)
         {
-            int fore=Wettest(fromPort?2:4);if(source<0||fore>=0&&hull.Flood.Water[fore]>hull.Flood.Water[source])source=fore;
-            if(source>=0)
-            {
-                int destination=hull.Flood.Index(fromPort?2.2f:-2.2f,hull.Flood.Z(source));
-                float maximum=selectedMode==0?Mathf.Abs(hull.LeftWater-hull.RightWater)*.5f:NavalMaintenanceMath.PumpTransferRate*dt;
-                float moved=NavalCompartmentMath.Move(hull.Flood,source,destination,Mathf.Min(NavalMaintenanceMath.PumpTransferRate*dt,maximum));
-                processed=moved;
-                if(moved<=.00001f)transfer=false;
-                Status="Transfer "+(fromPort?"port -> starboard":"starboard -> port")+" | "+(moved/Mathf.Max(.001f,dt)).ToString("F1")+" m3/s";
-            }
-            else transfer=false;
+            processed=NavalBallastTransfer.Move(hull.Flood,transferTanks,fromPort,NavalMaintenanceMath.PumpTransferRate*dt);
+            transfer=processed>.00001f;
+
         }
+        if(selectedMode==0)trimPlan.Observe(dt,processed,transfer);
         if(!transfer)
         {
             float budget=NavalMaintenanceMath.PumpOutRate*dt;
-            for(int n=0;n<8&&budget>0f;n++){int i=Wettest(-1);if(i<0)break;budget+=hull.Flood.Add(i,-budget);}
+            if(selectedMode!=4)for(int n=0;n<8&&budget>0f;n++){int i=Wettest(-1);if(i<0)break;budget+=hull.Flood.Add(i,-budget);}
+            if(budget>0f)budget-=DrainBallast(budget);
             processed=NavalMaintenanceMath.PumpOutRate*dt-budget;
-            Status="Pumping overboard";
+
         }
         if(processed>.00001f){pumpLastWork=Time.time;pumpPhase=Mathf.Repeat(pumpPhase+dt/1.2f,1f);lastTransfer=transfer;}
+        int kind=transfer?(fromPort?2:3):selectedMode==4?4:automatic&&trimPlan.Cooldown>0?5:1;
+        if(kind!=statusKind||Time.unscaledTime>=nextStatusAt)
+        {
+            statusKind=kind;nextStatusAt=Time.unscaledTime+.2f;
+            Status=transfer?"Transfer "+(fromPort?"port -> starboard":"starboard -> port")+" | "+(processed/Mathf.Max(.001f,dt)).ToString("F1")+" m3/s":
+                kind==4?"Ballast -> sea":kind==5?"Trim ineffective: pumping overboard":"Pumping overboard";
+            Status+=" | Sealed ballast: "+BallastVolume.ToString("F1")+" m3";
+        }
         if(crank!=null)crank.localRotation=Quaternion.Euler(Mathf.Sin(Time.time*8f)*25f,0f,0f);
     }
     private void Update()
@@ -187,7 +202,7 @@ public partial class NavalBilgeSystem : MonoBehaviour
         if(playerPump)
         {
             if(!near){playerPump=false;return;}
-            if(Input.GetKeyDown(KeyCode.Q))mode=(mode+1)%4;
+            if(Input.GetKeyDown(KeyCode.Q))mode=(mode+1)%pumpModes.Length;
             if(Input.GetKey(KeyCode.T))Pump(Mathf.Min(Time.deltaTime,.05f),false);
         }
     }
@@ -204,6 +219,6 @@ public partial class NavalBilgeSystem : MonoBehaviour
             GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,620f),Screen.height-245f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,620f),30f),NeedsRepair?"Помпа повреждена — восстановите её детали (удерживать R)":"Помпа разрушена — восстановление невозможно");
             return;
         }
-        GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,620f),Screen.height-245f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,620f),30f),playerPump?"PUMP: hold T | Q: "+new string[]{"Auto","Overboard","Port -> starboard","Starboard -> port"}[mode]+" | E: leave | "+Status:"E: bilge pump");
+        GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,620f),Screen.height-265f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,620f),48f),playerPump?"Помпа: держать T | Q: "+pumpModes[mode]+" | E: выйти\n"+Status:"E: помпа | Закрытый балласт: "+BallastVolume.ToString("F1")+" / "+(NavalBallastLayout.Capacity(hull.WorldScale)*4f).ToString("F1")+" м³");
     }
 }

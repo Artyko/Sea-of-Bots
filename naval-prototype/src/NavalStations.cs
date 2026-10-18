@@ -41,11 +41,27 @@ public partial class NavalStations : MonoBehaviour
         {if(station%2==1)portWorking++;else starboardWorking++;}
         gunAvailabilityRevision=hull.Revision;
     }
+    public float ShipScale {get{return hull.WorldScale;}}
+    public int PortWorking {get{UpdateGunAvailability();return portWorking;}}
+    public int StarboardWorking {get{UpdateGunAvailability();return starboardWorking;}}
     public int WorkingGuns {get{UpdateGunAvailability();return portWorking+starboardWorking;}}
     public float CombatOrbitSign(float preferred)
     {UpdateGunAvailability();return NavalBroadsideMath.OrbitSign(portWorking,starboardWorking,preferred);}
+    public bool CanBearOn(int station,Vector3 point)
+    {float yawAngle,elevation;return station>0&&station<=GunCount&&Functional(station)&&TryAimSolution(station-1,point,out yawAngle,out elevation);}
+    public int FiringSideToward(Vector3 point)
+    {
+        int port=0,starboard=0;
+        for(int station=1;station<=GunCount;station++)if(CanBearOn(station,point))
+        {if(station%2==1)port++;else starboard++;}
+        if(port==0&&starboard==0)return 0;
+        return NavalBroadsideMath.CombatSide(TargetSide(point),port,starboard);
+    }
     public int CombatSideToward(Vector3 point)
-    {UpdateGunAvailability();return NavalBroadsideMath.CombatSide(TargetSide(point),portWorking,starboardWorking);}
+    {
+        UpdateGunAvailability();int firing=FiringSideToward(point);
+        return firing!=0?firing:NavalBroadsideMath.CombatSide(TargetSide(point),portWorking,starboardWorking);
+    }
     public void PauseInput(){ForwardInput=0f;TurnInput=0f;}
     public bool AllGunsBroken {get{return WorkingGuns==0;}}
     public Vector3 Post(int station)

@@ -6,12 +6,13 @@ public static class NavalGunneryMath
     // Waterline, guns, mast, wheel. Avoid repeating the last type when possible.
     public static int Choose(float roll,int previous,bool[] available)
     {
+        bool normal=available[0]||available[1]||available[3];
         float total=0f;int count=0;
-        for(int i=0;i<4;i++)if(available[i])count++;
-        for(int i=0;i<4;i++)if(available[i]&&(count==1||i!=previous))total+=weights[i];
+        for(int i=0;i<4;i++)if(available[i]&&(!normal||i!=2))count++;
+        for(int i=0;i<4;i++)if(available[i]&&(!normal||i!=2)&&(count==1||i!=previous))total+=weights[i];
         if(total==0f)return -1;
         float pick=Math.Max(0f,Math.Min(.999999f,roll))*total;
-        for(int i=0;i<4;i++)if(available[i]&&(count==1||i!=previous))
+        for(int i=0;i<4;i++)if(available[i]&&(!normal||i!=2)&&(count==1||i!=previous))
         {pick-=weights[i];if(pick<0f)return i;}
         return -1;
     }

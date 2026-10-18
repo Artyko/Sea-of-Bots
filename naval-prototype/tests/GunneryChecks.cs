@@ -10,7 +10,7 @@ class GunneryChecks
         Check(!NavalTargetVisibility.Broadside(20f,-100f),"Oblique stern view remains excluded");
         Check(NavalTargetVisibility.Broadside(100f,20f),"Oblique broadside view permitted");
         bool[] masked={true,false,true,false};
-        for(int i=0;i<100;i++){int kind=NavalGunneryMath.Choose(i/100f,-1,masked);Check(kind==0||kind==2,"Hidden mechanisms are never selected");}
+        for(int i=0;i<100;i++){int kind=NavalGunneryMath.Choose(i/100f,-1,masked);Check(kind==0,"Visible hull always suppresses mast");}
         bool[] all={true,true,true,true};int[] counts=new int[4];
         for(int n=0;n<1000;n++)
         {
@@ -19,7 +19,7 @@ class GunneryChecks
             for(int previous=0;previous<4;previous++)Check(NavalGunneryMath.Choose(roll,previous,all)!=previous,"Alternate target types");
             Check(NavalGunneryMath.Choose(roll,2,new bool[]{false,false,true,false})==2,"Only remaining mast stays targetable");
         }
-        foreach(int count in counts)Check(count>0,"Every feature can be chosen");
+        Check(counts[0]>0&&counts[1]>0&&counts[3]>0&&counts[2]==0,"Normal targets suppress rig entirely");
         Check(counts[0]>counts[1]&&counts[1]>counts[3]&&counts[3]>counts[2],"Weighted target preference");
         Check(counts[2]<70,"Mast is a rare target when all features are available");
         Check(NavalGunneryMath.Choose(.5f,-1,new bool[4])==-1,"No shot without available target");

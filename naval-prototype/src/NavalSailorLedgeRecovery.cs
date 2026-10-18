@@ -31,7 +31,7 @@ public partial class NavalRepairSailor
             // Require the actual deck, not another rail, gun or the stair opening.
             if(Mathf.Abs(lower.y-.825f)*hull.WorldScale>.12f||!LedgePathClear(feet,upper)||!LedgePathClear(upper,lower))continue;
             route.Add(upper);route.Add(lower);ledgeWaypoints=2;
-            Append(NavalRepairRoutes.Plan(new NavalWalkPoint(lower.x,lower.y,lower.z),new NavalWalkPoint(goal.x,goal.y,goal.z),hull.Definition.Compartments,hull.Definition.StairWidth,hull.Floor));
+            Append(NavalBallastRoutes.Plan(new NavalWalkPoint(lower.x,lower.y,lower.z),new NavalWalkPoint(goal.x,goal.y,goal.z),hull.Definition.Partitions,hull.Definition.StairWidth,hull.Floor,hull.WorldScale));
             Debug.Log("[NavalPrototype] Crew ledge recovery: "+feet+" -> "+lower);
             return true;
         }

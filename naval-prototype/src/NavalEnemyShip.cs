@@ -10,7 +10,7 @@ public class NavalEnemyShip : MonoBehaviour
     public NavalStations Controls {get{return stations;}}
     public float SailPower {get{return rig!=null?rig.SailPowerFactor:0f;}}
     public int LivingCrew {get{int n=0;if(crew!=null)foreach(Character sailor in crew)if(sailor!=null&&sailor.IsAlive())n++;return n;}}
-    public Vector3 ShipVelocity { get { return Boat!=null?Boat.forward*speed:Vector3.zero; } }
+    public Vector3 ShipVelocity { get { return Boat!=null?Boat.forward*speed+(ram!=null?ram.Drift:Vector3.zero):Vector3.zero; } }
     private readonly NavalCrewController crewRoles=new NavalCrewController();
     private NavalRamDamage ram;
     private Transform target;
@@ -25,6 +25,7 @@ public class NavalEnemyShip : MonoBehaviour
     private readonly List<Material> materials=new List<Material>();
     private float heading,speed,verticalSpeed,footOffset,retryCrew,rudder;
     private readonly NavalHelmNavigator helmNavigator=new NavalHelmNavigator();
+    private readonly NavalCombatPosition combatPosition=new NavalCombatPosition();
     private readonly NavalRetreatState retreat=new NavalRetreatState();
     public bool Reversing {get{return helmNavigator.Reversing;}}
     public bool Retreating {get{return retreat.Active;}}
@@ -111,11 +112,15 @@ public class NavalEnemyShip : MonoBehaviour
             if(stations.AllGunsBroken)desired=radial;
             if(retreat.Active)desired=-radial+Vector3.Cross(Vector3.up,radial)*orbitSide*.2f;
             throttle=distance<24f?0.35f:0.8f;
-            if(stations.AllGunsBroken)throttle=0.7f;
+            if(!stations.AllGunsBroken&&!retreat.Active)
+                desired=combatPosition.Course(Boat,Hull,stations,target,world.ShipVelocity,speed,ref throttle);
+            else combatPosition.Reset();
+            if(stations.AllGunsBroken)throttle=1f;
             if(retreat.Active)throttle=1f;
             helmNavigator.Steer(NavalWorldMap.Active,Boat,desired,speed,rig.SailPowerFactor,dt,ref throttle,out turn);
         }
-        else helmNavigator.Reset(Boat.position);
+        else {helmNavigator.Reset(Boat.position);combatPosition.Reset();}
+        ram.StepMomentum(dt,ref speed);
         speed=NavalRigMath.StepSpeed(speed,throttle,rig.SailPowerFactor,dt);
         float depth=Hull.Volume/(BoatDimensions.HoldArea*Hull.AreaScale);
         rudder=NavalRigMath.StepRudder(rudder,turn,dt);
@@ -124,17 +129,18 @@ public class NavalEnemyShip : MonoBehaviour
         Vector3 p=Boat.position;
         float bow=ocean.Height(p.x+forward.x*9f,p.z+forward.z*9f),stern=ocean.Height(p.x-forward.x*9f,p.z-forward.z*9f);
         float starboard=ocean.Height(p.x+right.x*5.4f,p.z+right.z*5.4f),port=ocean.Height(p.x-right.x*5.4f,p.z-right.z*5.4f);
-        float pitch=-Mathf.Atan2(bow-stern,18f)*Mathf.Rad2Deg+Mathf.Clamp(Hull.Flood.LongitudinalMoment/(BoatDimensions.HalfHoldArea*Hull.VolumeScale)*15f,-15f,15f);
-        float roll=Mathf.Atan2(starboard-port,10.8f)*Mathf.Rad2Deg+Mathf.Clamp((Hull.LeftWater-Hull.RightWater)/(BoatDimensions.HalfHoldArea*Hull.VolumeScale)*33.6f,-22f,22f);
-        float height=(bow+stern+starboard+port)*0.25f-Hull.Volume/(BoatDimensions.DisplacementArea*Hull.AreaScale)-Hull.SinkDepth;
+        float pitch=-Mathf.Atan2(bow-stern,18f)*Mathf.Rad2Deg+Mathf.Clamp(Hull.WaterLongitudinalMoment/(BoatDimensions.HalfHoldArea*Hull.VolumeScale)*15f,-15f,15f);
+        float roll=Hull.Stability.Step(dt,NavalHullStability.Roll(Boat),Mathf.Atan2(starboard-port,10.8f)*Mathf.Rad2Deg);
+        float height=(bow+stern+starboard+port)*0.25f-Hull.Stability.Waterline-Hull.SinkDepth;
         verticalSpeed+=((height-p.y)*10f-verticalSpeed*5f)*dt;
-        Vector3 next=Boat.position+forward*speed*dt/(1f+depth)*(Hull.Sunk?0f:1f);
-        if(NavalWorldMap.Active!=null&&!NavalWorldMap.Active.CanAdvance(Boat.position,Quaternion.Euler(0f,Boat.eulerAngles.y,0f),next,flat,Boat)){next=Boat.position;speed=0f;helmNavigator.LandBlocked();}
+        Vector3 next=Boat.position+(forward*speed/(1f+depth)+ram.Drift)*dt*(Hull.Sunk?0f:1f);
+        if(NavalWorldMap.Active!=null&&!NavalWorldMap.Active.CanAdvance(Boat.position,Quaternion.Euler(0f,Boat.eulerAngles.y,0f),next,flat,Boat)){next=Boat.position;speed=0f;ram.StopMomentum();helmNavigator.LandBlocked();}
         next+=Vector3.up*verticalSpeed*dt;
-        Quaternion nextRotation=Quaternion.Slerp(Boat.rotation,Quaternion.Euler(pitch,heading,roll),1f-Mathf.Exp(-4f*dt));
+        Quaternion smoothed=Quaternion.Slerp(Boat.rotation,Quaternion.Euler(pitch,heading,Boat.eulerAngles.z),1f-Mathf.Exp(-4f*dt));
+        Quaternion nextRotation=Quaternion.Euler(smoothed.eulerAngles.x,smoothed.eulerAngles.y,roll);
         ram.Velocity=(next-Boat.position)/Mathf.Max(dt,0.001f);ram.AngularRate=Mathf.DeltaAngle(Boat.eulerAngles.y,nextRotation.eulerAngles.y)/Mathf.Max(dt,0.001f);
         if(NavalShipContact.Constrain(Boat.position,Boat.rotation,ref next,ref nextRotation,target,Boat))
-        {ram.Contact(target.GetComponent<NavalRamDamage>());helmNavigator.ShipBlocked();rudder=0f;speed=0f;heading=nextRotation.eulerAngles.y;}
+        {NavalRamDamage other=target.GetComponent<NavalRamDamage>();ram.Contact(other);ram.PushContact(other);helmNavigator.ShipBlocked();rudder*=.7f;heading=nextRotation.eulerAngles.y;}
         float rigRetention=NavalRigContact.Resolve(ram,Boat.position,Boat.rotation,ref next,ref nextRotation,target.GetComponent<NavalRamDamage>());
         if(rigRetention<1f){speed*=rigRetention;heading=nextRotation.eulerAngles.y;}
         Hull.PhysicsBody.SetPose(next,nextRotation);

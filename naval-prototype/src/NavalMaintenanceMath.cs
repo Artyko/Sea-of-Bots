@@ -11,6 +11,8 @@
         }
         return (leaks&&!repairAssigned?1:0)+(pumpNeeded&&!pumpAssigned?1:0)+(critical&&!bailAssigned&&(!pumpNeeded||pumpAssigned)?1:0)+(pumpBroken&&!pumpRepairAssigned?1:0);
     }
-    public static bool NeedPump(bool activeLeaks,bool otherRepair,bool repairAvailable,bool parallel=false)
-    {return (!activeLeaks||otherRepair||!repairAvailable)&&(!otherRepair||parallel);}
+    public static bool CanAcquireMaintenance(bool finalAttack,bool spare,bool parallel,bool otherWorker)
+    {return !finalAttack&&(spare||parallel||!otherWorker);}
+    public static bool NeedPump(bool activeLeaks,bool otherRepair,bool repairAvailable,bool parallel=false,bool spare=false)
+    {return (!activeLeaks||otherRepair||!repairAvailable)&&(!otherRepair||parallel||spare);}
 }

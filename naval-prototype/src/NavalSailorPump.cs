@@ -17,13 +17,13 @@ public partial class NavalRepairSailor
             if(allowed&&leak==null&&bailState==0)TryFindLeak();
             return false;
         }
-        if(pumpDuty&&!hull.ParallelMaintenance&&OtherMaintenanceWorker())
+        if(pumpDuty&&!SpareMaintenance&&!hull.ParallelMaintenance&&OtherMaintenanceWorker())
         {ReleasePump();BeginReturn();return false;}
         if(pumpDuty&&(!system.WantsOperator||system.PlayerUsing))
         {ReleasePump();BeginReturn();return false;}
         bool otherRepair=false;
         foreach(NavalRepairSailor worker in hull.RepairWorkers)if(worker!=null&&worker!=this&&worker.RepairingLeak)otherRepair=true;
-        if(pumpDuty&&hull.HasRepairDemand&&!otherRepair&&Time.time>=pumpReview)
+        if(pumpDuty&&hull.HasRepairDemand&&!system.UrgentTrim&&!otherRepair&&Time.time>=pumpReview)
         {
             pumpReview=Time.time+1f;HoldPosition();TryFindLeak();
             if(leak!=null){ReleasePump();return false;}
@@ -32,9 +32,9 @@ public partial class NavalRepairSailor
         {
             if(!allowed||leak!=null||bailState!=0||system.Operator!=null||system.PlayerUsing||!system.WantsOperator||Time.time<pumpRetry)return false;
             bool repairAvailable=false;
-            if(hull.HasRepairDemand&&!otherRepair)
+            if(hull.HasRepairDemand&&!system.UrgentTrim&&!otherRepair)
             {TryFindLeak();repairAvailable=leak!=null;if(repairAvailable)return false;}
-            if(!NavalMaintenanceMath.NeedPump(hull.HasRepairDemand,otherRepair,repairAvailable,hull.ParallelMaintenance))return false;
+            if(!system.UrgentTrim&&!NavalMaintenanceMath.NeedPump(hull.HasRepairDemand,otherRepair,repairAvailable,hull.ParallelMaintenance,SpareMaintenance))return false;
             waitingForRepair=false;system.Operator=this;pumpDuty=true;pumpArrived=false;pumpReview=Time.time+1f;
             Debug.Log("[NavalPrototype] Crew assigned to bilge pump");returning=false;changingPost=false;route.Clear();stuck=0f;
             feet=boat.InverseTransformPoint(robot.transform.position-boat.up*footOffset);PlanTo(system.PumpPost);

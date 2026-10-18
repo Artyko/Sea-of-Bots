@@ -73,7 +73,7 @@ public sealed class NavalHelmNavigator
             if(recovery.Phase==2)throttle=Mathf.Min(throttle,.65f);
             // Keep headway for the rudder, but slow a large heading correction.
             float error=Mathf.Abs(Mathf.DeltaAngle(ship.eulerAngles.y,Mathf.Atan2(desired.x,desired.z)*Mathf.Rad2Deg));
-            if(error>70f)throttle=Mathf.Min(throttle,.45f);
+            if(error>70f)throttle=Mathf.Min(throttle,.75f);
         }
         float wanted=Mathf.Atan2(desired.x,desired.z)*Mathf.Rad2Deg;
         turn=Mathf.Clamp(Mathf.DeltaAngle(ship.eulerAngles.y,wanted)/25f,-1f,1f);

@@ -10,7 +10,10 @@ public partial class NavalSailorRescue : MonoBehaviour
     private int side,stage;
     private bool climbing;
     private Vector3 feet;
-    private float scanAt,headOffset,maintenanceSubmergedAt=-1f;
+    private float scanAt,headOffset;
+    private NavalDrowning drowning;
+    private NavalBoarder cachedBoarder;
+    private NavalBoarder Boarder {get{if(cachedBoarder==null)cachedBoarder=GetComponent<NavalBoarder>();return cachedBoarder;}}
     private static readonly FieldInfo Velocity=typeof(FirstPersonMover).GetField("_velocity",BindingFlags.Instance|BindingFlags.NonPublic);
     public void Initialize(Character sailor,NavalRepairSailor repair,NavalHull ship)
     {
@@ -24,23 +27,43 @@ public partial class NavalSailorRescue : MonoBehaviour
     {
         NavalTestWorld world=NavalTestWorld.Active;
         if(world==null||!world.SimulationActive||robot==null||!robot.IsAlive()||worker.Rescuing)return;
-        NavalBoarder boarder=GetComponent<NavalBoarder>();if(boarder!=null&&boarder.InFlight)return;
+        NavalBoarder boarder=Boarder;if(boarder!=null&&boarder.InFlight)return;
         Vector3 foot=robot.transform.position-Vector3.up*worker.FootOffset;
-        float depth=world.WaterLevelAt(foot)-foot.y;
-        if(depth<0.9f){maintenanceSubmergedAt=-1f;return;}
-        RaycastHit support;
-        bool standing=Physics.Raycast(foot+Vector3.up*0.25f,Vector3.down,out support,0.55f,
-            PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore);
-        if(depth<worker.FootOffset+headOffset)
-        {maintenanceSubmergedAt=-1f;if(standing)return;}
-        else if(maintenanceSubmergedAt<0f)maintenanceSubmergedAt=Time.time;
-        // A short repair/pump task may finish using the existing 30-second air
-        // reserve. Do not interrupt it immediately just because the head dips.
-        if(worker.MaintenanceDuty&&InteriorShip(foot)!=null&&standing&&
-            (depth<worker.FootOffset+headOffset||maintenanceSubmergedAt>=0f&&Time.time-maintenanceSubmergedAt<10f))return;
+        NavalHull interior=InteriorShip(foot);
+        if(interior!=null)
+        {
+            Vector3 local=interior.Root.InverseTransformPoint(foot);
+            bool stairs=NavalWalkRoutes.InStairwell(local.x,local.y,local.z,interior.Definition.StairWidth*.5f+.175f,interior.Floor);
+            float exitSeconds=NavalHoldSafety.ExitSeconds(local.x,local.y,local.z,interior.Floor,interior.WorldScale,worker.DeckWalkSpeed,stairs);
+            if(!NavalHoldSafety.MustEscape(HeadUnder(world),interior.Sunk,AirRemaining(world),exitSeconds))return;
+        }
+        else
+        {
+            float depth=world.WaterLevelAt(foot)-foot.y;
+            if(depth<.9f)return;
+            bool standing=SupportedOnShip(foot);
+            if(!HeadUnder(world)&&standing)return;
+        }
         worker.BeginRescue();if(boarder!=null)boarder.SuspendForRescue();scanAt=0f;climbing=false;chosen=null;
-        NavalHull interior=InteriorShip(foot);if(interior!=null)BeginHoldEscape(interior);
+        if(interior!=null)
+        {
+            Debug.Log("[NavalPrototype] Hold evacuation: air="+AirRemaining(world).ToString("F1")+" sinking="+interior.Sunk);
+            BeginHoldEscape(interior);
+        }
     }
+    private bool SupportedOnShip(Vector3 foot)
+    {
+        Vector3 origin=foot+Vector3.up*.3f;
+        if(NavalPhysicsQueries.HasSupport(origin,Vector3.down,.7f,home.Root,.12f))return true;
+        foreach(NavalSeaLadder ladder in NavalSeaLadder.All)
+            if(ladder!=null&&ladder.Hull!=home&&NavalPhysicsQueries.HasSupport(origin,Vector3.down,.7f,ladder.Hull.Root,.12f))return true;
+        return false;
+    }
+    private bool HeadUnder(NavalTestWorld world)
+    {Vector3 top=NavalDrowning.HeadTop(robot);return world.WaterLevelAt(top)-top.y>.05f;}
+    private float AirRemaining(NavalTestWorld world)
+    {if(drowning==null)drowning=world.GetComponent<NavalDrowning>();return drowning!=null?drowning.AirRemaining(robot):NavalBreathClock.Capacity;}
+
     private bool Landing(NavalSeaLadder ladder,int which)
     {
         Vector3 point=new Vector3(which==0?-2.2f:2.2f,0.88f,ladder.Hull.Definition.LadderZ);RaycastHit hit;
@@ -66,7 +89,7 @@ public partial class NavalSailorRescue : MonoBehaviour
     }
     private void Place(Vector3 position)
     {
-        CharacterController controller=robot.GetComponentInChildren<CharacterController>();
+        CharacterController controller=worker.BodyController;
         bool enabled=controller!=null&&controller.enabled;if(enabled)controller.enabled=false;
         robot.transform.position=position;if(enabled)controller.enabled=true;ZeroVelocity();
     }
@@ -97,7 +120,7 @@ public partial class NavalSailorRescue : MonoBehaviour
                 NavalHull landed=chosen.Hull;climbing=false;worker.EndRescue();
                 if(landed!=home)
                 {
-                    NavalBoarder boarder=GetComponent<NavalBoarder>();if(boarder==null){boarder=gameObject.AddComponent<NavalBoarder>();boarder.Initialize(robot,worker,home);}
+                    NavalBoarder boarder=Boarder;if(boarder==null){boarder=gameObject.AddComponent<NavalBoarder>();cachedBoarder=boarder;boarder.Initialize(robot,worker,home);}
                     boarder.AdoptShip(landed);
                 }
                 chosen=null;
@@ -120,7 +143,7 @@ public partial class NavalSailorRescue : MonoBehaviour
         float targetY=sea-headOffset+0.2f;
         float lift=Mathf.Clamp((targetY-robot.transform.position.y)*5f,-2f,4f);
         Vector3 step=(Vector3.ClampMagnitude(direction,1f)*2.3f+Vector3.up*lift)*dt;
-        CharacterController body=robot.GetComponentInChildren<CharacterController>();
+        CharacterController body=worker.BodyController;
         if(body!=null&&body.enabled)body.Move(step);else robot.transform.position+=step;
         if(direction.sqrMagnitude>0.01f)robot.transform.rotation=Quaternion.RotateTowards(robot.transform.rotation,Quaternion.LookRotation(direction),180f*dt);
     }

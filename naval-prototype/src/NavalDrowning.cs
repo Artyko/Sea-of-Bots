@@ -9,6 +9,18 @@ public class NavalDrowning : MonoBehaviour
     private float scanAt;
     private readonly Dictionary<Character,NavalBreathClock> breaths=new Dictionary<Character,NavalBreathClock>();
     private readonly List<Character> removed=new List<Character>();
+    public static Vector3 HeadTop(Character robot)
+    {
+        FirstPersonMover mover=robot as FirstPersonMover;
+        Transform head=mover!=null?mover.GetHeadTransform():null;
+        return HeadTop(robot,head);
+    }
+    private static Vector3 HeadTop(Character robot,Transform head)
+    {
+        return (head!=null?head.position:robot.transform.position+Vector3.up*.8f)+Vector3.up*(.3f*Mathf.Abs(robot.transform.lossyScale.y));
+    }
+    public float AirRemaining(Character robot)
+    {NavalBreathClock clock;return breaths.TryGetValue(robot,out clock)?clock.Air:NavalBreathClock.Capacity;}
     public void Initialize(FirstPersonMover owner,Func<Vector3,float> level)
     {player=owner;waterLevel=level;}
     private void LateUpdate()
@@ -29,7 +41,7 @@ public class NavalDrowning : MonoBehaviour
             Transform head=mover!=null?mover.GetHeadTransform():null;
             if(head==null)continue;
             // Measure the top of the robot's head, independently of third-person camera position.
-            Vector3 top=head.position+Vector3.up*(0.3f*Mathf.Abs(robot.transform.lossyScale.y));
+            Vector3 top=HeadTop(robot,head);
             if(entry.Value.Step(waterLevel(top)-top.y,Time.deltaTime))
             {robot.Kill(null,DamageSourceType.ScriptedKill,-1);removed.Add(robot);}
         }

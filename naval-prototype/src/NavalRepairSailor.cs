@@ -18,6 +18,7 @@ public partial class NavalRepairSailor : MonoBehaviour
     private readonly List<NavalHullVoxel> claimed=new List<NavalHullVoxel>();
     private readonly Dictionary<NavalHullVoxel,float> retryAfter=new Dictionary<NavalHullVoxel,float>();
     private readonly List<NavalHullVoxel> candidates=new List<NavalHullVoxel>();
+    private System.Comparison<NavalHullVoxel> compareCandidates;
     private readonly Dictionary<NavalHullVoxel,float> priorities=new Dictionary<NavalHullVoxel,float>();
     private bool returning,stranded;
     private bool changingPost,waitingForRepair;
@@ -42,11 +43,23 @@ public partial class NavalRepairSailor : MonoBehaviour
     public bool Defending {get;private set;}
     public bool Assaulting {get;private set;}
     public bool Rescuing {get;private set;}
-    public string RescueStatus {get{NavalSailorRescue rescue=GetComponent<NavalSailorRescue>();return rescue!=null?rescue.Status:"Rescuing";}}
+    private NavalSailorRescue cachedRescue;
+    public NavalSailorRescue RescueComponent {get{if(cachedRescue==null)cachedRescue=GetComponent<NavalSailorRescue>();return cachedRescue;}}
+    public string RescueStatus {get{NavalSailorRescue rescue=RescueComponent;return rescue!=null?rescue.Status:"Rescuing";}}
     public void BeginRescue()
     {combatReturnPending=false;Release();route.Clear();returning=false;changingPost=false;stranded=false;Defending=false;Assaulting=false;Rescuing=true;if(gait!=null)gait.enabled=false;robot.DisableAI();}
     public void EndRescue()
     {Rescuing=false;stranded=false;Defending=false;Assaulting=false;feet=boat.InverseTransformPoint(robot.transform.position-boat.up*footOffset);home=feet;returning=false;if(gait!=null)gait.enabled=true;}
+    public bool SpareMaintenance {get;set;}
+    public bool FinalAttackDuty {get;private set;}
+    public void SetFinalAttack(bool active)
+    {
+        if(FinalAttackDuty==active)return;
+        FinalAttackDuty=active;
+        if(!active||Rescuing||Assaulting)return;
+        combatReturnPending=false;Release();route.Clear();returning=false;changingPost=false;
+        feet=boat.InverseTransformPoint(robot.transform.position-boat.up*footOffset);home=feet;
+    }
     public void PrepareBoardingPost(Vector3 post)
     {Release();route.Clear();returning=false;changingPost=false;SetPost(post,true);}
     public void BeginAssault(){BeginDefense();Assaulting=true;}
@@ -65,6 +78,7 @@ public partial class NavalRepairSailor : MonoBehaviour
         feet=boat.InverseTransformPoint(robot.transform.position-boat.up*footOffset);
         BeginReturn();
     }
+    public Vector3 CarriedPosition {get{return feet;}}
     public float CarriedSide {get{return feet.x;}}
     public float FootOffset { get { return footOffset; } }
     public float DeckWalkSpeed {get{return NavalCrewMovement.BaseSpeed(robot.GetBaseMoveSpeed());}}
@@ -162,6 +176,7 @@ public partial class NavalRepairSailor : MonoBehaviour
             }
         }
     }
+    private int CompareCandidatePriority(NavalHullVoxel a,NavalHullVoxel b){return priorities[b].CompareTo(priorities[a]);}
     private void FindLeak()
     {
         if(!MayAcquireMaintenance())return;
@@ -180,7 +195,8 @@ public partial class NavalRepairSailor : MonoBehaviour
                     if(worker!=null&&worker!=this&&worker.HasJob&&(worker.JobPoint-cell.LocalCenter).sqrMagnitude<1.2f*1.2f){reserved=true;break;}
                 if(!reserved){candidates.Add(cell);priorities[cell]=priority;}
             }
-        candidates.Sort(delegate(NavalHullVoxel a,NavalHullVoxel b){return priorities[b].CompareTo(priorities[a]);});
+        if(compareCandidates==null)compareCandidates=CompareCandidatePriority;
+        candidates.Sort(compareCandidates);
         Vector3 workPoint=Vector3.zero;
         int checkedSites=0;
         foreach(NavalHullVoxel candidate in candidates)
@@ -210,7 +226,7 @@ public partial class NavalRepairSailor : MonoBehaviour
     private bool ReachFrom(Vector3 stand,NavalHullVoxel hole)
     {
         Vector3 hand=boat.TransformPoint(stand+Vector3.up*0.8f);
-        Vector3 local=hole.LocalCenter;local.y=NavalRepairSite.AimY(local.y,stand.y);
+        Vector3 local=hull.RepairAccess(hole,stand);local.y=NavalRepairSite.AimY(local.y,stand.y);
         Vector3 point=boat.TransformPoint(local),offset=point-hand;
         if(!NavalRepairSite.WithinReach(offset.x,offset.y,offset.z))return false;
         return RepairSightClear(hand,offset);
@@ -220,19 +236,22 @@ public partial class NavalRepairSailor : MonoBehaviour
         float preferred=NavalRepairSite.Floor(hole.LocalCenter.y,hull.Floor);
         bool stairs=NavalWalkRoutes.InStairwell(feet.x,feet.y,feet.z,hull.Definition.StairWidth*.5f+.175f,hull.Floor);
         if(NavalRepairDispatch.PreferCurrentDeck(feet.y,hull.Floor,stairs))preferred=feet.y>.3f?.825f:hull.Floor;
-        float[] floors={preferred,preferred>.3f?hull.Floor:.825f};
-        float[] shifts={0f,-.35f,.35f,-.7f,.7f,-1.2f,1.2f};
-        bool endWall=Mathf.Abs(hole.LocalCenter.z)>BoatDimensions.HalfLength-.3f;
-        foreach(float floor in floors)
+        bool endWall=NavalRepairWorkSites.EndWall(hole.LocalCenter.z);
+        for(int deck=0;deck<2;deck++)
         {
-            if(endWall)foreach(float shift in shifts)
+            float floor=NavalRepairWorkSites.Floor(preferred,hull.Floor,deck);
+            if(endWall)for(int i=0;i<NavalRepairWorkSites.ShiftCount;i++)
             {
+                float shift=NavalRepairWorkSites.Shift(i);
                 point=new Vector3(Mathf.Clamp(hole.LocalCenter.x+shift,-2.35f,2.35f),floor,Mathf.Sign(hole.LocalCenter.z)*5.5f);
+                if(floor<.3f&&hull.Bilge!=null)point.y=NavalBallastLayout.Surface(point.x,point.z,hull.Floor,hull.WorldScale);
                 if(!RejectedPoint(hole,point)&&ReachFrom(point,hole)&&ClearBody(point))return true;
             }
-            foreach(float corridor in new float[]{2.35f,2.1f,1.65f,.95f})foreach(float shift in shifts)
+            for(int c=0;c<NavalRepairWorkSites.CorridorCount;c++)for(int i=0;i<NavalRepairWorkSites.ShiftCount;i++)
             {
+                float corridor=NavalRepairWorkSites.Corridor(c),shift=NavalRepairWorkSites.Shift(i);
                 point=new Vector3(hole.LocalCenter.x<0f?-corridor:corridor,floor,Mathf.Clamp(hole.LocalCenter.z+shift,-5.1f,5.1f));
+                if(floor<.3f&&hull.Bilge!=null)point.y=NavalBallastLayout.Surface(point.x,point.z,hull.Floor,hull.WorldScale);
                 if(!RejectedPoint(hole,point)&&ReachFrom(point,hole)&&ClearBody(point))return true;
             }
         }
@@ -241,7 +260,7 @@ public partial class NavalRepairSailor : MonoBehaviour
     private void PlanTo(Vector3 goal)
     {
         if(TryPlanLedgeRecovery(goal))return;
-        Append(NavalRepairRoutes.Plan(new NavalWalkPoint(feet.x,feet.y,feet.z),new NavalWalkPoint(goal.x,goal.y,goal.z),hull.Definition.Compartments,hull.Definition.StairWidth,hull.Floor));
+        Append(NavalBallastRoutes.Plan(new NavalWalkPoint(feet.x,feet.y,feet.z),new NavalWalkPoint(goal.x,goal.y,goal.z),hull.Definition.Partitions,hull.Definition.StairWidth,hull.Floor,hull.WorldScale));
     }
     private bool OtherMaintenanceWorker()
     {
@@ -249,7 +268,7 @@ public partial class NavalRepairSailor : MonoBehaviour
             if(worker!=null&&worker!=this&&worker.robot!=null&&worker.robot.IsAlive()&&worker.MaintenanceDuty)return true;
         return false;
     }
-    private bool MayAcquireMaintenance(){return hull.ParallelMaintenance||!OtherMaintenanceWorker();}
+    private bool MayAcquireMaintenance(){return NavalMaintenanceMath.CanAcquireMaintenance(FinalAttackDuty,SpareMaintenance,hull.ParallelMaintenance,OtherMaintenanceWorker());}
     private bool OtherLeakRepairer()
     {
         foreach(NavalRepairSailor worker in hull.RepairWorkers)
@@ -289,7 +308,7 @@ public partial class NavalRepairSailor : MonoBehaviour
             float side=feet.x<0f?-1f:1f;
             Vector3 detour=new Vector3(side*(returnRetries%2==1?2.1f:1.4f),floor,feet.z);
             route.Add(detour);
-            Append(NavalRepairRoutes.Plan(new NavalWalkPoint(detour.x,detour.y,detour.z),new NavalWalkPoint(home.x,home.y,home.z),hull.Definition.Compartments,hull.Definition.StairWidth,hull.Floor));
+            Append(NavalBallastRoutes.Plan(new NavalWalkPoint(detour.x,detour.y,detour.z),new NavalWalkPoint(home.x,home.y,home.z),hull.Definition.Partitions,hull.Definition.StairWidth,hull.Floor,hull.WorldScale));
         }
         else PlanTo(home);
     }
@@ -333,8 +352,9 @@ public partial class NavalRepairSailor : MonoBehaviour
         claimed.Clear();leak=null;progress.Reset();
         if(hammer!=null)hammer.localRotation=hammerRest;
     }
+    public CharacterController BodyController {get{return Controller();}}
     private CharacterController Controller()
-    {return cachedController;}
+    {if(cachedController==null&&robot!=null)cachedController=robot.GetComponentInChildren<CharacterController>();return cachedController;}
     private void HoldPosition()
     {
         CharacterController controller=Controller();bool enabled=controller!=null&&controller.enabled;

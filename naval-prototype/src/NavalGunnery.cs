@@ -4,6 +4,8 @@ using System.Collections.Generic;
 public partial class NavalStations
 {
     private static readonly NavalShipRegistry<Transform,NavalStations> ships=new NavalShipRegistry<Transform,NavalStations>();
+    public static NavalStations ForShip(Transform ship)
+    {NavalStations controls;return ship!=null&&ships.TryGet(ship,out controls)?controls:null;}
     private void RegisterShip(){ships.Register(boat,this);}
     private void UnregisterShip(){if(!object.ReferenceEquals(boat,null))ships.Remove(boat,this);}
     private static readonly string[] targetNames={"waterline","cannon","mast","wheel"};
@@ -18,6 +20,9 @@ public partial class NavalStations
     private readonly NavalHullVoxel[] featureCells=new NavalHullVoxel[4];
     private readonly List<NavalHullVoxel> shellTargets=new List<NavalHullVoxel>(),mastTargets=new List<NavalHullVoxel>();
     private int targetIndexCount=-1;
+    private readonly List<NavalHullVoxel> rigTargets=new List<NavalHullVoxel>();
+    private readonly NavalHullVoxel[] hullProbes=new NavalHullVoxel[8];
+    private readonly float[] hullProbeScores=new float[8];
     private static RaycastHit[] sightHits=new RaycastHit[64];
     private struct FeatureCandidate {public NavalHullVoxel Cell;public int Station;public float Score;}
     private sealed class CandidateOrder:IComparer<FeatureCandidate>
@@ -27,10 +32,11 @@ public partial class NavalStations
     private void PrepareTargetIndex()
     {
         if(targetIndexCount==hull.Voxels.Count)return;
-        targetIndexCount=hull.Voxels.Count;shellTargets.Clear();mastTargets.Clear();
+        targetIndexCount=hull.Voxels.Count;shellTargets.Clear();mastTargets.Clear();rigTargets.Clear();
         foreach(NavalHullVoxel cell in hull.Voxels)
         {
             if(cell.HydraulicShell)shellTargets.Add(cell);
+            if(cell.ManagedRig)rigTargets.Add(cell);
             Vector3 p=cell.LocalCenter;
             if(cell.ManagedRig&&!cell.RigFabric&&Mathf.Abs(p.x)<=.3f&&NearMast(p.z)&&p.y>=1.1f)mastTargets.Add(cell);
         }
@@ -54,6 +60,16 @@ public partial class NavalStations
         wantedYaw=Mathf.DeltaAngle(gun%2==0?-90f:90f,Mathf.Atan2(local.x,local.z)*Mathf.Rad2Deg);
         angle=Mathf.Atan2(local.y,new Vector2(local.x,local.z).magnitude)*Mathf.Rad2Deg;
         return Mathf.Abs(wantedYaw)<=30f&&angle>=-5f&&angle<=45f;
+    }
+    // Range feasibility only; yaw acquisition is the helmsman's separate responsibility.
+    public bool CanReachRange(Vector3 point)
+    {
+        for(int gun=0;gun<GunCount;gun++)if(Functional(gun+1))
+        {
+            Vector3 delta=point-barrels[gun].TransformPoint(new Vector3(0f,0f,1.38f));
+            if(NavalEngagementRange.BallisticReach(new Vector2(delta.x,delta.z).magnitude,delta.y))return true;
+        }
+        return false;
     }
     private Vector3 Lead(int gun,Vector3 point,Vector3 velocity)
     {
@@ -89,8 +105,76 @@ public partial class NavalStations
         Vector3 right=Vector3.Cross(Vector3.up,direction).normalized;
         return Quaternion.AngleAxis(shotError[gun].x,Vector3.up)*Quaternion.AngleAxis(shotError[gun].y,right)*direction;
     }
+    private NavalHullVoxel FirstVisibleCell(int gun,NavalHullVoxel target,bool rigTriggers=false)
+    {
+        Vector3 muzzle=barrels[gun].TransformPoint(new Vector3(0f,0f,1.38f)),delta=target.transform.position-muzzle;
+        int count;
+        while(true)
+        {
+            count=Physics.RaycastNonAlloc(muzzle,delta.normalized,sightHits,delta.magnitude+.08f,PhysicsManager.GetEnvironmentLayerMask(),rigTriggers?QueryTriggerInteraction.Collide:QueryTriggerInteraction.Ignore);
+            if(count<sightHits.Length)break;System.Array.Resize(ref sightHits,sightHits.Length*2);
+        }
+        int nearest=-1;float distance=float.PositiveInfinity;
+        for(int i=0;i<count;i++)if(sightHits[i].collider!=null&&!sightHits[i].collider.transform.IsChildOf(boat)&&sightHits[i].distance<distance)
+        {nearest=i;distance=sightHits[i].distance;}
+        NavalHullVoxel first=nearest>=0?NavalVoxelHit.Resolve(sightHits[nearest].collider,sightHits[nearest].point):null;
+        System.Array.Clear(sightHits,0,count);return first;
+    }
+    private bool AboveWater(NavalHullVoxel cell)
+    {Vector3 p=cell.transform.position;return p.y>=ocean.Height(p.x,p.z)+.03f;}
+    private bool HullVisible(int gun,NavalStations victim)
+    {
+        victim.PrepareTargetIndex();
+        for(int i=0;i<8;i++){hullProbes[i]=null;hullProbeScores[i]=float.PositiveInfinity;}
+        Vector3 muzzle=barrels[gun].TransformPoint(new Vector3(0f,0f,1.38f));
+        Matrix4x4 hullMatrix=victim.boat.localToWorldMatrix;
+        foreach(NavalHullVoxel cell in victim.shellTargets)
+        {
+            if(cell==null||cell.Missing||cell.Detached)continue;
+            int bin=(cell.LocalCenter.x<0?0:4)+Mathf.Clamp((int)((cell.LocalCenter.z+6f)/3f),0,3);
+            Vector3 world=hullMatrix.MultiplyPoint3x4(cell.LocalCenter);
+            float score=-world.y*1000f+(world-muzzle).sqrMagnitude*.001f;
+            if(score<hullProbeScores[bin]){hullProbeScores[bin]=score;hullProbes[bin]=cell;}
+        }
+        for(int i=0;i<8;i++)if(hullProbes[i]!=null&&AboveWater(hullProbes[i]))
+        {
+            NavalHullVoxel first=FirstVisibleCell(gun,hullProbes[i]);
+            if(first!=null&&first.Owner==victim.hull&&!first.ManagedRig&&AboveWater(first))return true;
+        }
+        return false;
+    }
+    private bool OnlyRigVisible(int gun,NavalStations victim)
+    {
+        if(HullVisible(gun,victim))return false;
+        NavalHullVoxel unused;
+        return !Feature(gun,victim,1,out unused)&&!Feature(gun,victim,3,out unused);
+    }
+    private bool RigFeature(int gun,NavalStations victim,Vector3 velocity,out NavalHullVoxel selected)
+    {
+        selected=null;float best=float.PositiveInfinity;
+        for(int i=0;i<8;i++){hullProbes[i]=null;hullProbeScores[i]=float.PositiveInfinity;}
+        foreach(NavalHullVoxel cell in victim.rigTargets)
+        {
+            if(cell==null||cell.Missing||cell.Detached)continue;
+            Vector3 world=cell.transform.position;
+            int bin=(cell.RigFabric?4:0)+(cell.LocalCenter.z<0?2:0)+(cell.LocalCenter.y>4?1:0);
+            float score=-world.y*1000f+(world-boat.position).sqrMagnitude*.001f;
+            if(score<hullProbeScores[bin]){hullProbes[bin]=cell;hullProbeScores[bin]=score;}
+        }
+        for(int i=0;i<8;i++)
+        {
+            NavalHullVoxel cell=hullProbes[i];if(cell==null||!AboveWater(cell))continue;
+            float score=(cell.transform.position-boat.position).sqrMagnitude;if(score>=best)continue;
+            Vector3 predicted;if(!ReachableLead(gun,cell.transform.position,velocity,out predicted))continue;
+            NavalHullVoxel first=FirstVisibleCell(gun,cell,true);
+            if(first==null||first.Owner!=victim.hull||!first.ManagedRig||!AboveWater(first))continue;
+            selected=cell;best=score;
+        }
+        return selected!=null;
+    }
     private bool VisibleMechanism(int gun,NavalStations victim,int station,NavalHullVoxel cell)
     {
+        if(!AboveWater(cell))return false;
         Vector3 muzzle=barrels[gun].TransformPoint(new Vector3(0f,0f,1.38f));
         Vector3 view=victim.boat.InverseTransformPoint(muzzle);
         if(!NavalTargetVisibility.Broadside(view.x,view.z))return false;
@@ -129,8 +213,14 @@ public partial class NavalStations
     }
     private bool ComputeLockedTargetVisible(int gun,Transform target)
     {
-        if(aimKind[gun]!=1&&aimKind[gun]!=3)return true;
         NavalStations victim;if(!ships.TryGet(target,out victim)||victim==null||aimCell[gun]==null)return false;
+        if(aimKind[gun]==0)return AboveWater(aimCell[gun])||HullVisible(gun,victim);
+        if(aimKind[gun]!=1&&aimKind[gun]!=3&&aimKind[gun]!=2)return true;
+        if(aimKind[gun]==2)
+        {
+            NavalHullVoxel first=FirstVisibleCell(gun,aimCell[gun],true);
+            return first!=null&&first.Owner==victim.hull&&first.ManagedRig&&AboveWater(first)&&OnlyRigVisible(gun,victim);
+        }
         int station=0;
         if(aimKind[gun]==1)for(int i=1;i<=victim.GunCount;i++)if(victim.mechanisms[i].Contains(aimCell[gun])){station=i;break;}
         return victim.Functional(station)&&victim.mechanisms[station].Contains(aimCell[gun])&&VisibleMechanism(gun,victim,station,aimCell[gun]);
@@ -187,14 +277,16 @@ public partial class NavalStations
         NavalStations victim;if(!ships.TryGet(target,out victim)||victim==null)return false;
         bool[] available=featureAvailable;NavalHullVoxel[] cells=featureCells;
         System.Array.Clear(available,0,available.Length);System.Array.Clear(cells,0,cells.Length);
+        bool hullVisible=HullVisible(gun,victim);
         for(int kind=0;kind<4;kind++)
         {
+            if(kind==2||kind==0&&!hullVisible)continue;
             if(!Feature(gun,victim,kind,out cells[kind]))continue;
             Vector3 predicted;
             available[kind]=ReachableLead(gun,cells[kind].transform.position,velocity,out predicted);
         }
         int chosen=NavalGunneryMath.Choose(Random.value,lastKind[gun],available);
-        if(chosen<0)
+        if(chosen<0&&hullVisible)
         {
             // At the edge of range the randomly chosen feature may be farther
             // away than the nearest waterline plank. Try reachable hull cells.
@@ -209,8 +301,9 @@ public partial class NavalStations
                 Vector3 predicted;if(!ReachableLead(gun,world,velocity,out predicted))continue;
                 nearest=candidateDistance;cells[0]=cell;chosen=0;
             }
-            if(chosen<0)return false;
         }
+        if(chosen<0&&!hullVisible&&OnlyRigVisible(gun,victim)&&RigFeature(gun,victim,velocity,out cells[2]))chosen=2;
+        if(chosen<0)return false;
         aimKind[gun]=chosen;aimCell[gun]=cells[chosen];aimShip[gun]=target;visibilityAt[gun]=0f;
         aimLocal[gun]=target.InverseTransformPoint(cells[chosen].transform.position);
         // Draw once per shot, so aiming stays stable while the cannon reloads.
