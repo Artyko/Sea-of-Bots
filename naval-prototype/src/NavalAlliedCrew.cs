@@ -16,7 +16,7 @@ public class NavalAlliedCrew : MonoBehaviour
     public bool RecoveringOverboard {get{return roles.RecoveringOverboard;}}
     public bool NeedsRetreat {get{return roles.NeedsRetreat;}}
     public bool HasHelmsman { get { return roles.HasHelmsman; } }
-    private Vector3 SpawnPost(int i){return i<=hull.Definition.GunCount?stations.Post(i):new Vector3(NavalShipDefinition.StandbyX(i),hull.Definition.WeatherDeck,NavalShipDefinition.StandbyZ(i));}
+    private Vector3 SpawnPost(int i){return i<=hull.Definition.GunCount?stations.Post(i):new Vector3(NavalShipDefinition.StandbyX(hull.Definition,i),hull.Definition.WeatherDeck,NavalShipDefinition.StandbyZ(i));}
     public void Initialize(FirstPersonMover owner,NavalHull ship,NavalStructure frame,NavalStations controls,float feet)
     {player=owner;hull=ship;structure=frame;stations=controls;footOffset=feet;crew=new Character[ship.Definition.CrewCount];workers=new NavalRepairSailor[crew.Length];spawned=new bool[crew.Length];roles.Initialize(hull,stations,crew,workers);}
     private void LateUpdate()

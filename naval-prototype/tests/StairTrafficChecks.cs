@@ -4,8 +4,9 @@ class StairTrafficChecks {
  static void Main(){int routes=0;
  foreach(var ship in NavalShipDefinition.Choices){
  float lane=NavalStairTraffic.Lane(ship.Scale,ship.StairWidth);
- Check(2*lane*ship.Scale>.9f,"Opposite full-size capsules fit separate lanes");
- Check((ship.StairWidth*.5f-lane)*ship.Scale>.45f,"Lane fits inside smallest actual stair width");
+ Check(lane>0,"Each flight has a directional lane");
+ Check(NavalStairTraffic.FriendlyPass(true,true,true,1),"Overlapping full-size friendly capsules can pass on narrow stairs");
+ Check((ship.StairWidth*.5f-lane)*ship.Scale>=.8f,"Lane fits inside smallest actual stair width");
  for(int flight=0;flight<ship.DeckCount-1;flight++){
  float offset=flight==0?0:ship.UpperDeckOffset;
  var lower=new NavalWalkPoint(1.4f,ship.HoldFloor+offset,-4.5f);

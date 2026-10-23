@@ -22,6 +22,12 @@ public sealed class NavalCargo : MonoBehaviour {
  int elements=0;foreach(var c in Crates)elements+=c.CollisionSources;
  Debug.Log("[NavalPrototype] Cargo compact collision: "+hull.Definition.Name+" crates="+Crates.Count+" source cells="+elements+" intact shapes="+(Crates.Count*6));
  }
+ public string AmmoDiagnostics {get{
+  int hold=0;foreach(var c in Crates)if(c.Kind==0&&c.Gun<0)hold+=c.Count;
+  var text=new System.Text.StringBuilder();text.Append("hold=").Append(hold).Append(" deck=");
+  for(int gun=0;gun<deckCrates.Length;gun++)text.Append(gun).Append(":").Append(AmmoAtGun(gun)).Append(",");
+  text.Append(" runner=").Append(Runner!=null?Runner.GetInstanceID():0);return text.ToString();
+ }}
  public string CollisionDiagnostics {get{
   int sources=0,shapes=0,compact=0;foreach(var c in Crates){sources+=c.CollisionSources;shapes+=c.CollisionShapes;if(c.CompactCollision)compact++;}
   return "source_cells="+sources+" active_shapes="+shapes+" compact_crates="+compact+"/"+Crates.Count;

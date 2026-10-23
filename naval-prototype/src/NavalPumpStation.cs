@@ -46,7 +46,7 @@ public partial class NavalBilgeSystem
   hull.AddDecorationBox(transform,metal,station.Post+new Vector3(0,.3f,NavalMaintenanceMath.PumpOffsetZ),new Vector3(.5f,.6f,.5f),true);
   hull.AddDecorationBox(transform,trim,station.Post+new Vector3(0,.65f,NavalMaintenanceMath.PumpOffsetZ),new Vector3(.8f,.12f,.15f),true);
   station.Crank=new GameObject("Bilge pump handle").transform;station.Crank.SetParent(transform,false);station.Crank.localPosition=station.Post+new Vector3(0,.65f,NavalMaintenanceMath.PumpOffsetZ);
-  for(int side=-1;side<=1;side+=2)hull.AddDecorationBox(transform,metal,new Vector3(side*1.4f,floor+.13f,-5.45f),new Vector3(2.8f,.12f,.12f),true);
+  for(int side=-1;side<=1;side+=2)hull.AddDecorationBox(transform,metal,new Vector3(side*1.4f,floor+.13f,-5.45f),new Vector3(2.8f,.12f,.12f),false);
   var members=new System.Collections.Generic.List<NavalHullVoxel>();
   for(int i=first;i<hull.Voxels.Count;i++)members.Add(hull.Voxels[i]);
   foreach(var cell in members)if(cell.LocalCenter.y>floor+.6f)cell.transform.SetParent(station.Crank,true);

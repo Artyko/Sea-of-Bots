@@ -12,7 +12,7 @@ public sealed class NavalCargoCrate {
  private NavalCargoCollision collision;
  public NavalCargoCrate(NavalHull owner,Vector3 point,int kind,int gun,Material wood,Material trim,Material iron){
  hull=owner;Point=point;Kind=kind;Gun=gun;Stock=new NavalCargoStock(kind==1?40:kind==2?1:20);
- Pickup=point+new Vector3(point.x>0?-1.3f:1.3f,0,0)/hull.WorldScale;
+ Pickup=point+new Vector3(point.x>0?-1.65f:1.65f,0,0)/hull.WorldScale;
  if(gun<0){var pickup=NavalCargoLayout.Pickup(hull.Definition,new NavalWalkPoint(point.x,point.y,point.z));Pickup=new Vector3(pickup.X,pickup.Y,pickup.Z);}
  int first=hull.Voxels.Count;
  Box(wood,new Vector3(0,.10f,0),new Vector3(1.3f,.20f,1.3f));

@@ -1,10 +1,10 @@
 ﻿{
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v228.dll",
+  "MainDLLFileName": "NavalPrototype-v230.dll",
   "Author": "Kirill",
-  "Version": 228,
-  "Description": "Move hold supply pickup points outside full-size sailor capsule clearance and free sloop ballast-side access; record plank acquisition/failure.",
+  "Version": 230,
+  "Description": "Audit all crew stations using native capsule queries; widen sail/pump access, correct standby and sloop stair lanes, keep pump pipes damageable without blocking feet.",
   "ModDependencies": [],
   "Tags": []
 }

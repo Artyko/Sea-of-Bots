@@ -31,6 +31,7 @@ public partial class NavalCrewController
     public void Initialize(NavalHull ship,NavalStations controls,Character[] sailors,NavalRepairSailor[] repair)
     {
         hull=ship;stations=controls;crew=sailors;workers=repair;
+        hull.Root.gameObject.AddComponent<NavalCrewAccessAudit>().Initialize(hull,stations);
         roles=new int[crew.Length];assigned=new int[crew.Length];boarders=new NavalBoarder[crew.Length];
         for(int i=0;i<roles.Length;i++)roles[i]=-1;
         defense=new NavalDeckDefense(hull,crew,workers);
@@ -186,7 +187,7 @@ public partial class NavalCrewController
         {
             if(!Free(i))continue;
             roles[i]=assigned[i];
-            Vector3 post=roles[i]>=0?stations.Post(roles[i]):new Vector3(NavalShipDefinition.StandbyX(i),hull.Floor,NavalShipDefinition.StandbyZ(i));
+            Vector3 post=roles[i]>=0?stations.Post(roles[i]):new Vector3(NavalShipDefinition.StandbyX(hull.Definition,i),hull.Floor,NavalShipDefinition.StandbyZ(i));
             workers[i].SetPost(post);if(workers[i].Busy)continue;
             if(!workers[i].AtStation(post)){workers[i].SetPost(post,true);continue;}
             Character sailor=crew[i];sailor.DisableAI();
@@ -235,7 +236,7 @@ public partial class NavalCrewController
             workers[i].SpareMaintenance=!boarding;
             if(!boarding)
             {
-                if(!workers[i].MaintenanceDuty&&!workers[i].HandlingSails)workers[i].SetPost(new Vector3(NavalShipDefinition.StandbyX(i),hull.Floor,NavalShipDefinition.StandbyZ(i)));
+                if(!workers[i].MaintenanceDuty&&!workers[i].HandlingSails)workers[i].SetPost(new Vector3(NavalShipDefinition.StandbyX(hull.Definition,i),hull.Floor,NavalShipDefinition.StandbyZ(i)));
                 continue;
             }
             if(workers[i].HandlingSails){ready=false;continue;}
@@ -243,7 +244,7 @@ public partial class NavalCrewController
             if(!boarders[i].Departed)ready=false;
             if(!boarders[i].Busy)
             {
-                workers[i].SetPost(new Vector3(NavalShipDefinition.StandbyX(i),hull.Definition.WeatherDeck,NavalShipDefinition.StandbyZ(i)));
+                workers[i].SetPost(new Vector3(NavalShipDefinition.StandbyX(hull.Definition,i),hull.Definition.WeatherDeck,NavalShipDefinition.StandbyZ(i)));
             }
         }
         if(helm>=0)

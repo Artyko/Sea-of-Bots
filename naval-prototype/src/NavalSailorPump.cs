@@ -11,7 +11,7 @@ public partial class NavalRepairSailor
         for(int n=0;n<3;n++)
         {
             int choice=pumpApproach++%3;Vector3 goal=pumpStation.Post;
-            goal.z+=.4f/hull.WorldScale;
+            goal.z+=.65f/hull.WorldScale;
             goal.x=choice==0?0:choice==1?-.55f:.55f;
             if(!ClearBody(goal)||!Supported(goal))continue;
             feet=boat.InverseTransformPoint(robot.transform.position-Vector3.up*footOffset);

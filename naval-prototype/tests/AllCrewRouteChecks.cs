@@ -10,7 +10,7 @@ class AllCrewRouteChecks {
  for(int level=0;level<ship.MaintenanceDeckCount;level++){
   float floor=ship.MaintenanceFloor(level);
   posts.Add(new NavalWalkPoint(0,floor,-4.8f));posts.Add(new NavalWalkPoint(0,floor,NavalPlankSupplyLayout.PickupZ(ship.Scale)));posts.Add(new NavalWalkPoint(0,floor,NavalCannonSupplyLayout.PickupZ(ship.Scale)));
-  for(int sailor=0;sailor<ship.CrewCount;sailor++)posts.Add(new NavalWalkPoint(NavalShipDefinition.StandbyX(sailor),floor,NavalShipDefinition.StandbyZ(sailor)));
+  for(int sailor=0;sailor<ship.CrewCount;sailor++)posts.Add(new NavalWalkPoint(NavalShipDefinition.StandbyX(ship,sailor),floor,NavalShipDefinition.StandbyZ(sailor)));
   foreach(float x in new float[]{-2.35f,2.35f})foreach(float z in new float[]{-4.8f,-1.4f,1.4f,4.8f})posts.Add(new NavalWalkPoint(x,NavalBallastLayout.Surface(x,z,floor,ship.Scale),z));
  }
  posts.Add(new NavalWalkPoint(NavalSailWorkLayout.PostX,ship.WeatherDeck,NavalSailWorkLayout.PostZ));

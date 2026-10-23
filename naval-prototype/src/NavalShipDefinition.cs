@@ -81,7 +81,8 @@ public sealed class NavalShipDefinition
         for(int gun=0;gun<GunCount;gun+=2)if(BoatDimensions.IntersectsCannonPort(x,y,z-GunZ(this,gun)-1,hx,hy,hz))return true;
         return false;
     }
-    public static float StandbyX(int sailor){return sailor%2==0?-1.9f:1.9f;}
+    public static float StandbyX(int sailor){return sailor%2==0?-1.65f:1.65f;}
+    public static float StandbyX(NavalShipDefinition ship,int sailor){return ship.Scale<=2?(sailor%2==0?-.1f:.1f):StandbyX(sailor);}
     public static float StandbyZ(int sailor){return 4.9f-sailor/2*.9f;}
     public static float HelmZ(NavalShipDefinition ship){return ship.MastZ.Length>1?-5.45f:-4.8f;}
 }

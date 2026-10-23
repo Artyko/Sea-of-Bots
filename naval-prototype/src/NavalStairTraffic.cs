@@ -3,7 +3,7 @@ using System.Collections.Generic;
 // Keep right in the direction of travel; lanes fit the smallest full-size crew stair.
 public static class NavalStairTraffic
 {
- public static float Lane(float scale,float width){return Math.Min(width*.26f,.55f/scale);}
+ public static float Lane(float scale,float width){return Math.Max(0,Math.Min(Math.Min(width*.26f,.55f/scale),width*.5f-.85f/scale));}
  public static bool InPassage(NavalWalkPoint point,NavalShipDefinition ship)
  {
   if(AtFlight(point,ship,0))return true;

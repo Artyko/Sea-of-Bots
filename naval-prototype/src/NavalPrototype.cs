@@ -212,7 +212,7 @@ public partial class NavalTestWorld : MonoBehaviour
         Active = this;
         if(GetComponent<NavalBattleTelemetry>()==null)gameObject.AddComponent<NavalBattleTelemetry>();
         ToggleEnemy();
-        Debug.Log("[NavalPrototype] v228 ships and waves started on native Naval Ocean editor map.");
+        Debug.Log("[NavalPrototype] v230 ships and waves started on native Naval Ocean editor map.");
     }
 
     private Material MakeMaterial(Color color)

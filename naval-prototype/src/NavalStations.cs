@@ -11,6 +11,7 @@ public partial class NavalStations : MonoBehaviour
     private bool previousEmergencySteering;
     public bool EmergencySteering {get{return helmMechanism!=null&&!helmMechanism.Functional;}}
     public float SteeringFactor {get{return EmergencySteering?1f/3f:1f;}}
+    public Vector3 EmergencyPost {get{return TillerPost;}}
     private Vector3 TillerPost {get{return new Vector3(-1.2f,hull.Definition.MaintenanceFloor(hull.Definition.MaintenanceDeckCount-1),-5.3f);}}
     private NavalRepairableMechanism helmMechanism;
     private NavalRepairableMechanism[] cannonMechanisms;

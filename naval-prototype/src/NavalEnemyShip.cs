@@ -75,7 +75,7 @@ public class NavalEnemyShip : MonoBehaviour
         for(int i=0;i<Hull.Definition.CrewCount;i++)if(!recruited[i])
         {
             Vector3 initialPost=i<=Hull.Definition.GunCount?stations.Post(i):
-                new Vector3(NavalShipDefinition.StandbyX(i),Hull.Definition.WeatherDeck,NavalShipDefinition.StandbyZ(i));
+                new Vector3(NavalShipDefinition.StandbyX(Hull.Definition,i),Hull.Definition.WeatherDeck,NavalShipDefinition.StandbyZ(i));
             Vector3 position=Boat.TransformPoint(initialPost)+Vector3.up*footOffset;
             Transform spawned=factory.SpawnEnemy(i==0?EnemyType.Spear2:EnemyType.Hammer1,position,position+Boat.forward,null);
             if(spawned==null)continue;
