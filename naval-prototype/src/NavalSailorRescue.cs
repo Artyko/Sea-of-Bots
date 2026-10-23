@@ -21,8 +21,17 @@ public partial class NavalSailorRescue : MonoBehaviour
         FirstPersonMover mover=robot as FirstPersonMover;Transform head=mover!=null?mover.GetHeadTransform():null;
         headOffset=head!=null?head.position.y-robot.transform.position.y:0.8f;
     }
+    public bool AwaitingHomeRescue {get{return robot!=null&&robot.IsAlive()&&worker!=null&&worker.Rescuing&&escapeShip==null&&!home.Sunk&&(chosen==null||chosen.Hull==home);}}
     private void ZeroVelocity()
     {FirstPersonMover mover=robot as FirstPersonMover;if(mover!=null&&Velocity!=null)Velocity.SetValue(mover,Vector3.zero);}
+    public bool HasAirForWork(float travelSeconds,float workSeconds){
+        var world=NavalTestWorld.Active;if(world==null)return false;
+        Vector3 foot=robot.transform.position-Vector3.up*worker.FootOffset;
+        Vector3 local=home.Root.InverseTransformPoint(foot);
+        float exit=NavalHoldSafety.ExitSeconds(local.x,local.y,local.z,home.Floor,home.WorldScale,worker.DeckWalkSpeed,false);
+        if(home.Definition.DeckCount>2&&local.y<.825f)exit+=6f;
+        return AirRemaining(world)>Mathf.Min(22f,exit)+Mathf.Max(0,travelSeconds)+workSeconds+2f;
+    }
     public void CheckForWater()
     {
         NavalTestWorld world=NavalTestWorld.Active;
@@ -35,6 +44,7 @@ public partial class NavalSailorRescue : MonoBehaviour
             Vector3 local=interior.Root.InverseTransformPoint(foot);
             bool stairs=NavalWalkRoutes.InStairwell(local.x,local.y,local.z,interior.Definition.StairWidth*.5f+.175f,interior.Floor);
             float exitSeconds=NavalHoldSafety.ExitSeconds(local.x,local.y,local.z,interior.Floor,interior.WorldScale,worker.DeckWalkSpeed,stairs);
+            if(interior.Definition.DeckCount>2&&local.y<.825f)exitSeconds+=interior.Definition.UpperDeckOffset*interior.WorldScale/Mathf.Max(1f,worker.DeckWalkSpeed*.8f)+6f;
             if(!NavalHoldSafety.MustEscape(HeadUnder(world),interior.Sunk,AirRemaining(world),exitSeconds))return;
         }
         else
@@ -66,11 +76,11 @@ public partial class NavalSailorRescue : MonoBehaviour
 
     private bool Landing(NavalSeaLadder ladder,int which)
     {
-        Vector3 point=new Vector3(which==0?-2.2f:2.2f,0.88f,ladder.Hull.Definition.LadderZ);RaycastHit hit;
+        Vector3 point=new Vector3(which==0?-2.2f:2.2f,ladder.Hull.Definition.WeatherDeck+.055f,ladder.Hull.Definition.LadderZ);RaycastHit hit;
         Vector3 world=ladder.transform.TransformPoint(point);
         return Physics.Raycast(world+ladder.transform.up*0.4f,-ladder.transform.up,out hit,0.8f,
             PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore)&&hit.collider.transform.IsChildOf(ladder.transform)&&
-            Mathf.Abs(ladder.transform.InverseTransformPoint(hit.point).y-0.825f)<0.2f;
+            Mathf.Abs(ladder.transform.InverseTransformPoint(hit.point).y-ladder.Hull.Definition.WeatherDeck)<0.2f;
     }
     private void SelectLadder()
     {
@@ -83,6 +93,7 @@ public partial class NavalSailorRescue : MonoBehaviour
                 if(!ladder.Usable(i)||!Landing(ladder,i))continue;
                 NavalSwimPoint next;
                 float distance=NavalSwimPath.Route(new NavalSwimPoint(local.x,local.z),new NavalSwimPoint(i==0?-3.7f:3.7f,ladder.Hull.Definition.LadderZ),out next);
+                distance*=ladder.Hull.WorldScale;
                 if(distance<nearest){nearest=distance;chosen=ladder;side=i;}
             }
         }
@@ -111,8 +122,8 @@ public partial class NavalSailorRescue : MonoBehaviour
             if(chosen==null||!chosen.Usable(side)||!Landing(chosen,side))
             {climbing=false;chosen=null;scanAt=0f;return;}
             float sign=side==0?-1f:1f;
-            Vector3 target=stage==0?new Vector3(sign*3.7f,feet.y,chosen.Hull.Definition.LadderZ):stage==1?new Vector3(sign*3.7f,chosen.Hull.Definition.AboveDeckY(2.55f),chosen.Hull.Definition.LadderZ):
-                stage==2?new Vector3(sign*2.2f,chosen.Hull.Definition.AboveDeckY(2.55f),chosen.Hull.Definition.LadderZ):new Vector3(sign*2.2f,0.86f,chosen.Hull.Definition.LadderZ);
+            Vector3 target=stage==0?new Vector3(sign*3.7f,feet.y,chosen.Hull.Definition.LadderZ):stage==1?new Vector3(sign*3.7f,chosen.Hull.Definition.BoardingY,chosen.Hull.Definition.LadderZ):
+                stage==2?new Vector3(sign*2.2f,chosen.Hull.Definition.BoardingY,chosen.Hull.Definition.LadderZ):new Vector3(sign*2.2f,chosen.Hull.Definition.WeatherDeck+.035f,chosen.Hull.Definition.LadderZ);
             feet=Vector3.MoveTowards(feet,target,1.3f*dt);Place(chosen.transform.TransformPoint(feet)+chosen.transform.up*worker.FootOffset);
             if((feet-target).sqrMagnitude<0.0001f)
             {
@@ -142,7 +153,7 @@ public partial class NavalSailorRescue : MonoBehaviour
         float sea=world.WaterLevelAt(robot.transform.position);
         float targetY=sea-headOffset+0.2f;
         float lift=Mathf.Clamp((targetY-robot.transform.position.y)*5f,-2f,4f);
-        Vector3 step=(Vector3.ClampMagnitude(direction,1f)*2.3f+Vector3.up*lift)*dt;
+        Vector3 step=(Vector3.ClampMagnitude(direction,1f)*Mathf.Min(2.3f,worker.DeckWalkSpeed)+Vector3.up*lift)*dt;
         CharacterController body=worker.BodyController;
         if(body!=null&&body.enabled)body.Move(step);else robot.transform.position+=step;
         if(direction.sqrMagnitude>0.01f)robot.transform.rotation=Quaternion.RotateTowards(robot.transform.rotation,Quaternion.LookRotation(direction),180f*dt);

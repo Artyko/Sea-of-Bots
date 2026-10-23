@@ -14,8 +14,12 @@
     {return targetBearing+(side==1?90f:-90f);}
     public static int HelmSide(float heading,float targetBearing,int port,int starboard,int previous,int firing)
     {
-        if(firing==1&&port>0||firing==2&&starboard>0)return firing;
+        // Navigation seeks the stronger battery; CombatSide independently keeps
+        // gunners shooting the currently exposed side until the turn is complete.
+        if(port>starboard)return 1;
+        if(starboard>port)return 2;
         if(previous==1&&port>0||previous==2&&starboard>0)return previous;
+        if(firing==1&&port>0||firing==2&&starboard>0)return firing;
         if(port==0)return 2;
         if(starboard==0)return 1;
         float left=System.Math.Abs(Delta(heading,Heading(targetBearing,1)));
@@ -52,6 +56,8 @@
     // cross(up, towardTarget) exposes port; its negative exposes starboard.
     public static float OrbitSign(int portGuns,int starboardGuns,float preferred)
     {
+        if(portGuns>starboardGuns)return 1f;
+        if(starboardGuns>portGuns)return -1f;
         if(preferred>0f&&portGuns>0||preferred<0f&&starboardGuns>0)return preferred;
         if(portGuns>0)return 1f;
         if(starboardGuns>0)return -1f;

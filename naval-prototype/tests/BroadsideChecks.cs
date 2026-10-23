@@ -8,7 +8,7 @@ class BroadsideChecks
  Check(NavalBroadsideMath.CombatSide(1,1,2)==1,"Keep the exposed single port gun firing");
  Check(NavalBroadsideMath.CombatSide(2,2,1)==2,"Keep the exposed single starboard gun firing");
  Check(NavalBroadsideMath.CombatSide(1,2,2)==1&&NavalBroadsideMath.CombatSide(2,2,2)==2,"Equal broadsides preserve current side");
- Check(NavalBroadsideMath.OrbitSign(2,1,-1f)==-1f&&NavalBroadsideMath.OrbitSign(1,2,1f)==1f,"Extra hidden guns do not abandon the current firing side");
+ Check(NavalBroadsideMath.OrbitSign(2,1,-1f)==1f&&NavalBroadsideMath.OrbitSign(1,2,1f)==-1f,"Navigation orbits toward the stronger battery while gunners keep firing");
  Check(NavalBroadsideMath.CombatSide(1,0,0)==1,"Both sides broken leaves boarding fallback intact");
  Check(NavalBroadsideMath.OrbitSign(1,1,-1f)==-1f,"Intact broadsides preserve existing tactics");
  Check(NavalBroadsideMath.OrbitSign(0,0,1f)==1f,"No guns preserves fallback direction");

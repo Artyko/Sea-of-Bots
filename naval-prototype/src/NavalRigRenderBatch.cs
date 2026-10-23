@@ -12,6 +12,10 @@ public sealed class NavalRigRenderBatch : MonoBehaviour
     private Transform[] poses;
     private Renderer[] originals;
     private Geometry[] geometry;
+    private Vector3[] posePositions;
+    private Quaternion[] poseRotations;
+    private float[] clothScales;
+    private Vector3[][] scaledVertices;
     private bool[] visible;
     private NavalBatchTopology topology;
     private readonly Dictionary<Material,int> paletteIds=new Dictionary<Material,int>();
@@ -20,7 +24,7 @@ public sealed class NavalRigRenderBatch : MonoBehaviour
     private Mesh mesh;
     private MeshRenderer renderer;
     private bool animated,dirty=true;
-    private float renderedAt=float.NegativeInfinity;
+    private bool poseDirty;
     public static void Create(Transform parent,List<NavalHullVoxel> source,bool deforming)
     {
         if(source.Count==0)return;
@@ -30,8 +34,9 @@ public sealed class NavalRigRenderBatch : MonoBehaviour
     }
     private void Initialize(Transform parent,List<NavalHullVoxel> source,bool deforming)
     {
-        root=parent;animated=deforming;cells=source.ToArray();
+        root=parent;animated=deforming;cells=source.ToArray();clothScales=new float[cells.Length];for(int i=0;i<clothScales.Length;i++)clothScales[i]=1f;
         poses=new Transform[cells.Length];originals=new Renderer[cells.Length];geometry=new Geometry[cells.Length];visible=new bool[cells.Length];
+        posePositions=new Vector3[cells.Length];poseRotations=new Quaternion[cells.Length];scaledVertices=new Vector3[cells.Length][];
         int[] counts=new int[cells.Length];int[][] triangles=new int[cells.Length][];
         Dictionary<Mesh,Geometry> geometries=new Dictionary<Mesh,Geometry>();
         for(int i=0;i<cells.Length;i++)
@@ -45,6 +50,11 @@ public sealed class NavalRigRenderBatch : MonoBehaviour
             }
             geometry[i]=shape;counts[i]=shape.Vertices.Length;triangles[i]=shape.Triangles;
             cells[i].RigBatchOwner=this;
+            cells[i].RigBatchIndex=i;
+            posePositions[i]=poses[i].localPosition;poseRotations[i]=poses[i].localRotation;
+            scaledVertices[i]=new Vector3[shape.Vertices.Length];
+            Vector3 scale=poses[i].localScale;
+            for(int v=0;v<shape.Vertices.Length;v++)scaledVertices[i][v]=Vector3.Scale(shape.Vertices[v],scale);
         }
         topology=new NavalBatchTopology(counts,triangles);vertices=new Vector3[topology.VertexCount];normals=new Vector3[topology.VertexCount];
         Vector2[] uv=new Vector2[topology.VertexCount];
@@ -58,10 +68,12 @@ public sealed class NavalRigRenderBatch : MonoBehaviour
         Refresh();
     }
     public void MarkDirty(){dirty=true;}
-    private void LateUpdate(){if(mesh!=null&&(dirty||animated&&renderedAt!=Time.time))Refresh();}
+    public void SetAnimatedPose(int index,Vector3 position,Quaternion rotation,float clothScale=1f)
+    {posePositions[index]=position;poseRotations[index]=rotation;clothScales[index]=clothScale;poseDirty=true;}
+    private void LateUpdate(){if(mesh!=null&&(dirty||animated&&poseDirty))Refresh();}
     private void Refresh()
     {
-        renderedAt=Time.time;
+        poseDirty=false;
         using(NavalPerformance.Measure(NavalPerfArea.RigRendering))
         {
             if(dirty)
@@ -87,18 +99,19 @@ public sealed class NavalRigRenderBatch : MonoBehaviour
                 foreach(int material in topology.ActiveMaterials)activeMaterials.Add(palette[material]);
                 mesh.subMeshCount=activeMaterials.Count;
                 for(int sub=0;sub<activeMaterials.Count;sub++)mesh.SetTriangles(topology.Triangles(topology.ActiveMaterials[sub]),sub,false);
-                renderer.sharedMaterials=activeMaterials.ToArray();renderer.enabled=activeMaterials.Count>0;dirty=false;
+                renderer.SetSharedMaterials(activeMaterials);renderer.enabled=activeMaterials.Count>0;dirty=false;
             }
             if(!renderer.enabled)return;
             for(int i=0;i<cells.Length;i++)if(visible[i])
             {
-                Transform pose=poses[i];Quaternion rotation=pose.localRotation;
-                Matrix4x4 matrix=Matrix4x4.TRS(pose.localPosition,rotation,pose.localScale);
+                Transform pose=poses[i];Quaternion rotation=animated?poseRotations[i]:pose.localRotation;
+                Vector3 position=animated?posePositions[i]:pose.localPosition;
                 Geometry shape=geometry[i];int offset=topology.Offset(i);
                 Vector3 right=rotation*Vector3.right,up=rotation*Vector3.up,forward=rotation*Vector3.forward;
                 for(int v=0;v<shape.Vertices.Length;v++)
                 {
-                    vertices[offset+v]=matrix.MultiplyPoint3x4(shape.Vertices[v]);
+                    Vector3 scaled=scaledVertices[i][v];
+                    vertices[offset+v]=position+right*scaled.x+up*(scaled.y*clothScales[i])+forward*scaled.z;
                     // Source cells are boxes: face normals lie on scale axes, so rotation preserves the exact normal.
                     Vector3 normal=shape.Normals[v];
                     normals[offset+v]=Mathf.Abs(normal.x)==1f?right*normal.x:Mathf.Abs(normal.y)==1f?up*normal.y:Mathf.Abs(normal.z)==1f?forward*normal.z:rotation*normal;
@@ -112,6 +125,6 @@ public sealed class NavalRigRenderBatch : MonoBehaviour
         if(mesh!=null)Destroy(mesh);
         if(cells==null)return;
         for(int i=0;i<cells.Length;i++)if(cells[i]!=null)
-        {cells[i].RigBatchOwner=null;cells[i].Batched=false;if(originals[i]!=null)originals[i].enabled=!cells[i].Missing;}
+        {cells[i].RigBatchOwner=null;cells[i].RigBatchIndex=-1;cells[i].Batched=false;if(originals[i]!=null)originals[i].enabled=!cells[i].Missing;}
     }
 }

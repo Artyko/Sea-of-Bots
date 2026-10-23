@@ -14,7 +14,7 @@ public class NavalSailorGait : MonoBehaviour
     private Quaternion[] idleRotation;
     private readonly NavalGaitClock clock=new NavalGaitClock();
     private float stride,weight,lastMove=-100f;
-    private bool idleApplied;
+    private bool idleApplied,nativeInjury;
     public void Initialize(Character sailor,CharacterModel body)
     {
         robot=sailor;model=body;
@@ -47,6 +47,25 @@ public class NavalSailorGait : MonoBehaviour
     private void LateUpdate()
     {
         if(robot==null||!robot.IsAlive()){Restore();enabled=false;return;}
+        bool rightDamaged=robot.IsDamaged(MechBodyPartType.RightLeg),leftDamaged=robot.IsDamaged(MechBodyPartType.LeftLeg);
+        if((rightDamaged||leftDamaged)&&model!=null&&model.LegsAnimator!=null)
+        {
+            // The game's animator owns one-legged hopping/crawling. Sampling
+            // the intact run clip here would overwrite its injury animation.
+            nativeInjury=true;idleApplied=false;model.SetManualLegsAnimationEnabled(false);
+            model.SetLegsBool("IsOneLeggedLeft",rightDamaged&&!leftDamaged);
+            model.SetLegsBool("IsOneLeggedRight",leftDamaged&&!rightDamaged);
+            model.SetLegsBool("IsCrawling",rightDamaged&&leftDamaged);
+            model.SetLegsBool("IsMoving",Time.time-lastMove<.08f);
+            FirstPersonMover mover=robot as FirstPersonMover;
+            if(mover!=null)model.SetLegsFloat("RunSpeed",mover.BaseAnimatorRunSpeed*(rightDamaged&&leftDamaged?1f:mover.OneLeggedAnimatorRunSpeedMultiplier));
+            return;
+        }
+        if(nativeInjury)
+        {
+            nativeInjury=false;idleApplied=false;
+            model.SetLegsBool("IsOneLeggedLeft",false);model.SetLegsBool("IsOneLeggedRight",false);model.SetLegsBool("IsCrawling",false);
+        }
         if(root==null||walk==null)return;
         weight=Mathf.MoveTowards(weight,Time.time-lastMove<0.08f?1f:0f,Time.deltaTime*6f);
         if(weight==0f&&idleApplied)return;

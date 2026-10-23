@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 public static class NavalRigMath
 {
@@ -37,9 +37,9 @@ public static class NavalRigMath
         target=Math.Max(-1f,Math.Min(1f,target));
         return target+(current-target)*(float)Math.Exp(-2f*Math.Max(0f,dt));
     }
-    public static float StepSpeed(float speed, float throttle, float sailPower, float dt)
+    public static float StepSpeed(float speed, float throttle, float sailPower, float dt,float maxSpeed=4f)
     {
-        float target = throttle * 4f * sailPower;
+        float target = throttle * maxSpeed * sailPower;
         // Releasing the helm takes longer to stop than active reverse thrust.
         bool coasting = Math.Abs(target) < 0.001f;
         float response = coasting ? 0.14f : (speed * target < 0f ? 0.42f : 0.30f);

@@ -1,0 +1,7 @@
+# v213 — shore and support query optimization
+
+- Support first performs a single nearest-hit ray/sphere cast. A valid upward-facing hit from the requested ship immediately proves support. An ambiguous, foreign, side-facing or absent nearest hit falls back to the original complete NonAlloc query. Existing exact same-frame cache and damage/synchronization invalidation remain. No support radius, distance, normal threshold or ship filter changes.
+- Shore SAT first rejects disjoint conservative world AABBs. Potential overlap still evaluates every previous separating axis and returns the same penetration depth. Every committed motion retains IslandAdvance, native swept overlap checks, rotation/draft and shore escape checks.
+- Navigation no longer probes alternative headings when the direct course is clear over the requested range and no bypass side is committed. The forward clearance probe and exact movement barrier remain.
+
+Verification: full mod compiled against installed Unity/game; 30000 randomized full-rotation/tilt box pairs matched original SAT depth; original shore box, swept rotation/translation, retreat and rounded-capsule stair tests; 656 crate routes passed. No native PhysX support regression or live FPS comparison performed. New Support fast path can cost an extra query when nearest hit is ambiguous; benefit must be measured in the next fight. These changes do not optimize all engine/GPU cost.

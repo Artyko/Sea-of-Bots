@@ -38,10 +38,12 @@ public sealed class NavalRigSnapshot
     }
     public Quaternion Delta(Quaternion predictedRotation){return predictedRotation*Quaternion.Inverse(originalRotation);}
     public Vector3 Predict(Vector3 center,Vector3 position,Quaternion delta){return position+delta*(center-originalPosition);}
-    public bool PrepareGroups(Vector3 ship,Quaternion shipRotation,float scale,Vector3 rigPosition,Quaternion rigRotation,bool moving)
+    public bool PrepareGroups(Vector3 ship,Quaternion shipRotation,float scale,Vector3 rigPosition,Quaternion rigRotation,bool moving,float top=float.NaN,float bottom=float.NaN)
     {
         Vector3 center=ship+shipRotation*new Vector3(0f,-.225f*scale,0f);
         Vector3 half=Extent(shipRotation,new Vector3(6.35f,4.725f,12.65f)*scale);
+        if(!float.IsNaN(top)&&!float.IsNaN(bottom))
+        {center=ship+shipRotation*new Vector3(0,(top+bottom)*.5f,0);half=Extent(shipRotation,new Vector3(6.35f*scale,(top-bottom)*.5f,12.65f*scale));}
         Bounds body=new Bounds(center,half*2f);body.Expand(.004f);
         bool any=false;Quaternion delta=Delta(rigRotation);
         for(int i=0;i<groupCount;i++)

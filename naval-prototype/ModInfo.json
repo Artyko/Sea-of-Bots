@@ -1,10 +1,10 @@
 ﻿{
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v112.dll",
+  "MainDLLFileName": "NavalPrototype-v222.dll",
   "Author": "Kirill",
-  "Version": 112,
-  "Description": "Allocation-free repair candidate tables, refreshed component references and mutation-invalidated flood summaries with exact regression parity.",
+  "Version": 222,
+  "Description": "Match player support casts to controller footprint on both ships; accept supported raised station footing without snapping through trim.",
   "ModDependencies": [],
   "Tags": []
 }

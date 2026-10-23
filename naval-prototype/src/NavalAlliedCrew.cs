@@ -13,11 +13,12 @@ public class NavalAlliedCrew : MonoBehaviour
     private NavalStations stations;
     private readonly NavalCrewController roles=new NavalCrewController();
     public int LivingCrew {get{int n=0;if(crew!=null)foreach(Character sailor in crew)if(sailor!=null&&sailor.IsAlive())n++;return n;}}
+    public bool RecoveringOverboard {get{return roles.RecoveringOverboard;}}
     public bool NeedsRetreat {get{return roles.NeedsRetreat;}}
     public bool HasHelmsman { get { return roles.HasHelmsman; } }
-    private Vector3 Home(int i){return new Vector3(i%2==0?-1.8f:1.8f,0.825f,4.9f-i/2*.9f);}
+    private Vector3 SpawnPost(int i){return i<=hull.Definition.GunCount?stations.Post(i):new Vector3(NavalShipDefinition.StandbyX(i),hull.Definition.WeatherDeck,NavalShipDefinition.StandbyZ(i));}
     public void Initialize(FirstPersonMover owner,NavalHull ship,NavalStructure frame,NavalStations controls,float feet)
-    {player=owner;hull=ship;structure=frame;stations=controls;footOffset=feet*0.85f;crew=new Character[ship.Definition.CrewCount];workers=new NavalRepairSailor[crew.Length];spawned=new bool[crew.Length];roles.Initialize(hull,stations,crew,workers);}
+    {player=owner;hull=ship;structure=frame;stations=controls;footOffset=feet;crew=new Character[ship.Definition.CrewCount];workers=new NavalRepairSailor[crew.Length];spawned=new bool[crew.Length];roles.Initialize(hull,stations,crew,workers);}
     private void LateUpdate()
     {
         if(NavalTestWorld.Active==null||!NavalTestWorld.Active.SimulationActive)return;
@@ -26,14 +27,14 @@ public class NavalAlliedCrew : MonoBehaviour
             retry=Time.time+2f;EnemyFactory factory=Singleton<EnemyFactory>.Instance;
             if(factory!=null)for(int i=0;i<hull.Definition.CrewCount;i++)if(!spawned[i])
             {
-                Vector3 position=hull.Root.TransformPoint(Home(i))+hull.Root.up*footOffset;
+                Vector3 position=hull.Root.TransformPoint(SpawnPost(i))+Vector3.up*footOffset;
                 Transform body=factory.SpawnEnemy(EnemyType.Hammer1,position,position+hull.Root.forward,null);
                 if(body==null)continue;
                 Character sailor=body.GetComponent<Character>();if(sailor==null){Destroy(body.gameObject);continue;}
-                body.SetParent(transform,true);body.localScale=Vector3.one*0.85f;
+                body.SetParent(transform,true);body.localScale=Vector3.one;
                 sailor.IsPlayerTeam=true;sailor.SetIgnoreForVictoryCount(true);sailor.DisableAI();
                 crew[i]=sailor;spawned[i]=true;
-                workers[i]=body.gameObject.AddComponent<NavalRepairSailor>();workers[i].Initialize(sailor,hull,structure,Home(i),footOffset);
+                workers[i]=body.gameObject.AddComponent<NavalRepairSailor>();workers[i].Initialize(sailor,hull,structure,SpawnPost(i),footOffset);
                 body.gameObject.AddComponent<NavalSailorRescue>().Initialize(sailor,workers[i],hull);
             }
         }

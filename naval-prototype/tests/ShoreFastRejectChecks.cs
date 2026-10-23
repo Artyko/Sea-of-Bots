@@ -1,0 +1,5 @@
+﻿using System;
+class ShoreFastRejectChecks {
+ static NavalShoreBox Box(Random random){double yaw=random.NextDouble()*6.28,pitch=random.NextDouble()*2-1;var r=new NavalBoxVector((float)Math.Cos(yaw),0,(float)-Math.Sin(yaw));var f=new NavalBoxVector((float)(Math.Sin(yaw)*Math.Cos(pitch)),(float)Math.Sin(pitch),(float)(Math.Cos(yaw)*Math.Cos(pitch)));return new NavalShoreBox{Center=new NavalBoxVector((float)random.NextDouble()*150,(float)random.NextDouble()*60,(float)random.NextDouble()*150),Half=new NavalBoxVector(2+(float)random.NextDouble()*15,2+(float)random.NextDouble()*8,3+(float)random.NextDouble()*25),Right=r,Up=NavalBoxVector.Cross(f,r),Forward=f};}
+ static void Main(){var random=new Random(213);for(int i=0;i<30000;i++){var a=Box(random);var b=Box(random);float expected=ReferenceShoreSat.Penetration(a,b),actual=NavalShoreBoxMath.Penetration(a,b);if(Math.Abs(expected-actual)>.0001){Console.WriteLine("FAIL: conservative rejection changed collision");Environment.ExitCode=1;return;}}Console.WriteLine("PASS: 30000 tilted/rotated box pairs match the previous full SAT depth exactly.");}
+}

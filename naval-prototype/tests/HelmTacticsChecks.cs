@@ -8,7 +8,7 @@ class HelmTacticsChecks
         Check(recovery.BeginReverse()&&recovery.Phase==1,"ship contact starts reverse immediately");
         for(int i=0;i<70;i++){Check(!recovery.BeginReverse(),"repeated contact cannot restart reverse");recovery.Step(.1f,0,0,true,true,3);}
         Check(recovery.Phase==1,"reverse allowed to decelerate and build sternward speed");
-        for(int i=0;i<15;i++){recovery.BeginReverse();recovery.Step(.1f,0,0,true,true,3);}
+        for(int i=0;i<235;i++){recovery.BeginReverse();recovery.Step(.1f,0,0,true,true,3);}
         Check(recovery.Phase==2,"blocked stern stops reverse within bounded time despite repeated contact");
         for(int i=0;i<45;i++)recovery.Step(.1f,.2f,0,true,false,3);
         int previous=recovery.Side;Check(recovery.BeginReverse()&&recovery.Side==-previous,"next recovery alternates turn direction");

@@ -69,6 +69,12 @@ public class NavalRamDamage : MonoBehaviour
         }
         pa.y=pb.y=(a.position.y+b.position.y)*0.5f-0.2f;
     }
+    public bool BoardingContactWith(NavalRamDamage other)
+    {
+        if(other==null||Opponent!=other)return false;
+        float gap=NavalBoardingContactMath.Gap(transform.position.x,transform.position.z,transform.eulerAngles.y,Hull.WorldScale,other.transform.position.x,other.transform.position.z,other.transform.eulerAngles.y,other.Hull.WorldScale);
+        return NavalBoardingContactMath.Allows(true,Time.time-LastContact,gap);
+    }
     public void Contact(NavalRamDamage other)
     {
         if(other==null||other==this)return;

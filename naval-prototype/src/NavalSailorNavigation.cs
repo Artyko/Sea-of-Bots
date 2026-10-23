@@ -2,6 +2,8 @@
 
 public partial class NavalRepairSailor
 {
+    private readonly NavalMovementWatchdog movementWatchdog=new NavalMovementWatchdog();
+    private float stairRecoveryAt,deckReplanAt;
     private enum RouteResult {Moving,Arrived,Blocked,Fell}
     // All maintenance duties use one movement, arrival and obstruction policy.
     // The caller owns the job-specific response to an obstruction.
@@ -9,23 +11,55 @@ public partial class NavalRepairSailor
     {
         if(route.Count==0)return RouteResult.Arrived;
         Vector3 target=route[0];bool final=route.Count==1;
+        // A stale route must not pull a sailor vertically through an intact deck.
+        bool submergedRepair=final&&leak!=null&&NavalTestWorld.Active!=null&&NavalTestWorld.Active.WaterLevelAt(boat.TransformPoint(feet))>boat.TransformPoint(feet).y+2.6f;
+        if(!submergedRepair&&ledgeWaypoints==0&&Time.time>=deckReplanAt&&Mathf.Abs(target.y-feet.y)*hull.WorldScale>1f&&
+           new Vector2(target.x-feet.x,target.z-feet.z).magnitude*hull.WorldScale<1.2f){
+            deckReplanAt=Time.time+2f;Vector3 goal=route[route.Count-1];
+            route.Clear();stuck=0;movementWatchdog.Reset();PlanTo(goal);
+            if(route.Count==0)return RouteResult.Arrived;
+            target=route[0];final=route.Count==1;
+            Debug.Log("[NavalPrototype] Rebuilt stale deck route: ship="+boat.name+" feet="+feet+" next="+target+" duty="+Status);
+        }
+        float recoveryFloor;
+        if(ledgeWaypoints==0&&Time.time>=stairRecoveryAt&&NavalStairRecovery.Needed(
+            new NavalWalkPoint(feet.x,feet.y,feet.z),new NavalWalkPoint(target.x,target.y,target.z),hull.Definition,out recoveryFloor)){
+            stairRecoveryAt=Time.time+2f;Vector3 goal=route[route.Count-1];
+            int preferred=feet.x<0?-1:1;
+            for(int attempt=0;attempt<2;attempt++){
+                var recovery=NavalStairRecovery.Exit(new NavalWalkPoint(feet.x,feet.y,feet.z),
+                    new NavalWalkPoint(goal.x,goal.y,goal.z),hull.Definition,recoveryFloor,attempt==0?preferred:-preferred);
+                var exit=recovery[0];Vector3 point=new Vector3(exit.X,exit.Y,exit.Z);
+                // The controller executes every segment. Never jump to a tread above the head.
+                if(!ClearBody(point)||!NavigationClear(feet,point))continue;
+                route.Clear();Append(recovery);stuck=0;moveSpeed=0;movementWatchdog.Reset();
+                Debug.Log("[NavalPrototype] Crew stair underflight recovery: ship="+boat.name+" feet="+feet+" exit="+point+" duty="+Status);
+                target=route[0];final=false;break;
+            }
+        }
         float before=boat.TransformVector(target-feet).magnitude;
         Move(target,dt,final);
+        bool motionExpired=movementWatchdog.Step(dt,feet.x*hull.WorldScale,feet.y*hull.WorldScale,feet.z*hull.WorldScale);
         bool recovering=ledgeWaypoints>0;
         bool closeRepair=!recovering&&finishAtRepairReach&&leak!=null&&final&&Mathf.Abs(feet.y-target.y)<.3f&&
             new Vector2(feet.x-target.x,feet.z-target.z).magnitude<.4f&&CanReachLeak();
-        bool reached=closeRepair||(recovering?NavalLedgeRecoveryMath.Arrived(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):NavalRouteArrival.Reached(feet.x,feet.y,feet.z,target.x,target.y,target.z,final));
+        bool walkedOff=ledgeWaypoints==2&&NavalLedgeRecoveryMath.WalkedOff(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale);
+        bool stairPoint=NavalShipRoutes.InStairwell(new NavalWalkPoint(target.x,target.y,target.z),hull.Definition);
+        bool reached=walkedOff||closeRepair||(stairPoint&&!recovering?
+            NavalWalkRoutes.Reached(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):recovering?NavalLedgeRecoveryMath.Arrived(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):final&&returning?AtStation(target):NavalRouteArrival.Reached(feet.x,feet.y,feet.z,target.x,target.y,target.z,final));
         stuck=NavalRouteProgress.Step(stuck,before,boat.TransformVector(target-feet).magnitude,dt,reached,Time.time<passageWorkUntil);
         if(closeRepair)route.Clear();else if(reached){route.RemoveAt(0);if(recovering)ledgeWaypoints--;}
         if(feet.y<hull.Floor-.7f)return RouteResult.Fell;
+        if(motionExpired){movementWatchdog.Reset();Debug.Log("[NavalPrototype] Crew route stalled for 8 seconds at "+feet+" target="+target+" ship="+boat.name+" profile="+hull.Definition.Name+" duty="+Status);return RouteResult.Blocked;}
+        if(stuck>.45f&&RecoverObstruction(target))return RouteResult.Moving;
         if(stuck>timeout)return RouteResult.Blocked;
         return route.Count==0?RouteResult.Arrived:RouteResult.Moving;
     }
     private void TryFindLeak()
     {
-        if(Time.time<scanAt&&scanRevision==hull.Revision)return;
+        if(Time.time<scanAt)return;
         scanAt=Time.time+.25f;
-        if(scanRevision!=hull.Revision)retryAfter.Clear();
+        // Damage elsewhere must not erase this sailor's inaccessible-site cooldowns.
         scanRevision=hull.Revision;FindLeak();
     }
 }

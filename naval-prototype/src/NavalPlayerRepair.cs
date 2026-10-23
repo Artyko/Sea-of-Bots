@@ -20,13 +20,33 @@ public class NavalPlayerRepair : MonoBehaviour
         if(Time.time>=scanAt)
         {
             scanAt=Time.time+0.1f;NavalHullVoxel next=FindTarget();
-            if(next!=target){target=next;elapsed=0f;}
+            if(next!=target)
+            {
+                bool sameGun=next!=null&&target!=null&&next.RepairMechanism!=null&&next.RepairMechanism.IsCannon&&next.RepairMechanism==target.RepairMechanism;
+                target=next;if(!sameGun)elapsed=0f;
+            }
         }
         if(target==null||!target.Missing&&!target.Detached){elapsed=0f;return;}
         if(target.RepairMechanism!=null&&!target.RepairMechanism.CanRepair){elapsed=0f;return;}
         if(!Input.GetKey(KeyCode.R)){elapsed=0f;return;}
+        NavalRepairableMechanism mechanism=target.RepairMechanism;
+        if(mechanism!=null&&mechanism.IsCannon)
+        {
+            if(mechanism.RepairWorker!=null){elapsed=0f;return;}
+            mechanism.PlayerRepairUntil=Time.time+.3f;
+            if(!mechanism.PartsDelivered)
+            {
+                if(hull.CannonSupply==null||!hull.CannonSupply.DeliverPlayerKit()){elapsed=0f;return;}
+                mechanism.PartsDelivered=true;
+            }
+        }
         elapsed+=Time.deltaTime;
-        if(elapsed<4f)return;
+        if(mechanism!=null&&mechanism.IsCannon)mechanism.ReportRepair(elapsed,"Ремонт");
+        float duration=mechanism!=null?mechanism.RepairSeconds:4f;
+        if(elapsed<duration)return;
+        if(mechanism!=null&&mechanism.IsCannon)
+        {mechanism.CompleteCannonRepair(structure,elapsed);target=null;elapsed=0f;scanAt=0f;return;}
+        if(mechanism==null&&hull.Cargo!=null&&!hull.Cargo.UsePlayerBoard()){elapsed=0f;return;}
         Vector3 patch=target.LocalCenter;
         foreach(NavalHullVoxel cell in hull.Voxels)
             if((cell.HydraulicShell||cell.InternalBarrier||cell.RepairableEquipment)&&(cell.Missing||cell.Detached)&&(cell.LocalCenter-patch).sqrMagnitude<=0.85f*0.85f)
@@ -41,6 +61,7 @@ public class NavalPlayerRepair : MonoBehaviour
         foreach(NavalHullVoxel cell in hull.Voxels)
         {
             if(!(cell.HydraulicShell||cell.InternalBarrier||cell.RepairableEquipment)||!cell.Missing&&!cell.Detached)continue;
+            if(cell.RepairMechanism!=null&&cell.RepairMechanism.IsCannon&&cell.RepairMechanism.RepairWorker!=null)continue;
             Vector3 stand=hull.Root.InverseTransformPoint(ray.origin)-Vector3.up*(1.2f/hull.WorldScale);
             Vector3 point=hull.Root.TransformPoint(hull.RepairAccess(cell,stand));
             Vector3 offset=point-ray.origin;float along=Vector3.Dot(offset,ray.direction);
@@ -49,7 +70,11 @@ public class NavalPlayerRepair : MonoBehaviour
             if(distance>=score)continue;
             RaycastHit hit;
             if(Physics.Raycast(ray.origin,offset.normalized,out hit,Mathf.Max(0f,offset.magnitude-0.3f),
-                PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore))continue;
+                PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore))
+            {
+                NavalHullVoxel obstacle=cell.RepairMechanism!=null&&cell.RepairMechanism.IsCannon?NavalVoxelHit.Resolve(hit.collider,hit.point):null;
+                if(obstacle==null||obstacle.RepairMechanism!=cell.RepairMechanism)continue;
+            }
             best=cell;score=distance;
         }
         return best;
@@ -58,7 +83,15 @@ public class NavalPlayerRepair : MonoBehaviour
     {
         if(!Available()||target==null)return;
         if(target.RepairMechanism!=null&&!target.RepairMechanism.CanRepair)
-        {GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,500f),Screen.height-205f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,500f),28f),target.RepairMechanism.Name+": восстановление невозможно");return;}
-        GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,500f),Screen.height-205f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,500f),28f),"Hold R: repair aimed hole (4 sec) | "+Mathf.RoundToInt(elapsed/4f*100f)+"%");
+        {GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,500f),Screen.height-205f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,500f),28f),target.RepairMechanism.Name+(target.RepairMechanism.RepairUsed?": единственный ремонт уже использован":": восстановление невозможно"));return;}
+        if(target.RepairMechanism!=null&&target.RepairMechanism.IsCannon&&!target.RepairMechanism.PartsDelivered&&
+            (hull.CannonSupply==null||!hull.CannonSupply.PlayerHasKit))
+        {
+            string missing=hull.HasCannonStock?"Нужны запчасти: E у ящика в трюме":"Ящик запчастей повреждён — ремонт недоступен";
+            GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,560),Screen.height-205,NavalHudLayout.ContextWidth(Screen.width,Screen.height,560),28),missing);return;
+        }
+        float duration=target.RepairMechanism!=null?target.RepairMechanism.RepairSeconds:4f;
+        string label=target.RepairMechanism!=null&&target.RepairMechanism.IsCannon?"Пушка: удерживай R — ремонт 60 с (один раз)":"Удерживай R — ремонт 4 с";
+        GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,500f),Screen.height-205f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,500f),28f),label+" | "+Mathf.RoundToInt(elapsed/duration*100f)+"%");
     }
 }

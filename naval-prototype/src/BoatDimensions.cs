@@ -1,4 +1,4 @@
-public static class BoatDimensions
+﻿public static class BoatDimensions
 {
     public const float WorldScale = 2f;
     public const float AreaScale = WorldScale * WorldScale;
@@ -15,7 +15,7 @@ public static class BoatDimensions
     public const float DisplacementArea = 72f;
     public const float SinkVolume = HoldArea * 0.8f;
     public const float PumpRate = 1.6f;
-    public const float CannonPortSill = 1.025f;
+    public const float CannonPortSill = .925f;
     public static bool IntersectsCannonPort(float x, float y, float z, float halfX, float halfY, float halfZ)
     {
         return System.Math.Abs(x) + halfX > 2.7f && y + halfY > CannonPortSill &&

@@ -13,7 +13,7 @@ public class NavalStructure : MonoBehaviour
     private readonly List<bool> triggers=new List<bool>();
     private readonly List<GameObject> debris=new List<GameObject>();
     private List<int>[] edges;
-    private bool dirty;
+    private bool dirty,initialCleanup=true;
     private bool[] absent;
     private NavalConnectivityWorkspace connectivity;
     private readonly Dictionary<NavalHullVoxel,int> cellIndices=new Dictionary<NavalHullVoxel,int>();
@@ -66,7 +66,11 @@ public class NavalStructure : MonoBehaviour
         List<List<int>> components=connectivity.Evaluate(edges,absent);
         int main=-1,largest=0;
         for(int i=0;i<components.Count;i++)if(components[i].Count>largest){main=i;largest=components[i].Count;}
-        for(int i=0;i<components.Count;i++)if(i!=main)Drop(components[i],shipVelocity);
+        for(int i=0;i<components.Count;i++)if(i!=main){
+            if(initialCleanup){Debug.Log("[NavalPrototype] Removed unsupported spawn detail: ship="+hull.Definition.Name+" cells="+components[i].Count+" at="+cells[components[i][0]].LocalCenter);foreach(int index in components[i])cells[index].SetMissing(true);}
+            else Drop(components[i],shipVelocity);
+        }
+        initialCleanup=false;
             }
     }
     private void Drop(List<int> component,Vector3 velocity)
@@ -104,7 +108,8 @@ public class NavalStructure : MonoBehaviour
     }
     public void RestoreCell(NavalHullVoxel voxel)
     {
-        if(voxel.RepairMechanism!=null&&!voxel.RepairMechanism.CanRepair)return;
+        if(voxel.RepairMechanism!=null&&(!voxel.RepairMechanism.CanRepair||
+            voxel.RepairMechanism.IsCannon&&!voxel.RepairMechanism.RestoringCannon))return;
         int i;if(!cellIndices.TryGetValue(voxel,out i))return;
         Transform cell=voxel.transform;
         cell.SetParent(parents[i],false);cell.localPosition=positions[i];cell.localRotation=rotations[i];cell.localScale=sizes[i];

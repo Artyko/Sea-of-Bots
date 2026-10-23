@@ -25,7 +25,7 @@ public class NavalSeaLadder : MonoBehaviour
     private void LadderBox(NavalHull hull,Material material,Vector3 point,Vector3 size,bool solid)
     {
         float low=hull.Definition.AboveDeckY(point.y-size.y*.5f),high=hull.Definition.AboveDeckY(point.y+size.y*.5f);
-        point.y=(low+high)*.5f;size.y=high-low;
+        point.y=(low+high)*.5f+hull.Definition.UpperDeckOffset;size.y=high-low;
         hull.AddDecorationBox(transform,material,point,size,solid);
     }
     public bool Usable(int side)
@@ -72,7 +72,7 @@ public class NavalBoarding
             for(int i=0;i<2;i++)
             {
                 float x=i==0?-3.35f:3.35f;
-                if(!ladder.Usable(i)||Mathf.Abs(local.x)<3.05f||local.y>2.6f||local.y<-2.5f)continue;
+                if(!ladder.Usable(i)||Mathf.Abs(local.x)<3.05f||local.y>2.6f+ladder.Hull.Definition.UpperDeckOffset||local.y<-2.5f+ladder.Hull.Definition.UpperDeckOffset)continue;
                 float distance=Vector2.Distance(new Vector2(local.x,local.z),new Vector2(x,ladder.Hull.Definition.LadderZ))*ladder.Hull.WorldScale;
                 if(distance<nearest){nearby=ladder;nearSide=i;nearest=distance;}
             }
@@ -85,7 +85,7 @@ public class NavalBoarding
         if(!Climbing)return;
         float sign=side==0?-1f:1f;
         Vector3 target=stage==0?new Vector3(sign*3.7f,feet.y,selected.Hull.Definition.LadderZ):stage==1?
-            new Vector3(sign*3.7f,selected.Hull.Definition.AboveDeckY(2.55f),selected.Hull.Definition.LadderZ):stage==2?new Vector3(sign*2.2f,selected.Hull.Definition.AboveDeckY(2.55f),selected.Hull.Definition.LadderZ):new Vector3(sign*2.2f,0.86f,selected.Hull.Definition.LadderZ);
+            new Vector3(sign*3.7f,selected.Hull.Definition.BoardingY,selected.Hull.Definition.LadderZ):stage==2?new Vector3(sign*2.2f,selected.Hull.Definition.BoardingY,selected.Hull.Definition.LadderZ):new Vector3(sign*2.2f,selected.Hull.Definition.WeatherDeck+.035f,selected.Hull.Definition.LadderZ);
         feet=Vector3.MoveTowards(feet,target,1.5f*dt);
         CharacterController controller=player.GetComponentInChildren<CharacterController>();
         bool enabled=controller!=null&&controller.enabled;if(enabled)controller.enabled=false;

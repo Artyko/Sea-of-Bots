@@ -7,7 +7,7 @@ public partial class NavalRepairSailor
     private Vector3 bailPickup,bailOutlet;
     private readonly NavalBucketLoad bucketLoad=new NavalBucketLoad();
     private NavalBucketVisual bucket;
-    public float BucketWater {get{return bucketLoad.Amount;}}
+    public float BucketWater {get{return bucketLoad.Amount+fireWater;}}
     private string BailStatus {get{return bailState==1?"Going to water":bailState==2?"Scooping water":bailState==3?"Carrying bucket":"Pouring overboard";}}
     private void BailRoute(Vector3 goal)
     {
@@ -57,7 +57,7 @@ public partial class NavalRepairSailor
                 if(Time.time<scanAt&&hull.HasActiveLeaks)return false;
                 TryFindLeak();if(leak!=null)return false;
             }
-            feet=boat.InverseTransformPoint(robot.transform.position-boat.up*footOffset);
+            feet=boat.InverseTransformPoint(robot.transform.position-Vector3.up*footOffset);
             if(!StartBailing())return false;
         }
         robot.DisableAI();if(route.Count==0)HoldPosition();

@@ -14,7 +14,7 @@ public sealed class NavalShipPhysics : MonoBehaviour
     private readonly HashSet<NavalHullVoxel> pending=new HashSet<NavalHullVoxel>();
     private int attached,loose,staticShapes,invalid;
     private bool fullAudit=true;
-    public void MarkDirty(NavalHullVoxel cell){pending.Add(cell);}
+    public void MarkDirty(NavalHullVoxel cell){NavalPhysicsQueries.Invalidate();pending.Add(cell);}
     public void RequestAudit(){fullAudit=true;}
     public Rigidbody Body {get{return body;}}
     public void Initialize(NavalHull owner)
@@ -33,9 +33,15 @@ public sealed class NavalShipPhysics : MonoBehaviour
     {
         using(NavalPerformance.Measure(NavalPerfArea.HullPose))
         {
-            // Preserve the current render-frame pose before rider carry, raycasts and crew movement.
-            // MovePosition/FixedUpdate would defer it; interpolation would introduce a second visual pose.
-            transform.SetPositionAndRotation(position,rotation);
+            // Move the kinematic actor directly, then explicitly publish its current pose.
+            // Rigidbody setters need not update Transform until the next physics step.
+            // Rider carry, crew deck carry and local queries must see this frame's pose.
+            if(body!=null){
+                bool changed=false;
+                if(!body.position.Equals(position)){body.position=position;changed=true;}
+                if(!body.rotation.Equals(rotation)){body.rotation=rotation;changed=true;}
+                if(changed){body.PublishTransform();NavalPhysicsQueries.Invalidate();}
+            }else {transform.SetPositionAndRotation(position,rotation);NavalPhysicsQueries.Invalidate();}
         }
     }
     public void FinishConstruction()

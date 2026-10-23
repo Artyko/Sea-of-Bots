@@ -80,17 +80,22 @@ class ColliderLifecycleChecks
         {
             GameObject obj=new GameObject("voxel");obj.transform.SetParent(ship.transform,false);
             obj.transform.localPosition=new Vector3((x+.5f)*.25f,(y+.5f)*.25f,(z+.5f)*.25f);obj.transform.localScale=new Vector3(.25f,.25f,.25f);
-            obj.AddComponent<BoxCollider>().size=new Vector3(1,1,1);hull.Voxels.Add(obj.AddComponent<NavalHullVoxel>());
+            obj.AddComponent<BoxCollider>().size=new Vector3(1,1,1);var cell=obj.AddComponent<NavalHullVoxel>();cell.RepairableEquipment=true;hull.Voxels.Add(cell);
         }
         NavalHullColliders manager=ship.AddComponent<NavalHullColliders>();manager.Initialize(hull);NavalHullColliders.FlushAll();
         Check(manager.BatchedCount==64&&manager.ActiveCount==1,"64 original boxes merge into one active proxy");
         foreach(NavalHullVoxel cell in hull.Voxels)Check(cell.ColliderBatched&&!cell.PhysicsCollider.enabled,"no duplicate source colliders");
         NavalHullVoxel damaged=hull.Voxels[0];NavalMergedCollider first=EnabledProxies()[0];
         Check(NavalVoxelHit.Resolve(first.Shape,new Vector3(.125f,.125f,.125f))==damaged,"merged hit returns actual voxel");
+        Check(NavalVoxelHit.Resolve(first.Shape,new Vector3(.125f,-.003f,.125f))==null,"off-surface sweep point reproduces unresolved merged impact");
+        Check(NavalVoxelHit.Resolve(first.Shape,new Vector3(.125f,-.003f,.125f),new Vector3(.125f,0,.125f))==damaged,"same-shape surface fallback recovers actual deck voxel");
+        Check(NavalVoxelHit.Resolve(first.Shape,new Vector3(0,-.003f,0),new Vector3(0,0,0))==damaged,"corner contact recovers without enlarged hit tolerance");
         damaged.Missing=true;manager.MarkDirty(damaged);damaged.PhysicsCollider.enabled=false;
         Check(EnabledProxies().Count==0,"old whole proxy disabled synchronously before any flush");
         foreach(NavalHullVoxel cell in hull.Voxels)Check(cell.PhysicsCollider.enabled==!cell.Missing&&!cell.ColliderBatched,"fallback uses exact originals immediately");
         Check(NavalVoxelHit.Resolve(first.Shape,new Vector3(.125f,.125f,.125f))==null,"stale proxy cannot resolve destroyed cell");
+        Check(NavalVoxelHit.Resolve(first.Shape,new Vector3(.125f,.125f,.125f),new Vector3(.125f,0,.125f))==null,"fallback never revives an invalidated proxy");
+        Check(NavalVoxelHit.Resolve(damaged.PhysicsCollider,new Vector3(.125f,.125f,.125f))==null,"disabled destroyed source is not a valid hit");
         NavalHullColliders.FlushAll();
         foreach(NavalMergedCollider proxy in EnabledProxies())Check(!proxy.Cells.Contains(damaged),"hole absent from every merged shape");
         // Simulate repair with the same notification order as SetMissing.

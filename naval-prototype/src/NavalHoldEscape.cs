@@ -19,7 +19,7 @@ public partial class NavalSailorRescue
     {
         if(ship==null||ship.Root==null)return false;
         Vector3 local=ship.Root.InverseTransformPoint(point);
-        return NavalHoldEscapeRules.InHold(local.x,local.y,local.z,ship.Floor);
+        return NavalHoldEscapeRules.InHold(local.x,local.y,local.z,ship.Floor,ship.Definition.WeatherDeck);
     }
     private void BeginHoldEscape(NavalHull ship)
     {
@@ -30,7 +30,7 @@ public partial class NavalSailorRescue
     private void PlanHoldEscape()
     {
         escapeRoute.Clear();
-        escapeRoute.AddRange(NavalBallastRoutes.Plan(new NavalWalkPoint(escapeFeet.x,escapeFeet.y,escapeFeet.z),new NavalWalkPoint(1.65f,0.825f,1.1f),escapeShip.Definition.Partitions,escapeShip.Definition.StairWidth,escapeShip.Floor,escapeShip.WorldScale));
+        escapeRoute.AddRange(NavalSupplyRoutes.Plan(new NavalWalkPoint(escapeFeet.x,escapeFeet.y,escapeFeet.z),new NavalWalkPoint(1.65f,escapeShip.Definition.WeatherDeck,1.1f),escapeShip.Definition));
     }
     private void EscapeHold(float dt)
     {
@@ -51,14 +51,16 @@ public partial class NavalSailorRescue
         Vector3 offset=ship.TransformVector(movementTarget-escapeFeet),before=escapeFeet;
         Vector3 look=offset;look.y=0f;
         if(look.sqrMagnitude>.01f)robot.transform.rotation=Quaternion.RotateTowards(robot.transform.rotation,Quaternion.LookRotation(look),360f*dt);
-        bool stairs=NavalWalkRoutes.InStairwell(escapeFeet.x,escapeFeet.y,escapeFeet.z,escapeShip.Definition.StairWidth*.5f+.175f,escapeShip.Floor)||NavalWalkRoutes.InStairwell(target.x,target.y,target.z,escapeShip.Definition.StairWidth*.5f+.175f,escapeShip.Floor);
+        bool stairs=NavalShipRoutes.InStairwell(new NavalWalkPoint(escapeFeet.x,escapeFeet.y,escapeFeet.z),escapeShip.Definition)||NavalShipRoutes.InStairwell(new NavalWalkPoint(target.x,target.y,target.z),escapeShip.Definition);
         float speed=worker.DeckWalkSpeed*(stairs?0.8f:1f);
         Vector3 step=Vector3.ClampMagnitude(offset,speed*dt);
         CharacterController body=worker.BodyController;
-        if(body!=null&&body.enabled)body.Move(step+Vector3.down*.3f*dt);else robot.transform.position+=step;
+        if(body!=null&&body.enabled){NavalCrewPassage.Prepare(body);body.Move(step+Vector3.down*.3f*dt);}else robot.transform.position+=step;
         escapeFeet=ship.InverseTransformPoint(robot.transform.position-ship.up*worker.FootOffset);
         worker.BoardingMoved(ship.TransformVector(escapeFeet-before).magnitude);
-        if((escapeRoute.Count>1||escapeFeet.y>=0.65f)&&NavalRouteArrival.Reached(escapeFeet.x,escapeFeet.y,escapeFeet.z,target.x,target.y,target.z,escapeRoute.Count==1))
+        if((escapeRoute.Count>1||escapeFeet.y>=0.65f)&&(stairs?
+            NavalWalkRoutes.Reached(escapeFeet.x-target.x,escapeFeet.y-target.y,escapeFeet.z-target.z,escapeShip.WorldScale):
+            NavalRouteArrival.Reached(escapeFeet.x,escapeFeet.y,escapeFeet.z,target.x,target.y,target.z,escapeRoute.Count==1)))
         {
             escapeRoute.RemoveAt(0);escapeStuck=0f;
             if(escapeRoute.Count==0)

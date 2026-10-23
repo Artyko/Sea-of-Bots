@@ -30,8 +30,8 @@ public sealed class NavalHullColliders : MonoBehaviour
         {
             BoxCollider collider=cell.PhysicsCollider as BoxCollider;
             Transform pose=cell.transform;
-            if(collider==null||!collider.enabled||collider.isTrigger||cell.ManagedRig||cell.MovableEquipment||cell.RepairableEquipment||
-                cell.Missing||cell.Detached||pose.parent!=transform||!AxisAligned(pose)||!Positive(pose.localScale))continue;
+            if(collider==null||!collider.enabled||collider.isTrigger||cell.ManagedRig||cell.MovableEquipment||
+                cell.CargoCollision!=null||cell.Missing||cell.Detached||pose.parent!=transform||!AxisAligned(pose)||!Positive(pose.localScale))continue;
             Vector3 position=pose.localPosition,scale=pose.localScale;
             // Layer, physical material and contact offset must also agree. Built only at construction.
             string key=Mathf.FloorToInt(position.x/2f)+":"+Mathf.FloorToInt(position.y/2f)+":"+Mathf.FloorToInt(position.z/2f)+":"+
@@ -154,7 +154,16 @@ public static class NavalVoxelHit
 {
     public static NavalHullVoxel Resolve(Collider collider,Vector3 point)
     {
-        NavalHullVoxel direct=collider.GetComponent<NavalHullVoxel>();if(direct!=null)return direct;
+        if(collider==null||!collider.enabled)return null;
+        NavalHullVoxel direct=collider.GetComponent<NavalHullVoxel>();if(direct!=null)return direct.Missing?null:direct;
+        NavalCargoProxy cargo=collider.GetComponent<NavalCargoProxy>();if(cargo!=null)return cargo.Resolve(point);
         NavalMergedCollider merged=collider.GetComponent<NavalMergedCollider>();return merged!=null?merged.Resolve(point):null;
+    }
+    public static NavalHullVoxel Resolve(Collider collider,Vector3 point,Vector3 surfacePoint)
+    {
+        NavalHullVoxel cell=Resolve(collider,point);
+        // PhysX sweep contacts at initial overlaps and seams may not lie on the box.
+        // Retry on that same shape's surface, without widening the voxel hit tolerance.
+        return cell!=null?cell:Resolve(collider,surfacePoint);
     }
 }

@@ -1,4 +1,20 @@
-﻿## v106 — запас остойчивости при затоплении
+﻿## v115 — explicit dry centre of gravity
+
+All production ship profiles now set dry CG inside the lower hold, independently of inverse GM tuning. Actual ship profile tests cover dry recovery, free flooding, ballast transfer and capsize. See [calibration, results and limits](STABILITY_V115_CHECKS.md). Older sections describe historical calibrations.
+
+## v114 — посадка и остойчивость галеона
+
+Все шесть пушек и места канониров перенесены на открытую верхнюю палубу. Старые проёмы средней палубы закрыты; наружные лестницы доходят до верхней. Проектная ватерлиния проходит посередине высоты средней палубы: +6,1 м относительно начала корпуса, верхняя палуба на 3,8 м выше моря, осадка около 9,4 м. Просветы трюмов сохранены.
+
+Сухая масса соответствует новой осадке, центр тяжести опущен с +10,5 до +3,6 м относительно начала корпуса (примерно 2,5 м ниже моря). Остойчивость и балласт по-прежнему рассчитываются через распределение массы; ограничения крена нет. Шлюп и бригантина сохраняют прежние параметры. Гидростатика остаётся поперечным прямоугольным приближением, без интегрирования сужения по длине.
+
+Нос и корма сужены, настилы и борта следуют силуэту; бушприт поднят, добавлены пояса обшивки и обрамлённые кормовые окна над водой. Маска океана и активные клетки затопления учитывают сужение, вода не хранится в срезанных углах. Все детали остаются разрушаемыми вокселями.
+
+При активной течи сильнее помпы и крене от 12° разрешён помощник для параллельного ремонта/откачки; от 22° допускается снять последнего канонира и отходить. Обычная небольшая течь не требует снятия второго матроса с пушки.
+
+Расчётная проверка: течь 20 м³/с в течение 20 с, откачка с 18-й секунды и одинаковые волны дали максимум крена 15,5° до изменения и 5,8° после. Это контрольный сценарий, не гарантия выживания при любой пробоине. Проверены границы маски, сохранение объёма воды и балласта, проёмы и прежние профили. Внешний вид и бой в Unity требуют игровой проверки.
+
+## v106 — запас остойчивости при затоплении
 
 Сухой центр тяжести понижен: начальная метацентрическая высота увеличена с 0,025 до 0,10 ширины (1,2 м у шлюпа, 1,8 м у бригантины). Затухание угловой скорости усилено с 0,8 до 1,1 с⁻¹. Масса, вместимость и сила балласта не умножаются; ограничение угла и автоматическое выравнивание не добавлены. При тяжёлом высоком асимметричном затоплении расчёт по-прежнему допускает опрокидывание за 90°.
 
@@ -44,3 +60,15 @@
 ## v109 — повреждённый балласт
 
 Наружное повреждение, соединённое с подводной пробоиной корпуса, заполняет бак до уровня моря. Внутреннее повреждение сливает запас в трюм. Сквозное повреждение далее использует обычный расход корпуса; масса моря добавляется один раз по фактическому приёму воды. У помпы есть отдельный ручной режим «Балласт → море» (Q, удерживать T), не расходующий бюджет на трюм. Полное восстановление оболочки возвращает герметичность; ремонт не удаляет воду сам по себе. Подробности: [FLOOD_RESPONSE.md](FLOOD_RESPONSE.md).
+
+
+v124: galleon design waterline lowered by 1.2 world metres in hull coordinates, raising the dry hull 1.2 m above its former position. Implemented through design displacement, so flooding still sinks it through the common hydrostatic model; no visual-only root offset. Other ship profiles and physical dry CG locations are unchanged.
+
+
+v128: shared automatic ballast pumping now chooses roll or longitudinal water-induced pitch by filtered angular error. Longitudinal transfers move bow water to aft tanks or stern water to forward tanks, preferring the same side; lateral transfers retain their nearest-end selection. Wave pitch is excluded from the correction request. Separate response monitors stop ineffective attempts and fall back to overboard pumping. Q cycles two additional manual modes (bow to stern, stern to bow). Existing pitch response and water mass conservation are retained. Physical obstacle and ocean-wave behaviour still need in-game validation.
+
+
+v144 propulsion/display: ship definitions specify healthy full-throttle speeds of 4.8 m/s (sloop), 4.2 m/s (brigantine), 3.6 m/s (galleon), identically for allied and enemy instances. Shared sail-power scaling and acceleration/coasting remain intact. HUD speed now measures the final horizontal displacement after island/ship/rig collision constraints, including lateral drift and excluding vertical bobbing, in m/s and knots. The ocean currently has no horizontal current, so this is speed through water in the present model; future currents must be subtracted explicitly.
+
+
+v177: Galleon design waterline raised 0.6 world metres (hull sits 0.6 m deeper), through the existing displacement/stability model. Cannon removal radius now caps at brigantine world radius (1.2 m); galleon local radius is 0.3 instead of 0.4. Sloop/brigantine impact radii remain unchanged. Voxel quantization and detached unsupported parts can change the visible final opening.

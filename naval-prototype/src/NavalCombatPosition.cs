@@ -8,17 +8,40 @@ public sealed class NavalCombatPosition
     private Transform opponent;
     private float reviewAt;
     private Vector3 anchor;
-    private int workingSide;
+    private int workingSide,pursuitQuarter;
+    private readonly NavalPursuitMath pursuit=new NavalPursuitMath();
 
-    public void Reset(){opponent=null;reviewAt=0f;workingSide=0;plan.Reset();rangePlan.Reset(0);}
-    public Vector3 Course(Transform own,NavalHull hull,NavalStations guns,Transform enemy,Vector3 enemyVelocity,float ownSpeed,ref float throttle)
+    public void Reset(){pursuit.Reset();pursuitQuarter=0;opponent=null;reviewAt=0f;workingSide=0;plan.Reset();rangePlan.Reset(0);}
+    public Vector3 Course(Transform own,NavalHull hull,NavalStations guns,Transform enemy,Vector3 enemyVelocity,float ownSpeed,ref float throttle,bool targetRetreating=false)
     {
         NavalStations other=NavalStations.ForShip(enemy);
         if(other==null)return enemy.position-own.position;
         if(opponent!=enemy){Reset();opponent=enemy;rangePlan.Reset(own.GetInstanceID()^Random.Range(1,int.MaxValue));}
         Vector3 toward=enemy.position-own.position;toward.y=0f;
         float distance=toward.magnitude;Vector3 radial=toward.normalized;
-        bool reachable=guns.CanReachRange(enemy.position);
+        Vector3 enemyForward=enemy.forward;enemyForward.y=0;enemyForward.Normalize();
+        Vector3 offsetFromTarget=own.position-enemy.position;offsetFromTarget.y=0;
+        bool escaping=enemyVelocity.magnitude>1f&&Vector3.Dot(enemyVelocity,radial)>.8f&&Vector3.Dot(offsetFromTarget.normalized,enemyForward)<-.3f;
+        if(pursuit.Step(Mathf.Min(Time.deltaTime,.05f),targetRetreating,escaping,guns.WorkingGuns>0))
+        {
+            pursuitQuarter=NavalPursuitMath.Quarter(other.PortWorking,other.StarboardWorking,pursuitQuarter);
+            Vector3 enemyRight=Vector3.Cross(Vector3.up,enemyForward);
+            float sternGap=NavalPursuitMath.StandOff(hull.WorldScale,other.ShipScale);
+            Vector3 sternAnchor=enemy.position-enemyForward*sternGap+enemyRight*(pursuitQuarter*sternGap*.4f);
+            Vector3 correctionToStern=sternAnchor-own.position;correctionToStern.y=0;
+            // Keep closing irrespective of ballistic reach; range no longer triggers a distant broadside turn.
+            Vector3 interception=enemyVelocity+correctionToStern*.3f;
+            float targetBearing=Mathf.Atan2(radial.x,radial.z)*Mathf.Rad2Deg;
+            workingSide=NavalBroadsideMath.HelmSide(own.eulerAngles.y,targetBearing,guns.PortWorking,guns.StarboardWorking,workingSide,guns.FiringSideAtShip(enemy));
+            Vector3 firing=Quaternion.Euler(0,NavalBroadsideMath.Heading(targetBearing,workingSide),0)*Vector3.forward;
+            float pursuitBlend=NavalPursuitMath.FireBlend(correctionToStern.magnitude);
+            Vector3 closeCourse=Vector3.Lerp(interception.sqrMagnitude>.01f?interception.normalized:enemyForward,firing,pursuitBlend);
+            // Stay in the rear blind sector rather than sailing beside intact enemy guns.
+            if(Vector3.Dot(offsetFromTarget,enemyForward)>-sternGap*.4f)closeCourse=correctionToStern.normalized;
+            throttle=1f;
+            return closeCourse.sqrMagnitude>.001f?closeCourse:enemyForward;
+        }
+        bool reachable=guns.CanReachShipRange(enemy);
         rangePlan.Step(Mathf.Min(Time.deltaTime,.05f),distance,reachable,hull.WorldScale,other.ShipScale);
         float radius=rangePlan.Desired;
         if(Time.time>=reviewAt)
@@ -34,7 +57,7 @@ public sealed class NavalCombatPosition
         }
         float bearing=Mathf.Atan2(radial.x,radial.z)*Mathf.Rad2Deg;
         workingSide=NavalBroadsideMath.HelmSide(own.eulerAngles.y,bearing,guns.PortWorking,guns.StarboardWorking,
-            workingSide,guns.FiringSideToward(enemy.position));
+            workingSide,guns.FiringSideAtShip(enemy));
         float broadsideBearing=NavalBroadsideMath.Heading(bearing,workingSide);
         Vector3 broadside=Quaternion.Euler(0f,broadsideBearing,0f)*Vector3.forward;
         Vector3 correction=anchor-own.position;correction.y=0f;

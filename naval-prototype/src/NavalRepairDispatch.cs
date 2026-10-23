@@ -2,6 +2,8 @@
 
 public static class NavalRepairDispatch
 {
+    public static bool ResumeGunnery(bool opportunity,bool queued,bool activeJob,bool fire,bool leaks,bool pumpDemand,bool danger,float carriedWater)
+    {return opportunity&&queued&&!activeJob&&!fire&&!leaks&&!pumpDemand&&!danger&&carriedWater<=0f;}
     public static bool CanRecall(bool acceptedPatch,bool leaks,bool otherRepairer,float carriedWater)
     {return carriedWater<=0f&&!acceptedPatch&&(!leaks||otherRepairer);}
     public static float RetryDelay(bool flowing){return flowing?1f:3f;}

@@ -4,8 +4,8 @@ class WorkingBroadsideChecks
  static void Check(bool ok,string text){if(!ok)throw new Exception(text);}
  static void Main()
  {
-  Check(NavalBroadsideMath.HelmSide(0,-90,1,2,2,1)==1,"Visible one-gun port side overrides hidden two-gun side");
-  Check(NavalBroadsideMath.HelmSide(0,90,2,1,1,2)==2,"Symmetric visible starboard priority");
+  Check(NavalBroadsideMath.HelmSide(0,-90,1,2,2,1)==2,"Helm turns to two-gun starboard while port gun continues firing");
+  Check(NavalBroadsideMath.HelmSide(0,90,2,1,1,2)==1,"Symmetric stronger port battery priority");
   Check(NavalBroadsideMath.HelmSide(0,0,0,1,1,0)==2,"Destroyed side forces surviving side");
   Check(NavalBroadsideMath.HelmSide(0,179,1,1,0,0)==2,"Choose shorter starboard orientation");
   Check(NavalBroadsideMath.HelmSide(0,-179,1,1,0,0)==1,"Choose shorter port orientation");
@@ -38,6 +38,6 @@ class WorkingBroadsideChecks
    Check(acquired,"Surviving broadside acquires target from every starting heading with real rudder/headway");
   }
   Check(left&&right,"Both turn directions used");
-  Console.WriteLine("PASS: visible gun priority, destroyed-side recovery, 9216 course/waypoint cases and 48 moving-hull turn acquisitions in both directions.");
+  Console.WriteLine("PASS: stronger helm battery priority, destroyed-side recovery, course/waypoint cases and 48 moving-hull turn acquisitions in both directions.");
  }
 }

@@ -20,6 +20,9 @@ public class NavalWater : MonoBehaviour
     private readonly List<Vector3> outside = new List<Vector3>(10);
     private const int Count = 101;
     private readonly NavalWaveField waveField=new NavalWaveField(Count);
+    private readonly NavalOceanNormals normalField=new NavalOceanNormals(Count);
+    private readonly float[] heights=new float[Count*Count];
+    private readonly List<Vector3> surfaceNormals=new List<Vector3>(28000);
     private const float Spacing = 3f;
     private const float Half = 50f;
     private float nextMeshAt;
@@ -118,16 +121,21 @@ public class NavalWater : MonoBehaviour
                     * Mathf.Sin(relative.z * 2f + simulationTime * 4f);
             }
             vertices[i].y = h - waterPosition.y;
+            heights[i]=vertices[i].y;
             minY=Mathf.Min(minY,vertices[i].y);maxY=Mathf.Max(maxY,vertices[i].y);
         }
         surfaceBounds=new Bounds(new Vector3(offsetX,(minY+maxY)*.5f,offsetZ),new Vector3(2f*Half*Spacing,maxY-minY,2f*Half*Spacing));
         indices.Clear();
         clippedVertices.Clear(); clippedVertices.AddRange(vertices);
         PrepareClip(boat);
+        int minCellX=Mathf.FloorToInt((clipMin.x-offsetX)/Spacing+Half),maxCellX=Mathf.FloorToInt((clipMax.x-offsetX)/Spacing+Half);
+        int minCellZ=Mathf.FloorToInt((clipMin.z-offsetZ)/Spacing+Half),maxCellZ=Mathf.FloorToInt((clipMax.z-offsetZ)/Spacing+Half);
         for (int z = 0; z < Count - 1; z++) for (int x = 0; x < Count - 1; x++)
         {
             int a = z * Count + x, b = a + 1, c = a + Count, d = c + 1;
-            AddTriangle(a, c, b, boat); AddTriangle(b, c, d, boat);
+            if(clipActive&&x>=minCellX&&x<=maxCellX&&z>=minCellZ&&z<=maxCellZ)
+            {AddTriangle(a, c, b, boat); AddTriangle(b, c, d, boat);}
+            else {indices.Add(a);indices.Add(c);indices.Add(b);indices.Add(b);indices.Add(c);indices.Add(d);}
         }
         // Water remains visible when viewed upward from below the surface.
         int frontCount = indices.Count;
@@ -138,11 +146,18 @@ public class NavalWater : MonoBehaviour
         }
         frontCount=indices.Count;
         int frontVertices = clippedVertices.Count;
+        normalField.Build(heights,Spacing);surfaceNormals.Clear();
+        for(int i=0;i<frontVertices;i++)
+        {
+            Vector3 p=clippedVertices[i];NavalSurfaceNormal n=i<vertices.Length?normalField.At(i):normalField.Sample((p.x-offsetX)/Spacing+Half,(p.z-offsetZ)/Spacing+Half);
+            surfaceNormals.Add(new Vector3(n.X,n.Y,n.Z));
+        }
         for (int i = 0; i < frontVertices; i++) clippedVertices.Add(clippedVertices[i]);
+        for (int i = 0; i < frontVertices; i++) surfaceNormals.Add(-surfaceNormals[i]);
         for (int i = 0; i < frontCount; i += 3)
         { indices.Add(indices[i + 2] + frontVertices); indices.Add(indices[i + 1] + frontVertices); indices.Add(indices[i] + frontVertices); }
         mesh.Clear(); mesh.SetVertices(clippedVertices); mesh.SetTriangles(indices, 0, false);
-        mesh.RecalculateNormals(); mesh.RecalculateBounds();
+        mesh.SetNormals(surfaceNormals);mesh.bounds=surfaceBounds;
         buildWatch.Stop();BuildMilliseconds=(float)buildWatch.Elapsed.TotalMilliseconds;
             }
     }
@@ -161,12 +176,12 @@ public class NavalWater : MonoBehaviour
         Vector3 vc = waterToClip.MultiplyPoint3x4(pc);
         // Cut at the middle of the solid walls, not outside them. The walls cover the seam.
         // A centroid test leaves whole triangular holes and lets overlapping corners enter the hold.
-        for (int plane = 0; plane < 5; plane++)
+        for (int plane = 0; plane < clipPlanes; plane++)
             if (Distance(va, plane) >= 0f && Distance(vb, plane) >= 0f && Distance(vc, plane) >= 0f)
             { indices.Add(a); indices.Add(b); indices.Add(c); return; }
         polygon.Clear(); polygon.Add(va); polygon.Add(vb); polygon.Add(vc);
         // Subtract the convex hull mask. Emit only disjoint outside pieces at each plane.
-        for (int plane = 0; plane < 5 && polygon.Count >= 3; plane++)
+        for (int plane = 0; plane < clipPlanes && polygon.Count >= 3; plane++)
         {
             Split(polygon, plane);
             Emit(outside, boat);
@@ -174,10 +189,12 @@ public class NavalWater : MonoBehaviour
         }
         // Remaining polygon lies inside the boat below the rim and is intentionally discarded.
     }
+    private int clipPlanes=5;
     private float clipRim=BoatDimensions.Rim;
     private bool PrepareClip(Transform boat)
     {
         NavalSeaLadder equipment=boat.GetComponent<NavalSeaLadder>();
+        clipPlanes=equipment!=null&&equipment.Hull.Definition.DeckCount>2?9:5;
         clipRim=equipment!=null?equipment.Hull.Definition.RimY:BoatDimensions.Rim;
         waterToClip=boat.worldToLocalMatrix*transform.localToWorldMatrix;
         clipToWater=transform.worldToLocalMatrix*boat.localToWorldMatrix;
@@ -213,7 +230,8 @@ public class NavalWater : MonoBehaviour
             case 1: return -p.x - BoatDimensions.HalfWidth;
             case 2: return p.z - BoatDimensions.HalfLength;
             case 3: return -p.z - BoatDimensions.HalfLength;
-            default: return p.y - clipRim;
+            case 4: return p.y - clipRim;
+            default: return NavalHullOutline.EndPlane(p.x,p.z,plane-5);
         }
     }
     private void Split(List<Vector3> source, int plane)

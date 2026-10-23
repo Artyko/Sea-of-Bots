@@ -9,7 +9,7 @@ class BrigantineChecks
         var old=NavalShipDefinition.Sloop;var brig=NavalShipDefinition.Brigantine;
         Check((.825f-BoatDimensions.HoldFloor)*brig.Scale/NavalWalkRoutes.StepCount<.25f,"Brig stairs stay below controller step height");
         Check(old.Scale==2f&&old.GunCount==2&&old.MastZ.Length==1&&old.Compartments,"Sloop size, guns and crew retained with shared compartments");
-        Check(brig.Scale==3f&&brig.GunCount==4&&brig.CrewCount==4&&brig.MastZ.Length==2&&brig.Compartments,"Brigantine profile");
+        Check(brig.Scale==3f&&brig.GunCount==4&&brig.CrewCount==5&&brig.MastZ.Length==2&&brig.Compartments,"Brigantine profile");
         Check(NavalShipDefinition.GunSide(0)==NavalShipDefinition.GunSide(2)&&NavalShipDefinition.GunZ(0)!=NavalShipDefinition.GunZ(2),"Two distinct guns per broadside");
         Check(Math.Abs(NavalShipDefinition.HelmZ(brig)-brig.MastZ[1])>1f,"Helm clear of aft mast");
         var grid=new NavalFloodGrid(12,24,BoatDimensions.HoldWidth,BoatDimensions.HoldLength,brig.Scale,4f);

@@ -2,6 +2,9 @@
 public static class NavalGunneryMath
 {
     public const float ReloadSeconds=5f;
+    public const float MinimumPitch=-25f,MaximumPitch=45f;
+    public static bool WithinTraverse(float yaw,float pitch)
+    {return Math.Abs(yaw)<=30f&&pitch>=MinimumPitch&&pitch<=MaximumPitch;}
     private static readonly float[] weights={4f,3f,.5f,1.5f};
     // Waterline, guns, mast, wheel. Avoid repeating the last type when possible.
     public static int Choose(float roll,int previous,bool[] available)

@@ -27,10 +27,10 @@ public sealed class NavalBallastTank
     public void Spill(NavalFloodGrid grid)
     {
         if(SpillPending<=0)return;
-        float room=0;for(int i=0;i<grid.Water.Length;i++)room+=Math.Max(0,grid.MaxCellVolume-grid.Water[i]);
+        float room=0;for(int i=0;i<grid.Water.Length;i++)room+=Math.Max(0,grid.CellCapacity(i)-grid.Water[i]);
         float budget=Math.Min(room,SpillPending),released=0;
         if(room<=0)return;
-        for(int i=0;i<grid.Water.Length;i++)released+=grid.Add(i,budget*Math.Max(0,grid.MaxCellVolume-grid.Water[i])/room);
+        for(int i=0;i<grid.Water.Length;i++)released+=grid.Add(i,budget*Math.Max(0,grid.CellCapacity(i)-grid.Water[i])/room);
         SpillPending=Math.Max(0,SpillPending-released);
     }
     public void Reseal(){OuterBroken=InnerBroken=false;}
@@ -53,6 +53,14 @@ public static class NavalBallastWall
 // Unobstructed water overtopping an intact lip, reduced by the interior water level.
 public static class NavalDownfloodMath
 {
+    // Pressure is evaluated at the opening's X/Z, not at the flood cell centre.
+    // A dry column has no interior backpressure. Inverted height columns cannot
+    // represent a free surface; do not turn their floor into an imaginary seal.
+    public static float InsideAtOpening(float lipWorldY,float lipLocalY,float floor,float depth,float upY,float scale)
+    {
+        if(depth<=.001f||upY<=.05f)return float.NegativeInfinity;
+        return lipWorldY+(floor+depth-lipLocalY)*upY*scale;
+    }
     public static float OverflowRate(float sea,float lip,float inside,float width)
     {
         float head=Math.Max(0,sea-Math.Max(lip,inside));
@@ -65,12 +73,13 @@ public sealed class NavalDownfloodEmergency
 {
     private float reserve;
     public bool Active {get;private set;}
-    public void Step(float dt,bool activeLeaks,float openingInflow,float heel)
+    public void Step(float dt,bool activeLeaks,float openingInflow,float heel,float pitch=0)
     {
         if(activeLeaks){reserve=0;Active=false;return;}
-        bool flooding=openingInflow>.02f&&Math.Abs(heel)>=6;
+        float tilt=Math.Max(Math.Abs(heel),Math.Abs(pitch));
+        bool flooding=openingInflow>.02f&&tilt>=6;
         if(flooding)reserve=8;else reserve=Math.Max(0,reserve-Math.Max(0,dt));
-        Active=flooding||reserve>0&&Math.Abs(heel)>3;
+        Active=flooding||reserve>0&&tilt>3;
     }
 }
 
@@ -118,26 +127,31 @@ public sealed class NavalBallastTrim
 // All open-hold cells on the low side are valid intakes, including the former central corridor.
 public static class NavalBallastTransfer
 {
-    public static int Source(NavalFloodGrid grid,bool port)
+    public static int Source(NavalFloodGrid grid,bool port){return Source(grid,port,false);}
+    private static int Source(NavalFloodGrid grid,bool negative,bool longitudinal)
     {
         int best=-1;float most=.00001f;
-        for(int i=0;i<grid.Water.Length;i++)if((grid.X(i)<0)==port&&grid.Water[i]>most){best=i;most=grid.Water[i];}
+        for(int i=0;i<grid.Water.Length;i++)if(((longitudinal?grid.Z(i):grid.X(i))<0)==negative&&grid.Water[i]>most){best=i;most=grid.Water[i];}
         return best;
     }
     public static float Move(NavalFloodGrid grid,NavalBallastTank[] tanks,bool fromPort,float requested)
+    {return MoveAxis(grid,tanks,fromPort,requested,false);}
+    public static float MoveLongitudinal(NavalFloodGrid grid,NavalBallastTank[] tanks,bool fromStern,float requested)
+    {return MoveAxis(grid,tanks,fromStern,requested,true);}
+    private static float MoveAxis(NavalFloodGrid grid,NavalBallastTank[] tanks,bool negative,float requested,bool longitudinal)
     {
         float moved=0;
         for(int pass=0;pass<16&&requested-moved>.00001f;pass++)
         {
-            int source=Source(grid,fromPort);NavalBallastTank stored=null,target=null;
+            int source=Source(grid,negative,longitudinal);NavalBallastTank stored=null,target=null;
             if(source<0)foreach(var tank in tanks)
-                if(tank!=null&&!tank.Broken&&(tank.X<0)==fromPort&&tank.Water>.00001f&&(stored==null||tank.Water>stored.Water))stored=tank;
+                if(tank!=null&&!tank.Broken&&((longitudinal?tank.Z:tank.X)<0)==negative&&tank.Water>.00001f&&(stored==null||tank.Water>stored.Water))stored=tank;
             if(source<0&&stored==null)break;
-            float z=source>=0?grid.Z(source):stored.Z,best=float.MaxValue;
+            float cross=source>=0?(longitudinal?grid.X(source):grid.Z(source)):(longitudinal?stored.X:stored.Z),best=float.MaxValue;
             foreach(var tank in tanks)
             {
-                if(tank==null||tank.Broken||(tank.X<0)==fromPort||tank.Capacity-tank.Water<.00001f)continue;
-                float distance=Math.Abs(tank.Z-z);if(distance<best){target=tank;best=distance;}
+                if(tank==null||tank.Broken||((longitudinal?tank.Z:tank.X)<0)==negative||tank.Capacity-tank.Water<.00001f)continue;
+                float distance=Math.Abs((longitudinal?tank.X:tank.Z)-cross);if(distance<best){target=tank;best=distance;}
             }
             if(target==null)break;
             float amount=source>=0?target.Fill(grid,source,requested-moved):target.Receive(stored.Drain(Math.Min(requested-moved,target.Capacity-target.Water)));

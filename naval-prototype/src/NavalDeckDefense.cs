@@ -7,7 +7,6 @@ public class NavalDeckDefense
     private readonly NavalRepairSailor[] workers;
     private Character intruder;
     private float scanAt;
-    private Matrix4x4 previousBoat;
     private static readonly MethodInfo SetOpponent=typeof(AIController).GetMethod("SetTargetOpponentCharacter",BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic);
     public int Guard {get;private set;}
     public NavalDeckDefense(NavalHull ship,Character[] sailors,NavalRepairSailor[] repair)
@@ -17,12 +16,12 @@ public class NavalDeckDefense
     private bool OnDeck(Character character)
     {
         if(character==null)return false;
-        Vector3 local=hull.Root.InverseTransformPoint(character.transform.position);
-        if(!NavalBoardingRules.EnemyOnDeck(character.IsAlive(),character.IsNeutral,false,local.x,local.y,local.z))return false;
-        RaycastHit hit;
-        return Physics.Raycast(character.transform.position+hull.Root.up*0.2f,-hull.Root.up,out hit,3.5f,
-            PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore)&&hit.collider.transform.IsChildOf(hull.Root)&&
-            hull.Root.InverseTransformPoint(hit.point).y>=0.55f;
+        for(int i=0;i<crew.Length;i++)if(Alive(i))
+        {
+            NavalBoarder navigator=crew[i].GetComponent<NavalBoarder>();
+            return navigator!=null&&navigator.EnemyAboard(character);
+        }
+        return false;
     }
     public void Tick(int[] roles,bool helmUseful)
     {
@@ -50,30 +49,20 @@ public class NavalDeckDefense
                 if(score<best){best=score;chosen=i;}
             }
             if(chosen<0)return;
-            Guard=chosen;workers[Guard].BeginDefense();crew[Guard].ActivateAI();
-            previousBoat=hull.Root.localToWorldMatrix;
+            Guard=chosen;
         }
-        Character sailor=crew[Guard];
-        CharacterController controller=sailor.GetComponentInChildren<CharacterController>();
-        bool enabled=controller!=null&&controller.enabled;if(enabled)controller.enabled=false;
-        sailor.transform.position=hull.Root.TransformPoint(previousBoat.inverse.MultiplyPoint3x4(sailor.transform.position));
-        if(enabled)controller.enabled=true;
-        previousBoat=hull.Root.localToWorldMatrix;
-        FirstPersonMover mover=sailor as FirstPersonMover;
-        AIController ai=mover!=null?mover.GetAIController():sailor.GetComponent<AIController>();
-        if(ai!=null){ai.SetTargetOverrides(false,false);if(ai.GetTargetOpponentCharacter()!=intruder&&SetOpponent!=null)SetOpponent.Invoke(ai,new object[]{intruder});}
-        // Never pursue a boarder off the ship: a swimmer ceases to be a valid target.
-        Vector3 position=hull.Root.InverseTransformPoint(sailor.transform.position);
-        if(Mathf.Abs(position.x)>3.2f||Mathf.Abs(position.z)>6.2f||position.y<0.4f)Stop();
+        NavalBoarder defense=crew[Guard].GetComponent<NavalBoarder>();
+        if(defense==null){Stop();return;}
+        defense.Defend(intruder);
     }
+
     public void Stop()
     {
         if(Guard>=0&&workers[Guard]!=null&&crew[Guard]!=null)
         {
-            crew[Guard].DisableAI();
-            FirstPersonMover mover=crew[Guard] as FirstPersonMover;
-            if(mover!=null&&mover.GetAIController()!=null&&SetOpponent!=null)SetOpponent.Invoke(mover.GetAIController(),new object[]{null});
-            if(!workers[Guard].Rescuing)workers[Guard].EndDefense();
+            NavalBoarder defense=crew[Guard].GetComponent<NavalBoarder>();
+            if(defense!=null)defense.StopDefense();
+            else if(!workers[Guard].Rescuing)workers[Guard].EndDefense();
         }
         Guard=-1;
     }

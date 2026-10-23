@@ -65,12 +65,13 @@ public sealed class NavalStabilityMath
     public float AngularVelocity {get;private set;}
     public float Waterline {get;private set;}
     public float RightingArm {get;private set;}
-    public NavalStabilityMath(float scale,float floor,float rim,float initialGMFraction=DefaultGMFraction)
+    public NavalStabilityMath(float scale,float floor,float rim,float initialGMFraction=DefaultGMFraction,float designWaterline=0,float dryCenterY=float.NaN)
     {
         Beam=BoatDimensions.HalfWidth*2*scale;Bottom=floor*scale;Top=rim*scale;Length=BoatDimensions.HalfLength*2*scale;
-        double draft=-Bottom;DryMass=Beam*draft*Length;
-        // A low dry CG gives reserve stability against free-water motion. It is fixed, never changed by pump commands.
-        DryY=Bottom+draft*.5+Beam*Beam/(12*draft)-Beam*initialGMFraction;
+        double draft=designWaterline*scale-Bottom;DryMass=Beam*draft*Length;
+        // Production profiles specify their physical dry CG independently of GM.
+        // The inverse-GM fallback preserves historical comparison fixtures only.
+        DryY=float.IsNaN(dryCenterY)?Bottom+draft*.5+Beam*Beam/(12*draft)-Beam*initialGMFraction:dryCenterY;
         DryInertia=DryMass*((Beam*Beam+(Top-Bottom)*(Top-Bottom))/12+DryY*DryY);
     }
     public void Observe(float actualAngle)

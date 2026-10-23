@@ -40,7 +40,7 @@ class RetreatChecks
  early.Step(.75f,5f);Check(early.RepairRetreat&&early.Critical,"Severe flood activates both stages");
  early.Step(.6f,5f);Check(early.RepairRetreat&&!early.Critical,"Stop new bucket trips before retreat finishes");
  var sloop=NavalShipDefinition.Sloop;
- Check(sloop.Compartments&&sloop.GunCount==2&&sloop.CrewCount==2,"Sloop gets systems with original crew and guns");
+ Check(sloop.Compartments&&sloop.GunCount==2&&sloop.CrewCount==4,"Sloop gets systems with expanded crew and original guns");
  Check(NavalCompartmentMath.WallX-sloop.StairWidth*.5f>.8f,"Sloop stair leaves side corridors clear");
  Check(sloop.StairWidth*sloop.Scale>2f,"Stair remains wide enough for robots and player");
  Console.WriteLine("Retreat and sloop layout checks passed");

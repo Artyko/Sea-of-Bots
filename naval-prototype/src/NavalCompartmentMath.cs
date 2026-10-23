@@ -10,7 +10,7 @@ public static class NavalCompartmentMath
     public static float Move(NavalFloodGrid grid,int from,int to,float requested)
     {
         if(from==to)return 0f;
-        float amount=Math.Min(Math.Max(0f,requested),Math.Min(grid.Water[from],grid.MaxCellVolume-grid.Water[to]));
+        float amount=Math.Min(Math.Max(0f,requested),Math.Min(grid.Water[from],grid.CellCapacity(to)-grid.Water[to]));
         float removed=-grid.Add(from,-amount);grid.Add(to,removed);return removed;
     }
     public static bool NeedsTransfer(float left,float right,float heel)

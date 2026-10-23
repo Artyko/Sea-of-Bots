@@ -4,35 +4,37 @@ using UnityEngine;
 // Shared equipment for any definition with watertight compartments.
 public partial class NavalBilgeSystem : MonoBehaviour
 {
-    private readonly List<NavalHullVoxel> walls=new List<NavalHullVoxel>(),pumpCells=new List<NavalHullVoxel>();
+    private readonly List<NavalHullVoxel> walls=new List<NavalHullVoxel>();
     private NavalHull hull;
     private FirstPersonMover player;
-    private Transform crank;
+
     private int cachedRevision=-1;
-    private NavalRepairableMechanism pumpMechanism;
+
     private readonly Dictionary<int,Vector3> apertures=new Dictionary<int,Vector3>();
     private readonly List<NavalHullVoxel> damagedWalls=new List<NavalHullVoxel>();
-    public NavalRepairSailor Operator;
+
     public bool PlayerInteracting {get;private set;}
     private bool playerPump;
-    private float pumpLastWork=-100f,pumpPhase;
-    private bool lastTransfer;
+    private NavalPumpStation contextPump;
     private float nextStatusAt;
+    private int pumpPlanFrame=-1,pumpObserveFrame=-1;
     private int statusKind=-1;
-    private static readonly string[] pumpModes={"Авто","За борт","Левый -> правые ёмкости","Правый -> левые ёмкости","Балласт -> море"};
+    private static readonly string[] pumpModes={"Авто","За борт","Левый -> правые ёмкости","Правый -> левые ёмкости","Балласт -> море","Нос -> кормовые ёмкости","Корма -> носовые ёмкости"};
     private int mode; // 0 automatic, 1 bilge then ballast overboard, 2 port->starboard, 3 reverse, 4 ballast only overboard
     public Vector3 PumpPost {get{return new Vector3(0f,hull.Floor,-4.9f);}}
     public string Status {get;private set;}
-    public bool Functional {get{return pumpMechanism!=null&&pumpMechanism.Functional;}}
-    public bool NeedsRepair {get{return pumpMechanism!=null&&pumpMechanism.NeedsRepair;}}
-    private void StopBrokenPump()
-    {
-        ReleasePlayer();pumpLastWork=-100f;statusKind=-1;Status=pumpMechanism!=null&&pumpMechanism.Destroyed?"Pump destroyed":"Pump damaged";
-        if(Operator!=null){NavalRepairSailor worker=Operator;Operator=null;worker.CancelPumpDuty();}
-        if(crank!=null)crank.localRotation=Quaternion.identity;
-    }
+    public bool Functional {get{foreach(var station in pumps)if(station.Functional)return true;return false;}}
+    public bool NeedsRepair {get{foreach(var station in pumps)if(station.Mechanism.NeedsRepair)return true;return false;}}
+    public float LongitudinalList {get{return Mathf.Clamp(hull.WaterLongitudinalMoment/(BoatDimensions.HalfHoldArea*hull.VolumeScale)*15f,-15f,15f);}}
     public bool UrgentTrim {get{return Functional&&hull.UrgentTrim;}}
-    public bool WantsOperator {get{return Functional&&!hull.Sunk&&(UrgentTrim||hull.Flood.Total>1f||BallastVolume>1f&&(trimPlan.WantsTransfer||Mathf.Abs(NavalHullStability.Roll(transform))>6f));}}
+    private readonly NavalPumpDemand crewDemand=new NavalPumpDemand();
+    public void UpdateCrewDemand(float dt)
+    {
+        if(!Functional||hull.Sunk){crewDemand.Reset();return;}
+        crewDemand.Step(dt,RawOperatorDemand,hull.Flood.Total<.15f&&!UrgentTrim&&Mathf.Abs(LongitudinalList)<3f);
+    }
+    public bool WantsOperator {get{return Functional&&!hull.Sunk&&(crewDemand.Active||RawOperatorDemand);}}
+    private bool RawOperatorDemand {get{return Functional&&!hull.Sunk&&(UrgentTrim||hull.Flood.Total>1f||BallastVolume>1f&&(trimPlan.WantsTransfer||Mathf.Abs(NavalHullStability.Roll(transform))>6f||Mathf.Abs(LongitudinalList)>3f));}}
     public void Initialize(NavalHull owner,FirstPersonMover observer,Material wood,Material trim,Material metal)
     {
         hull=owner;player=observer;owner.Bilge=this;
@@ -70,17 +72,7 @@ public partial class NavalBilgeSystem : MonoBehaviour
         BuildShields(trim);
         }
         BuildBallast(wood,trim);
-        int first=hull.Voxels.Count;
-        hull.AddDecorationBox(transform,metal,PumpPost+new Vector3(0f,.3f,NavalMaintenanceMath.PumpOffsetZ),new Vector3(.5f,.6f,.5f),true);
-        hull.AddDecorationBox(transform,trim,PumpPost+new Vector3(0f,.65f,NavalMaintenanceMath.PumpOffsetZ),new Vector3(.8f,.12f,.15f),true);
-        crank=new GameObject("Bilge pump handle").transform;crank.SetParent(transform,false);crank.localPosition=PumpPost+new Vector3(0f,.65f,NavalMaintenanceMath.PumpOffsetZ);
-        // Two visible pipes lead from the pump toward side compartment inlets.
-        for(int side=-1;side<=1;side+=2)
-            hull.AddDecorationBox(transform,metal,new Vector3(side*1.4f,hull.Floor+.13f,-5.45f),new Vector3(2.8f,.12f,.12f),true);
-        // Body, handle and inlet pipes are one damageable mechanism.
-        for(int i=first;i<hull.Voxels.Count;i++){hull.Voxels[i].RepairableEquipment=true;pumpCells.Add(hull.Voxels[i]);}
-        foreach(NavalHullVoxel cell in pumpCells)if(cell.LocalCenter.y>hull.Floor+.6f)cell.transform.SetParent(crank,true);
-        pumpMechanism=new NavalRepairableMechanism(hull,pumpCells,true);
+        for(int deck=0;deck<hull.Definition.MaintenanceDeckCount;deck++)BuildPumpStation(hull.Definition.MaintenanceFloor(deck),trim,metal);
     }
     private NavalHullVoxel Wall(Vector3 point,Vector3 size,Material material)
     {NavalHullVoxel c=hull.AddVoxel(transform,material,point,size,false,true);c.InternalBarrier=true;walls.Add(c);return c;}
@@ -150,23 +142,34 @@ public partial class NavalBilgeSystem : MonoBehaviour
         {most=hull.Flood.Water[i];selected=i;}
         return selected;
     }
-    public void Pump(float dt,bool automatic)
+    public void Pump(float dt,bool automatic,NavalPumpStation station=null)
     {
-        if(!Functional){StopBrokenPump();return;}
+        if(station==null)station=playerPump?playerStation:NearestPump(PumpPost,false);
+        if(station==null||!station.Functional){if(station!=null)StopStation(station);return;}
         if(automatic?!WantsOperator:hull.Flood.Total+BallastVolume<=.00001f)return;
         float processed=0f;
         int selectedMode=automatic?0:mode;
         float heel=NavalHullStability.Roll(transform);
-        if(selectedMode==0)trimPlan.Update(dt,NavalBroadsideMath.Delta(hull.Stability.WaveRoll,heel),UrgentTrim);
-        bool transfer=(selectedMode==2||selectedMode==3)||selectedMode==0&&trimPlan.WantsTransfer&&NavalBallastTrim.AllowsTransfer(hull.HasActiveLeaks,hull.Inflow,UrgentTrim);
+        if(selectedMode==0&&pumpPlanFrame!=Time.frameCount)
+        {
+            pumpPlanFrame=Time.frameCount;
+            trimPlan.Update(dt,NavalBroadsideMath.Delta(hull.Stability.WaveRoll,heel),UrgentTrim);
+            // Pitch is evaluated from water mass, excluding the passing wave slope.
+            pitchPlan.Update(dt,LongitudinalList,Mathf.Abs(LongitudinalList)>3f);
+        }
+        bool longitudinal=selectedMode==5||selectedMode==6||selectedMode==0&&pitchPlan.WantsTransfer&&
+            (!trimPlan.WantsTransfer||Mathf.Abs(pitchPlan.FilteredHeel)>Mathf.Abs(trimPlan.FilteredHeel));
+        bool transfer=(selectedMode==2||selectedMode==3||selectedMode==5||selectedMode==6)||selectedMode==0&&(longitudinal||trimPlan.WantsTransfer)&&NavalBallastTrim.AllowsTransfer(hull.HasActiveLeaks,hull.Inflow,UrgentTrim);
         bool fromPort=selectedMode==2||selectedMode==0&&trimPlan.FilteredHeel>0;
+        bool fromStern=selectedMode==6||selectedMode==0&&pitchPlan.FilteredHeel<0;
+        bool attempted=transfer;
         if(transfer)
         {
-            processed=NavalBallastTransfer.Move(hull.Flood,transferTanks,fromPort,NavalMaintenanceMath.PumpTransferRate*dt);
+            processed=longitudinal?NavalBallastTransfer.MoveLongitudinal(hull.Flood,transferTanks,fromStern,NavalMaintenanceMath.PumpTransferRate*dt):NavalBallastTransfer.Move(hull.Flood,transferTanks,fromPort,NavalMaintenanceMath.PumpTransferRate*dt);
             transfer=processed>.00001f;
 
         }
-        if(selectedMode==0)trimPlan.Observe(dt,processed,transfer);
+        if(selectedMode==0&&pumpObserveFrame!=Time.frameCount){pumpObserveFrame=Time.frameCount;trimPlan.Observe(dt,longitudinal?0:processed,attempted&&!longitudinal);pitchPlan.Observe(dt,longitudinal?processed:0,attempted&&longitudinal);}
         if(!transfer)
         {
             float budget=NavalMaintenanceMath.PumpOutRate*dt;
@@ -175,33 +178,38 @@ public partial class NavalBilgeSystem : MonoBehaviour
             processed=NavalMaintenanceMath.PumpOutRate*dt-budget;
 
         }
-        if(processed>.00001f){pumpLastWork=Time.time;pumpPhase=Mathf.Repeat(pumpPhase+dt/1.2f,1f);lastTransfer=transfer;}
-        int kind=transfer?(fromPort?2:3):selectedMode==4?4:automatic&&trimPlan.Cooldown>0?5:1;
+        if(processed>.00001f){station.LastWork=Time.time;station.Phase=Mathf.Repeat(station.Phase+dt/1.2f,1f);station.LastTransfer=transfer;}
+        int kind=transfer?(longitudinal?(fromStern?7:6):(fromPort?2:3)):selectedMode==4?4:automatic&&trimPlan.Cooldown>0?5:1;
         if(kind!=statusKind||Time.unscaledTime>=nextStatusAt)
         {
             statusKind=kind;nextStatusAt=Time.unscaledTime+.2f;
-            Status=transfer?"Transfer "+(fromPort?"port -> starboard":"starboard -> port")+" | "+(processed/Mathf.Max(.001f,dt)).ToString("F1")+" m3/s":
+            Status=transfer?"Transfer "+(longitudinal?(fromStern?"stern -> bow":"bow -> stern"):(fromPort?"port -> starboard":"starboard -> port"))+" | "+(processed/Mathf.Max(.001f,dt)).ToString("F1")+" m3/s":
                 kind==4?"Ballast -> sea":kind==5?"Trim ineffective: pumping overboard":"Pumping overboard";
             Status+=" | Sealed ballast: "+BallastVolume.ToString("F1")+" m3";
         }
-        if(crank!=null)crank.localRotation=Quaternion.Euler(Mathf.Sin(Time.time*8f)*25f,0f,0f);
+        if(station.Crank!=null)station.Crank.localRotation=Quaternion.Euler(Mathf.Sin(Time.time*8f)*25f,0f,0f);
     }
     private void Update()
     {
         PlayerInteracting=false;
-        bool working=Functional;if(!working)StopBrokenPump();
-        if(player==null||!player.IsAlive()||!player.IsPlayerInputEnabled()||Time.timeScale==0f||NavalTestWorld.Active!=null&&NavalTestWorld.Active.ShipMenuOpen)return;
+        foreach(var station in pumps)if(!station.Functional&&(station.Operator!=null||PlayerUsingStation(station)))StopStation(station);
+        bool working=Functional;
+        if(player==null||!player.IsAlive()||!player.IsPlayerInputEnabled()){ReleasePlayer();return;}
+        if(Time.timeScale==0f||NavalTestWorld.Active!=null&&NavalTestWorld.Active.ShipMenuOpen)return;
         Vector3 feet=transform.InverseTransformPoint(player.transform.position-Vector3.up*1f);
-        bool near=Vector3.Distance(feet,PumpPost)<1.2f;
+        NavalPumpStation nearest=null;float distance=float.PositiveInfinity;
+        foreach(var station in pumps){float d=transform.TransformVector(feet-station.Post).sqrMagnitude;if(d<distance){distance=d;nearest=station;}}
+        bool near=nearest!=null&&distance<2.5f*2.5f;
+        contextPump=nearest;working=nearest!=null&&nearest.Functional;
         PlayerInteracting=near||playerPump;
         if(Input.GetKeyDown(KeyCode.E))
         {
             if(playerPump){playerPump=false;return;}
-            if(near&&working){playerPump=true;if(Operator!=null){Operator.CancelPumpDuty();Operator=null;}}
+            if(near&&working){playerStation=nearest;playerPump=true;if(nearest.Operator!=null)nearest.Operator.CancelPumpDuty();}
         }
         if(playerPump)
         {
-            if(!near){playerPump=false;return;}
+            if(!near||nearest!=playerStation){playerPump=false;return;}
             if(Input.GetKeyDown(KeyCode.Q))mode=(mode+1)%pumpModes.Length;
             if(Input.GetKey(KeyCode.T))Pump(Mathf.Min(Time.deltaTime,.05f),false);
         }
@@ -211,14 +219,16 @@ public partial class NavalBilgeSystem : MonoBehaviour
     private void OnGUI()
     {
         NavalTestWorld world=NavalTestWorld.Active;
-        if(world!=null&&world.PlayerHull==hull&&world.SimulationActive&&world.ViewCamera!=null&&!hull.Sunk&&Functional&&Time.time-pumpLastWork<.2f)
-            NavalWorldProgressBar.Draw(world.ViewCamera,transform.TransformPoint(PumpPost+new Vector3(0f,1.15f,NavalMaintenanceMath.PumpOffsetZ)),pumpPhase,true,false,lastTransfer?"Перекачка":"Откачка",GetInstanceID());
+        if(world!=null&&world.PlayerHull==hull&&world.SimulationActive&&world.ViewCamera!=null&&!hull.Sunk)
+            for(int i=0;i<pumps.Count;i++){var station=pumps[i];if(station.Functional&&Time.time-station.LastWork<.2f)
+                NavalWorldProgressBar.Draw(world.ViewCamera,transform.TransformPoint(station.Post+new Vector3(0f,1.15f,NavalMaintenanceMath.PumpOffsetZ)),station.Phase,true,false,station.LastTransfer?"Перекачка":"Откачка",GetInstanceID()+i);}
+
         if(!PlayerInteracting)return;
-        if(!Functional)
+        if(contextPump!=null&&!contextPump.Functional)
         {
-            GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,620f),Screen.height-245f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,620f),30f),NeedsRepair?"Помпа повреждена — восстановите её детали (удерживать R)":"Помпа разрушена — восстановление невозможно");
+            GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,620f),Screen.height-245f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,620f),30f),contextPump.Mechanism.NeedsRepair?"Помпа повреждена — восстановите её детали (удерживать R)":"Помпа разрушена — восстановление невозможно");
             return;
         }
-        GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,620f),Screen.height-265f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,620f),48f),playerPump?"Помпа: держать T | Q: "+pumpModes[mode]+" | E: выйти\n"+Status:"E: помпа | Закрытый балласт: "+BallastVolume.ToString("F1")+" / "+(NavalBallastLayout.Capacity(hull.WorldScale)*4f).ToString("F1")+" м³");
+        GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,620f),Screen.height-265f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,620f),48f),playerPump?"Помпа: держать T | Q: "+pumpModes[mode]+" | E: выйти\n"+Status:"E: помпа | Закрытый балласт: "+BallastVolume.ToString("F1")+" / "+(NavalBallastLayout.Capacity(hull.WorldScale)*BallastCount).ToString("F1")+" м³");
     }
 }
