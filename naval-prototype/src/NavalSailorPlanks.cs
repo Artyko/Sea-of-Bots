@@ -29,7 +29,7 @@ public partial class NavalRepairSailor
   }
   if(plankStock==null)return false;route.Clear();stuck=0;PlanTo(destination);return true;
  }
- private void FailedPlankTrip(){plankRetryAt=Time.time+8f;ContinueRepair();}
+ private void FailedPlankTrip(){Debug.Log("[NavalPrototype] Plank trip failed: sailor="+robot.GetInstanceID()+" ship="+boat.name+" stage="+plankStage+" carried="+planks.Count);plankRetryAt=Time.time+8f;ContinueRepair();}
  private bool TickPlanks(float dt)
  {
   if(!NeedsPlanks(leak))return false;
@@ -54,6 +54,7 @@ public partial class NavalRepairSailor
   if(planks.Count==0){
    plankStage=2;PlankPose(2);plankPickupTime+=dt;if(plankPickupTime<1.2f)return true;
    if(!planks.Refill(plankStock!=null&&plankStock.TakeBundle())){FailedPlankTrip();return true;}
+   Debug.Log("[NavalPrototype] Planks fetched: sailor="+robot.GetInstanceID()+" ship="+boat.name+" count="+planks.Count);
    plankStage=3;PlankPose(1);stuck=0;PlanTo(repairDestination);return true;
   }
   plankStage=0;progress.Reset();PlankPose(3);return true;

@@ -8,6 +8,8 @@ class CargoChecks {
  for(int n=0;n<total;n++){
  var p=NavalCargoLayout.Position(ship,n);Check(Math.Abs(p.X)+.675f/ship.Scale<ship.HullHalfWidth(p.Z)&&Math.Abs(p.Z)+.675f/ship.Scale<6,"Crates stay inside hull");
  var pickup=NavalCargoLayout.Pickup(ship,p);
+ Check(Math.Abs(pickup.X-p.X)*ship.Scale>.675f+.8f+.1f,"Actual 0.8m sailor radius clears crate at pickup");
+ if(Math.Abs(p.Z)>NavalBallastLayout.InnerZ&&Math.Abs(p.Z)<5.2f)Check(Math.Abs(pickup.X)*ship.Scale+.8f<(NavalBallastLayout.X-NavalBallastLayout.Width*.5f)*ship.Scale,"Full-size pickup capsule fits before ballast wall");
  for(int gunIndex=0;gunIndex<ship.GunCount;gunIndex++)for(int direction=0;direction<2;direction++){
  var gunPost=new NavalWalkPoint(NavalShipDefinition.GunSide(gunIndex)*ship.GunPostX,ship.GunDeck,NavalShipDefinition.GunZ(ship,gunIndex));
  var start=direction==0?gunPost:pickup;var destination=direction==0?pickup:gunPost;

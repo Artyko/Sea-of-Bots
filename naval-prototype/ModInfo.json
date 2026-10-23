@@ -1,10 +1,10 @@
 ﻿{
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v227.dll",
+  "MainDLLFileName": "NavalPrototype-v228.dll",
   "Author": "Kirill",
-  "Version": 227,
-  "Description": "Refresh actual sailor sole offset, require reachable final repair approach, log completed patches and supplement rider support at deck edges.",
+  "Version": 228,
+  "Description": "Move hold supply pickup points outside full-size sailor capsule clearance and free sloop ballast-side access; record plank acquisition/failure.",
   "ModDependencies": [],
   "Tags": []
 }

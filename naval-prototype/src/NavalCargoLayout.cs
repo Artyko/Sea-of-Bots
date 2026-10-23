@@ -1,5 +1,5 @@
 ﻿public static class NavalCargoLayout {
- public static NavalWalkPoint Pickup(NavalShipDefinition ship,NavalWalkPoint p){float floor=ship.HoldFloor;for(int level=0;level<ship.MaintenanceDeckCount;level++)if(ship.MaintenanceFloor(level)<=p.Y+.001f)floor=ship.MaintenanceFloor(level);float x=p.X+(p.X>0?1.3f:-1.3f)/ship.Scale;return new NavalWalkPoint(x,NavalBallastLayout.Surface(x,p.Z,floor,ship.Scale),p.Z);}
+ public static NavalWalkPoint Pickup(NavalShipDefinition ship,NavalWalkPoint p){float floor=ship.HoldFloor;for(int level=0;level<ship.MaintenanceDeckCount;level++)if(ship.MaintenanceFloor(level)<=p.Y+.001f)floor=ship.MaintenanceFloor(level);float x=p.X+(p.X>0?1.65f:-1.65f)/ship.Scale*(ship.Scale<=2?-1:1);return new NavalWalkPoint(x,NavalBallastLayout.Surface(x,p.Z,floor,ship.Scale),p.Z);}
  public static int Factor(NavalShipDefinition ship){return ship==NavalShipDefinition.Sloop?1:ship==NavalShipDefinition.Brigantine?2:4;}
  public static int Boxes(NavalShipDefinition ship,int kind){return kind==2?ship.GunCount:4*Factor(ship);}
  public static NavalWalkPoint Position(NavalShipDefinition ship,int n){

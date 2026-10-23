@@ -19,6 +19,12 @@ public static class NavalSupplyRoutes
   // The underside of each flight is not a walk-through corridor.
   for(int level=0;level<ship.MaintenanceDeckCount;level++)
    route=Around(route,start,ship,ship.MaintenanceFloor(level),-1.25f,ship.StairWidth*ship.Scale,3.5f*ship.Scale);
+  // A detour corner may overlap the stair exclusion; never make it a mandatory endpoint.
+  for(int i=route.Count-2;i>=0;i--){
+   var p=route[i];bool floor=false;for(int level=0;level<ship.MaintenanceDeckCount;level++)if(Math.Abs(p.Y-ship.MaintenanceFloor(level))<.001f)floor=true;
+   bool stairLanding=p.Z>=.42f&&p.Z<=.85f&&Math.Abs(p.X)<ship.StairWidth*.5f;
+   if(floor&&!stairLanding&&!CargoClear(p,p,ship))route.RemoveAt(i);
+  }
   return RepairSegments(start,route,ship);
  }
  private static bool CargoClear(NavalWalkPoint a,NavalWalkPoint b,NavalShipDefinition ship){

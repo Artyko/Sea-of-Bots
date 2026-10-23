@@ -154,7 +154,7 @@ public partial class NavalTestWorld
         float infoY=showHelp?822f:402f;
         string distance=enemy!=null?Vector3.Distance(boat.position,enemy.Boat.position).ToString("F0")+" м":"—";
         GUI.Label(new Rect(16f,infoY,650f,20f),"До противника: "+distance+"  |  "+(Spectating?"Наблюдатель":swimming?"Плавание":"На ногах")+"  |  Волны: "+(rough?"сильные":"слабые"),hudText);
-        GUI.Label(new Rect(16f,infoY+20f,650f,20f),"v227  |  FPS: "+(1000f/Mathf.Max(1f,frameMilliseconds)).ToString("F0")+"  |  Вода CPU: "+ocean.BuildMilliseconds.ToString("F1")+" мс",hudText);
+        GUI.Label(new Rect(16f,infoY+20f,650f,20f),"v228  |  FPS: "+(1000f/Mathf.Max(1f,frameMilliseconds)).ToString("F0")+"  |  Вода CPU: "+ocean.BuildMilliseconds.ToString("F1")+" мс",hudText);
         GUI.matrix=previous;
         NavalPerformance.Draw();
     }
