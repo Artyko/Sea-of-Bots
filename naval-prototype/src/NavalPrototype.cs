@@ -212,7 +212,7 @@ public partial class NavalTestWorld : MonoBehaviour
         Active = this;
         if(GetComponent<NavalBattleTelemetry>()==null)gameObject.AddComponent<NavalBattleTelemetry>();
         ToggleEnemy();
-        Debug.Log("[NavalPrototype] v222 ships and waves started on native Naval Ocean editor map.");
+        Debug.Log("[NavalPrototype] v227 ships and waves started on native Naval Ocean editor map.");
     }
 
     private Material MakeMaterial(Color color)
@@ -309,9 +309,10 @@ public partial class NavalTestWorld : MonoBehaviour
         ram.StepMomentum(dt,ref speed);
         speed = NavalRigMath.StepSpeed(speed, throttle, rig.SailPowerFactor, dt,hull.Definition.MaxSailingSpeed);
         // Carry only a rider supported by this deck. No parenting and no airborne snapping.
-        bool aboard = !Spectating&&NavalPhysicsQueries.HasSupport(player.transform.position+Vector3.up*.2f,
-            Vector3.down,NavalRiderSupportMath.Distance(footOffset+.4f,.12f,PlayerSupportRadius),boat,PlayerSupportRadius);
-        Vector3 localRider = !Spectating?boat.InverseTransformPoint(player.transform.position):Vector3.zero;
+        bool aboard = !Spectating&&PlayerSupportedBy(boat);
+        Vector3 riderFoot=!Spectating?PlayerFootPoint:Vector3.zero;
+        Vector3 riderOffset=!Spectating?player.transform.position-riderFoot:Vector3.zero;
+        Vector3 localRider=boat.InverseTransformPoint(riderFoot);
         rudder=stations.IsFunctional(0)?NavalRigMath.StepRudder(rudder,turn,dt):0f;
         heading += NavalRigMath.RudderRate(speed, rudder)*stations.SteeringFactor * dt / (1f + depth);
         Vector3 flatForward = Quaternion.Euler(0f, heading, 0f) * Vector3.forward;
@@ -349,7 +350,7 @@ public partial class NavalTestWorld : MonoBehaviour
             CharacterController controller = GetController();
             bool enabled = controller != null && controller.enabled;
             if (enabled) controller.enabled = false;
-            player.transform.position = boat.TransformPoint(localRider);
+            player.transform.position = NavalRiderCarry.Position(boat,localRider,riderOffset);
             if (enabled) controller.enabled = true;
         }
         // Publish hull and supported rider together before any controller movement/query.
@@ -462,8 +463,7 @@ public partial class NavalTestWorld : MonoBehaviour
             !player.IsAlive() || !player.IsPlayerInputEnabled() || Time.timeScale == 0f) return;
         float sea;
         // Called before the game's movement step, not after a full frame of falling.
-        bool supported=NavalPhysicsQueries.HasSupport(player.transform.position+Vector3.up*.1f,
-            Vector3.down,NavalRiderSupportMath.Distance(footOffset+.25f,0f,PlayerSupportRadius),boat,PlayerSupportRadius);
+        bool supported=PlayerSupportedBy(boat)||(EnemyBoat!=null&&PlayerSupportedBy(EnemyBoat));
         SetSwimming(WaterContact(supported, out sea));
         if ((swimming || stationLocked) && VelocityField != null) VelocityField.SetValue(player, Vector3.zero);
     }
@@ -493,6 +493,26 @@ public partial class NavalTestWorld : MonoBehaviour
         CharacterController controller = GetController();
         if (controller != null && controller.enabled) controller.Move(movement);
         else player.transform.position += movement;
+    }
+    public Vector3 PlayerFootPoint {get{
+        CharacterController body=GetController();
+        if(body!=null&&body.enabled){Bounds bounds=body.bounds;return new Vector3(bounds.center.x,bounds.min.y,bounds.center.z);}
+        return player.transform.position-Vector3.up*footOffset;
+    }}
+    public int PlayerSupportFallbacks {get;private set;}
+    public bool PlayerSupportedBy(Transform ship){
+        if(Spectating||player==null||ship==null)return false;
+        float radius=PlayerSupportRadius;
+        // Cast from just above the actual capsule sole, independent of model/root height.
+        Vector3 sole=PlayerFootPoint;
+        if(NavalPhysicsQueries.HasSupport(sole+Vector3.up*(radius+.25f),Vector3.down,.5f,ship,radius))return true;
+        // A sphere starting against an edge may miss its top. Probe actual footprint points.
+        float spread=radius*.7f;Vector3 origin=sole+Vector3.up*.35f;
+        for(int i=0;i<5;i++){
+            Vector3 offset=i==0?Vector3.zero:i==1?Vector3.right*spread:i==2?Vector3.left*spread:i==3?Vector3.forward*spread:Vector3.back*spread;
+            if(NavalPhysicsQueries.HasSupport(origin+offset,Vector3.down,.6f,ship,0f)){PlayerSupportFallbacks++;return true;}
+        }
+        return false;
     }
     public float PlayerSupportRadius {get{
         CharacterController body=GetController();

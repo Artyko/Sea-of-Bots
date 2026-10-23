@@ -10,6 +10,7 @@ public partial class NavalRepairSailor
     private readonly byte[] escapeLinks=new byte[81*81];
     private readonly System.Collections.Generic.List<Vector3> escapePath=new System.Collections.Generic.List<Vector3>(32);
     private static RaycastHit[] navigationHits=new RaycastHit[32];
+    private float NavigationRadius {get{var body=Controller();return body!=null?Mathf.Max(.15f,body.radius*Mathf.Max(Mathf.Abs(body.transform.lossyScale.x),Mathf.Abs(body.transform.lossyScale.z))):.38f;}}
     private bool NavigationStairs(Vector3 p)
     {return NavalShipRoutes.InStairwell(new NavalWalkPoint(p.x,p.y,p.z),hull.Definition);}
     private bool Supported(Vector3 p)
@@ -23,10 +24,10 @@ public partial class NavalRepairSailor
     {
         var body=Controller();float height=body!=null?Mathf.Max(1.8f,body.bounds.size.y):2.6f;
         Vector3 start=boat.TransformPoint(a),delta=boat.TransformVector(b-a);if(delta.sqrMagnitude<.001f)return true;
-        int count;
+        float radius=NavigationRadius;int count;
         while(true)
         {
-            count=Physics.CapsuleCastNonAlloc(start+Vector3.up*.45f,start+Vector3.up*(height-.4f),.38f,delta.normalized,
+            count=Physics.CapsuleCastNonAlloc(start+Vector3.up*(radius+.03f),start+Vector3.up*Mathf.Max(radius+.03f,height-radius),radius,delta.normalized,
                 navigationHits,delta.magnitude,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore);
             if(count<navigationHits.Length)break;System.Array.Resize(ref navigationHits,navigationHits.Length*2);
         }

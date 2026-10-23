@@ -216,11 +216,12 @@ public partial class NavalRepairSailor : MonoBehaviour
             {
                 if(leak.RepairMechanism!=null&&leak.RepairMechanism.IsCannon)
                 {leak.RepairMechanism.CompleteCannonRepair(structure,work);ContinueRepair();return;}
-                Vector3 patch=leak.LocalCenter;bool usesBoard=NeedsPlanks(leak),restored=false;
+                Vector3 patch=leak.LocalCenter;bool usesBoard=NeedsPlanks(leak),restored=false;int restoredCells=0;
                 foreach(NavalHullVoxel cell in claimed)
                     if(cell.RepairClaim==this&&(cell.HydraulicShell||cell.InternalBarrier||cell.RepairableEquipment)&&(cell.Missing||cell.Detached)&&
-                        (cell.LocalCenter-patch).sqrMagnitude<=0.85f*0.85f){structure.RestoreCell(cell);if(!cell.Missing&&!cell.Detached)restored=true;}
+                        (cell.LocalCenter-patch).sqrMagnitude<=0.85f*0.85f){structure.RestoreCell(cell);if(!cell.Missing&&!cell.Detached){restored=true;restoredCells++;}}
                 if(usesBoard&&restored)planks.Consume();
+                Debug.Log("[NavalPrototype] Repair finished: sailor="+robot.GetInstanceID()+" ship="+boat.name+" patch="+patch+" restored="+restoredCells+" boardUsed="+(usesBoard&&restored));
                 ContinueRepair();
             }
         }
@@ -345,6 +346,7 @@ public partial class NavalRepairSailor : MonoBehaviour
     }
     private void PlanTo(Vector3 goal)
     {
+        stairExitWaypoints=0;
         var world=NavalTestWorld.Active;
         if(leak!=null&&world!=null&&world.WaterLevelAt(boat.TransformPoint(goal))>boat.TransformPoint(goal).y+2.6f){
             float floor=hull.Floor;for(int level=0;level<hull.Definition.MaintenanceDeckCount;level++)if(hull.Definition.MaintenanceFloor(level)<=goal.y+.001f)floor=hull.Definition.MaintenanceFloor(level);
@@ -393,6 +395,7 @@ public partial class NavalRepairSailor : MonoBehaviour
     private int returnRetries;
     private void ReplanReturn()
     {
+        stairExitWaypoints=0;
         route.Clear();stuck=0f;returnRetries++;
         feet=boat.InverseTransformPoint(robot.transform.position-Vector3.up*footOffset);
         if(TryPlanLedgeRecovery(home))return;
@@ -442,6 +445,7 @@ public partial class NavalRepairSailor : MonoBehaviour
     {foreach(NavalWalkPoint point in points)route.Add(new Vector3(point.X,point.Y,point.Z));}
     private void Release()
     {
+        stairExitWaypoints=0;
         CancelAmmo();ReleaseSails();CancelCannonParts();CancelPlankTrip();
         nextTaskPending=false;waitingForRepair=false;
         CancelFire();

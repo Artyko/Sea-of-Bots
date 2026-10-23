@@ -96,9 +96,10 @@ public class NavalEnemyShip : MonoBehaviour
         NavalTestWorld world=NavalTestWorld.Active;
         if(target==null||world==null||!world.SimulationActive)return;
         float dt=Mathf.Min(Time.deltaTime,0.05f);
-        bool rider=!world.Spectating&&player!=null&&!world.IsBoarding&&
-            NavalPhysicsQueries.HasSupport(player.transform.position+Vector3.up*.2f,Vector3.down,NavalRiderSupportMath.Distance(footOffset+.4f,.12f,world.PlayerSupportRadius),Boat,world.PlayerSupportRadius);
-        Vector3 riderLocal=!world.Spectating&&player!=null?Boat.InverseTransformPoint(player.transform.position):Vector3.zero;
+        bool rider=!world.Spectating&&player!=null&&!world.IsBoarding&&world.PlayerSupportedBy(Boat);
+        Vector3 riderFoot=!world.Spectating&&player!=null?world.PlayerFootPoint:Vector3.zero;
+        Vector3 riderOffset=!world.Spectating&&player!=null?player.transform.position-riderFoot:Vector3.zero;
+        Vector3 riderLocal=Boat.InverseTransformPoint(riderFoot);
         if(Time.time>=retryCrew){retryCrew=Time.time+2f;RecruitCrew();}
         structure.Refresh(Boat.forward*speed+Vector3.up*verticalSpeed);
         Hull.Step(Boat,ocean,dt,false);rig.RefreshRig();
@@ -146,7 +147,7 @@ public class NavalEnemyShip : MonoBehaviour
         {
             CharacterController body=player.GetComponentInChildren<CharacterController>();
             bool enabled=body!=null&&body.enabled;if(enabled)body.enabled=false;
-            player.transform.position=Boat.TransformPoint(riderLocal);
+            player.transform.position=NavalRiderCarry.Position(Boat,riderLocal,riderOffset);
             if(enabled)body.enabled=true;
         }
         NavalPerformance.SyncTransforms();

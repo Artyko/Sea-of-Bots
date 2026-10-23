@@ -1,10 +1,10 @@
 ﻿{
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v222.dll",
+  "MainDLLFileName": "NavalPrototype-v227.dll",
   "Author": "Kirill",
-  "Version": 222,
-  "Description": "Match player support casts to controller footprint on both ships; accept supported raised station footing without snapping through trim.",
+  "Version": 227,
+  "Description": "Refresh actual sailor sole offset, require reachable final repair approach, log completed patches and supplement rider support at deck edges.",
   "ModDependencies": [],
   "Tags": []
 }

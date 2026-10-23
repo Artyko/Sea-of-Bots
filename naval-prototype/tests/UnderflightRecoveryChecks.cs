@@ -3,6 +3,16 @@ class UnderflightRecoveryChecks {
  static void Check(bool ok,string why){if(!ok)throw new Exception(why);}
  static void Main(){try{Run();}catch(Exception e){Console.WriteLine(e);Environment.ExitCode=1;}}
  static void Run(){
+ var gal=NavalShipDefinition.Galleon;float loggedFloor;
+ foreach(float z in new float[]{.47f,.53f})Check(!NavalStairRecovery.Needed(new NavalWalkPoint(-.2f,.85f,z),new NavalWalkPoint(0,.825f,.8f),gal,out loggedFloor),"Logged middle landing is legitimate lower-flight traffic, not upper underflight");
+ Check(!NavalStairRecovery.Arrived(.26f,.025f,0,4),"Old local-space tolerance must not finish lateral exit one metre early");
+ Check(NavalStairRecovery.Arrived(.02f,.025f,0,4),"Exit completes with real capsule clearance at Galleon scale");
+ foreach(var profile in NavalShipDefinition.Choices)foreach(float radius in new float[]{.35f,.5f,.8f}){
+  var p=new NavalWalkPoint(0,profile.HoldFloor,-.2f);var goal=new NavalWalkPoint(1.4f,profile.WeatherDeck,2);
+  foreach(int side in new int[]{-1,1}){var exit=NavalStairRecovery.Exit(p,goal,profile,profile.HoldFloor,side,radius)[0];
+   Check((Math.Abs(exit.X)-profile.StairWidth*.5f)*profile.Scale>=radius+.29f,"Exit clears actual native capsule plus arrival margin");
+  }
+ }
  var brig=NavalShipDefinition.Brigantine;float floor;
  Check(NavalStairRecovery.Needed(new NavalWalkPoint(.34f,-1.32f,-1.36f),new NavalWalkPoint(.47f,-1.29f,-1.78f),brig,out floor),"v217 floor-level plank route under staircase must recover");
  Check(NavalStairRecovery.Needed(new NavalWalkPoint(.36f,-1.31f,-1.29f),new NavalWalkPoint(.47f,-1.29f,-1.78f),brig,out floor),"v217 returning route under staircase must recover");

@@ -39,7 +39,7 @@ public partial class NavalRepairSailor
   robot.DisableAI();
   if(planks.Count==0&&(plankStock==null||!plankStock.Available)){FailedPlankTrip();return true;}
   if(route.Count>0){
-   var result=FollowRoute(dt,4f);
+   var result=FollowRoute(dt,4f,planks.Count>0);
    if(result==RouteResult.Fell){stranded=true;ContinueRepair();return true;}
    if(result==RouteResult.Blocked){
     if(planks.Count==0&&plankStock!=null)blockedCargo[plankStock]=Time.time+10f;

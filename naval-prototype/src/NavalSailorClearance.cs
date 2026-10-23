@@ -6,11 +6,12 @@ public partial class NavalRepairSailor
     private bool ClearBody(Vector3 local)
     {
         CharacterController body=Controller();float height=body!=null?Mathf.Max(1.8f,body.bounds.size.y):2.6f;
-        Vector3 bottom=boat.TransformPoint(local)+Vector3.up*.45f,top=boat.TransformPoint(local)+Vector3.up*(height-.4f);
+        float radius=NavigationRadius;
+        Vector3 bottom=boat.TransformPoint(local)+Vector3.up*(radius+.03f),top=boat.TransformPoint(local)+Vector3.up*Mathf.Max(radius+.03f,height-radius);
         int count;
         while(true)
         {
-            count=Physics.OverlapCapsuleNonAlloc(bottom,top,.38f,clearanceHits,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore);
+            count=Physics.OverlapCapsuleNonAlloc(bottom,top,radius,clearanceHits,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore);
             if(count<clearanceHits.Length)break;System.Array.Resize(ref clearanceHits,clearanceHits.Length*2);
         }
         bool clear=true;

@@ -6,6 +6,7 @@ public static class NavalStairRecovery
  public static bool Needed(NavalWalkPoint feet,NavalWalkPoint target,NavalShipDefinition ship,out float floor)
  {
   floor=ship.HoldFloor;
+  if(NavalStairTraffic.InPassage(feet,ship))return false;
   // Recover under the flight for every duty, including floor-level cargo routes.
   for(int level=ship.DeckCount-2;level>=0;level--){
    float offset=level==0?0:ship.UpperDeckOffset;
@@ -15,9 +16,11 @@ public static class NavalStairRecovery
   }
   return false;
  }
- public static List<NavalWalkPoint> Exit(NavalWalkPoint feet,NavalWalkPoint goal,NavalShipDefinition ship,float floor,int side)
+ public static bool Arrived(float dx,float dy,float dz,float scale)
+ {return (dx*dx+dz*dz)*scale*scale<.12f*.12f&&Math.Abs(dy)*scale<.35f;}
+ public static List<NavalWalkPoint> Exit(NavalWalkPoint feet,NavalWalkPoint goal,NavalShipDefinition ship,float floor,int side,float bodyRadius=.45f)
  {
-  float x=side*(ship.StairWidth*.5f+.65f/ship.Scale);
+  float x=side*(ship.StairWidth*.5f+(Math.Max(.35f,bodyRadius)+.3f)/ship.Scale);
   var exit=new NavalWalkPoint(x,feet.Y,feet.Z);
   var landing=new NavalWalkPoint(x,floor,feet.Z);
   var result=new List<NavalWalkPoint>();result.Add(exit);result.Add(landing);
