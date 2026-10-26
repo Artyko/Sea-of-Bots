@@ -1,10 +1,10 @@
 ﻿{
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v230.dll",
+  "MainDLLFileName": "NavalPrototype-v231.dll",
   "Author": "Kirill",
-  "Version": 230,
-  "Description": "Audit all crew stations using native capsule queries; widen sail/pump access, correct standby and sloop stair lanes, keep pump pipes damageable without blocking feet.",
+  "Version": 231,
+  "Description": "Laptop FPS pass: batch the editable naval map for play, reject distant shore physics, and reduce Intel water and sail uploads without changing simulation.",
   "ModDependencies": [],
   "Tags": []
 }

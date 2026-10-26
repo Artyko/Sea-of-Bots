@@ -27,6 +27,8 @@ class GalleonV192Checks {
  var clock=new NavalSailPoseClock();int close=0,far=0;var distant=new NavalSailPoseClock();
  for(int i=0;i<600;i++){float time=i/60f;if(clock.Due(time,1,false))close++;if(distant.Due(time,1,true))far++;}
  Check(close<=301&&far<=151,"Pose writes bounded at 30/15 Hz");Check(clock.Due(9.99f,.5f,false),"Sail control changes update immediately");
+ var laptop=new NavalSailPoseClock();int laptopWrites=0;for(int frame=0;frame<100;frame++)if(laptop.Due(frame/10f,1,false,frame,2))laptopWrites++;
+ Check(laptopWrites==50,"Laptop frame gap halves pose uploads below the time-rate limit");
  Console.WriteLine("PASS: maintenance floors, four barrels, full lower hold reserve, real dry displacement, seam targets and bounded sail pose work.");
  }
 }

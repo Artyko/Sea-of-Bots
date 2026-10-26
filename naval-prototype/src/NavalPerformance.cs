@@ -6,6 +6,20 @@ public enum NavalPerfArea {Sail,RigSupport,Ocean,HullDamage,Chunks,Structure,Cre
 public static class NavalPerformance
 {
     public static bool Enabled;
+    private static bool modeKnown,laptopMode;
+    public static bool LaptopMode
+    {
+        get
+        {
+            if(!modeKnown)
+            {
+                string vendor=SystemInfo.graphicsDeviceVendor??"",device=SystemInfo.graphicsDeviceName??"";
+                laptopMode=vendor.IndexOf("Intel",System.StringComparison.OrdinalIgnoreCase)>=0||device.IndexOf("Intel",System.StringComparison.OrdinalIgnoreCase)>=0;
+                modeKnown=true;UnityEngine.Debug.Log("[NavalPrototype] Performance profile: "+(laptopMode?"laptop/Intel":"standard")+" | GPU="+device);
+            }
+            return laptopMode;
+        }
+    }
     private static bool autoSample;
     private static int autoFrames;
     private static readonly long[] autoTotals=new long[(int)NavalPerfArea.Count],autoMaxima=new long[(int)NavalPerfArea.Count];

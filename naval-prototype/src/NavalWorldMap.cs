@@ -28,6 +28,9 @@ public partial class NavalWorldMap : MonoBehaviour
     private readonly List<float> motionDepth=new List<float>();
     private float horizonAt;
     private readonly HashSet<Collider> knownLand=new HashSet<Collider>();
+    private readonly List<Bounds> scenerySolids=new List<Bounds>();
+    private readonly List<int> nearScenery=new List<int>();
+    private readonly NavalBoundsIndex sceneryIndex=new NavalBoundsIndex();
     private QueryCache Cache(Transform ship)
     {int id=ship.GetInstanceID();QueryCache cache;if(!queries.TryGetValue(id,out cache)){cache=new QueryCache();queries.Add(id,cache);}return cache;}
     public static bool TryGetSeaOrigin(out Vector3 point)
@@ -41,10 +44,12 @@ public partial class NavalWorldMap : MonoBehaviour
     {
         Active=this;origin=seaOrigin;focus=player.transform;camera=player.GetPlayerCamera();
         if(camera!=null){previousFar=camera.farClipPlane;camera.farClipPlane=12000f;}
-        foreach(ObjectPlacedInLevel obj in Object.FindObjectsByType<ObjectPlacedInLevel>(FindObjectsSortMode.None))RegisterIsland(obj);
+        ObjectPlacedInLevel[] placed=Object.FindObjectsByType<ObjectPlacedInLevel>(FindObjectsSortMode.None);
+        foreach(ObjectPlacedInLevel obj in placed){RegisterIsland(obj);RegisterScenery(obj);}
         Debug.Log("[NavalPrototype] Island solid barriers: "+islandSolids.Count);
-        foreach(ObjectPlacedInLevel obj in Object.FindObjectsByType<ObjectPlacedInLevel>(FindObjectsSortMode.None))
+        foreach(ObjectPlacedInLevel obj in placed)
             if(obj.name==WaterMarker)foreach(Renderer r in obj.GetComponentsInChildren<Renderer>())if(r.enabled){preview.Add(r);r.enabled=false;}
+        gameObject.AddComponent<NavalMapRenderBatch>().Build(placed);
         for(int i=0;i<100;i++)border.Add(new Vector3(-150f+i*3f,0f,-150f));
         for(int i=0;i<100;i++)border.Add(new Vector3(150f,0f,-150f+i*3f));
         for(int i=0;i<100;i++)border.Add(new Vector3(150f-i*3f,0f,150f));
@@ -78,20 +83,44 @@ public partial class NavalWorldMap : MonoBehaviour
         if(collider.GetComponentInParent<Character>()!=null)return false;
         knownLand.Add(collider);return true;
     }
+    private void RegisterScenery(ObjectPlacedInLevel obj)
+    {
+        if(obj==null||obj.name==WaterMarker)return;
+        foreach(Collider collider in obj.GetComponentsInChildren<Collider>())if(collider!=null&&collider.enabled&&!collider.isTrigger&&collider.bounds.size.sqrMagnitude>.001f)
+        {int id=scenerySolids.Count;Bounds bounds=collider.bounds;scenerySolids.Add(bounds);Vector3 min=bounds.min,max=bounds.max;sceneryIndex.Add(id,min.x,min.y,min.z,max.x,max.y,max.z);knownLand.Add(collider);}
+    }
+    private static Bounds ShipBounds(Vector3 point,Quaternion rotation,Vector3 offset,Vector3 half)
+    {
+        Vector3 r=rotation*Vector3.right,u=rotation*Vector3.up,f=rotation*Vector3.forward;
+        Vector3 extents=new Vector3(Mathf.Abs(r.x)*half.x+Mathf.Abs(u.x)*half.y+Mathf.Abs(f.x)*half.z,Mathf.Abs(r.y)*half.x+Mathf.Abs(u.y)*half.y+Mathf.Abs(f.y)*half.z,Mathf.Abs(r.z)*half.x+Mathf.Abs(u.z)*half.y+Mathf.Abs(f.z)*half.z);
+        return new Bounds(point+rotation*offset,extents*2f);
+    }
+    private bool SceneryNear(Vector3 from,Quaternion oldRotation,Vector3 to,Quaternion rotation,Vector3 offset,Vector3 half)
+    {
+        Bounds broad=ShipBounds(from,oldRotation,offset,half);broad.Encapsulate(ShipBounds(to,rotation,offset,half));
+        float radius=half.magnitude+offset.magnitude;
+        float rotationMargin=2f*radius*Mathf.Sin(Mathf.Min(180f,Quaternion.Angle(oldRotation,rotation))*Mathf.Deg2Rad*.5f);
+        broad.Expand((rotationMargin+.1f)*2f);
+        Vector3 min=broad.min,max=broad.max;sceneryIndex.Query(min.x,min.y,min.z,max.x,max.y,max.z,nearScenery);
+        for(int i=0;i<nearScenery.Count;i++)if(broad.Intersects(scenerySolids[nearScenery[i]]))return true;
+        return false;
+    }
     public bool CanSail(Vector3 point,Quaternion heading,Transform ship)
     {
         QueryCache cache=Cache(ship);
         if(Time.time<cache.SailAt&&(point-cache.Point).sqrMagnitude<0.25f&&Quaternion.Angle(heading,cache.Heading)<3f)return cache.Clear;
         cache.SailAt=Time.time+0.08f;cache.Point=point;cache.Heading=heading;cache.Clear=true;
+        Vector3 offset,half;ShoreVolume(ship,out offset,out half);
+        cache.Clear=IslandAdvance(point,heading,point,heading,offset,half);
+        if(!cache.Clear)return false;
+        if(!SceneryNear(point,heading,point,heading,offset,half))return true;
         int count;
         while(true)
         {
-            Vector3 offset,half;ShoreVolume(ship,out offset,out half);
             count=Physics.OverlapBoxNonAlloc(point+offset,half,overlap,heading,~0,QueryTriggerInteraction.Ignore);
             if(count<overlap.Length)break;overlap=new Collider[overlap.Length*2];
         }
         for(int i=0;i<count;i++)if(Land(overlap[i])){cache.Clear=false;break;}
-        if(cache.Clear){Vector3 o,h;ShoreVolume(ship,out o,out h);cache.Clear=IslandAdvance(point,heading,point,heading,o,h);}
         return cache.Clear;
     }
     private void ShoreVolume(Transform ship,out Vector3 offset,out Vector3 half)
@@ -124,6 +153,8 @@ public partial class NavalWorldMap : MonoBehaviour
         {
         Vector3 offset,half;ShoreVolume(ship,out offset,out half);direction.y=0f;direction.Normalize();
         int count;Quaternion heading=Quaternion.LookRotation(direction);
+        float indexed=IslandClearance(point,direction,heading,offset,half,range);
+        if(!SceneryNear(point,heading,point+direction*range,heading,offset,half))return indexed;
         while(true)
         {
             count=Physics.BoxCastNonAlloc(point+offset,half,direction,casts,heading,range,~0,QueryTriggerInteraction.Ignore);
@@ -131,7 +162,7 @@ public partial class NavalWorldMap : MonoBehaviour
         }
         float closest=range;
         for(int i=0;i<count;i++)if(Land(casts[i].collider))closest=Mathf.Min(closest,casts[i].distance);
-        return IslandClearance(point,direction,heading,offset,half,closest);
+        return Mathf.Min(indexed,closest);
             }
     }
     public bool CanAdvance(Vector3 from,Quaternion oldHeading,Vector3 to,Quaternion heading,Transform ship)
@@ -143,6 +174,7 @@ public partial class NavalWorldMap : MonoBehaviour
         // motion, including rotation and draft, before committing a kinematic pose.
         Vector3 offset,half;ShoreVolume(ship,out offset,out half);
         if(!IslandAdvance(from,oldHeading,to,heading,offset,half))return false;
+        if(!SceneryNear(from,oldHeading,to,heading,offset,half))return true;
         if(shoreProbe==null)
         {
             GameObject probe=new GameObject("Naval shore clearance probe");probe.transform.SetParent(transform,false);

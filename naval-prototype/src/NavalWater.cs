@@ -26,6 +26,7 @@ public class NavalWater : MonoBehaviour
     private const float Spacing = 3f;
     private const float Half = 50f;
     private float nextMeshAt;
+    private int nextMeshFrame;
     private readonly List<int> firstPass = new List<int>(65000);
     private Matrix4x4 waterToClip,clipToWater;
     private Vector3 clipMin,clipMax;
@@ -64,7 +65,7 @@ public class NavalWater : MonoBehaviour
         MeshRenderer renderer = gameObject.AddComponent<MeshRenderer>();
         renderer.sharedMaterial = surfaceMaterial;
         renderer.shadowCastingMode = ShadowCastingMode.Off;
-        renderer.receiveShadows = true;
+        renderer.receiveShadows = !NavalPerformance.LaptopMode;
     }
 
     private Material WaterMaterial(Shader shader, Color color)
@@ -97,7 +98,9 @@ public class NavalWater : MonoBehaviour
         using(NavalPerformance.Measure(NavalPerfArea.Ocean))
         {
         simulationTime += Mathf.Min(Time.deltaTime, 0.05f);
-        if(Time.time<nextMeshAt)return;nextMeshAt=Time.time+1f/30f;
+        bool laptop=NavalPerformance.LaptopMode;
+        if(Time.time<nextMeshAt||laptop&&Time.frameCount<nextMeshFrame)return;
+        nextMeshAt=Time.time+1f/(laptop?20f:30f);nextMeshFrame=Time.frameCount+(laptop?2:1);
         buildWatch.Restart();
         float offsetX = Mathf.Floor((Focus.x - transform.position.x) / 40f) * 40f;
         float offsetZ = Mathf.Floor((Focus.z - transform.position.z) / 40f) * 40f;

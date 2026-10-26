@@ -337,7 +337,7 @@ public class NavalShipVisuals : MonoBehaviour
             float deployed=sailControls!=null?Mathf.Abs(sailControls.SailSetting):1f;
             var world=NavalTestWorld.Active;Camera view=world!=null?world.ViewCamera:null;
             bool distant=view!=null&&(view.transform.position-transform.position).sqrMagnitude>160f*160f;
-            if(!poseClock.Due(Time.time,deployed,distant))return;
+            if(!poseClock.Due(Time.time,deployed,distant,Time.frameCount,NavalPerformance.LaptopMode?2:1))return;
             float clothScale=Mathf.Max(.06f,deployed);
             sailShape.Prepare(Time.time);
             for(int i=0;i<sail.Count;i++)
