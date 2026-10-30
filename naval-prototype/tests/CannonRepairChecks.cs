@@ -11,5 +11,8 @@ class CannonRepairChecks {
  for(int i=0;i<guns.Length;i++)Check(guns[i].Used,"Every cannon has its own independent one-use allowance");
  guns[0].Reset();Check(guns[0].Ready(60),"Explicit debug reset clears allowance");
  if(guns.Length>1)Check(guns[1].Used,"Resetting one gun does not reset another");}
+ var catastrophic=new NavalCannonRepairBudget();catastrophic.CatastrophicLoss();
+ Check(catastrophic.Lost&&catastrophic.Used&&!catastrophic.Ready(600)&&!catastrophic.Complete(true,600),"A gun whose ready ammunition detonated can never be repaired during the battle");
+ catastrophic.Reset();Check(!catastrophic.Lost&&catastrophic.Ready(60),"Explicit debug reset still restores a catastrophically lost gun");
  Console.WriteLine("PASS: 2/4/6 independent guns, 60-second threshold, no quick patch or second repair, incomplete work and explicit reset.");}
 }

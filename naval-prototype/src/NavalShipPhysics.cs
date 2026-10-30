@@ -46,11 +46,13 @@ public sealed class NavalShipPhysics : MonoBehaviour
     }
     public void FinishConstruction()
     {
+        NavalPhysicsQueries.Register(hull);
         colliderChunks=gameObject.AddComponent<NavalHullColliders>();colliderChunks.Initialize(hull);
         NavalPerformance.SyncTransforms();Audit();
         Debug.Log("[NavalPrototype] Exact collider merging: "+colliderChunks.BatchedCount+" source boxes -> "+colliderChunks.ActiveCount+" merged boxes");
         Debug.Log("[NavalPrototype] Kinematic voxel compound: "+hull.Definition.Name+" | "+audit);
     }
+    private void OnDestroy(){NavalPhysicsQueries.Unregister(hull);}
     private void AddState(int state,int sign)
     {
         if((state&1)!=0)attached+=sign;if((state&2)!=0)loose+=sign;
@@ -96,6 +98,17 @@ public sealed class NavalShipPhysics : MonoBehaviour
         {
             if(fullAudit||auditCount<0||Time.unscaledTime>=auditAt&&(pending.Count>0||auditRevision!=hull.Revision||auditCount!=hull.Voxels.Count))Audit();
             return audit+(colliderChunks!=null?" | "+colliderChunks.BatchedCount+">"+colliderChunks.ActiveCount:"");
+        }
+    }
+    public string ShapeDiagnostics
+    {
+        get
+        {
+            int enabled=0,triggers=0;
+            foreach(NavalHullVoxel cell in hull.Voxels)if(cell!=null&&cell.PhysicsCollider!=null&&cell.PhysicsCollider.enabled)
+            {enabled++;if(cell.PhysicsCollider.isTrigger)triggers++;}
+            int merged=colliderChunks!=null?colliderChunks.ActiveCount:0,cargo=hull.Cargo!=null?hull.Cargo.ActiveCompactCollisionShapes:0;
+            return "voxel_enabled="+enabled+" triggers="+triggers+" merged="+merged+" cargo_proxy="+cargo+" total="+(enabled+merged+cargo);
         }
     }
 }

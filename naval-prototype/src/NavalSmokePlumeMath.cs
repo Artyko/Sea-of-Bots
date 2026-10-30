@@ -1,10 +1,18 @@
 ﻿using System;
 public static class NavalSmokePlumeMath
 {
-    public const float Lifetime=12f,RiseSpeed=2.4f,Expansion=4f;
+    public const float Lifetime=7.5f,RiseSpeed=2.4f,Expansion=4f;
     public const int OpacityLevels=8;
-    public const float ColumnInterval=.25f/1.5f,ColumnSize=1f,SourceCarry=.2f;
-    public const int MaxColumns=8,MaxColumnPuffsPerTick=8;
+    public const float ColumnInterval=.25f,ColumnSize=1f,SourceCarry=.2f;
+    public const int MaxColumns=4,MaxColumnPuffsPerTick=5;
+    // Smoke below a closed deck is re-emitted at a real companionway or a
+    // destroyed deck cell. These helpers keep deck selection testable without
+    // putting physics queries into the pure math layer.
+    public const float StairVentZ=.38f;
+    public static bool NeedsVent(float sourceY,float weatherDeck)
+    {return sourceY<weatherDeck-.08f;}
+    public static float NextVentDeck(float sourceY,float middleDeck,float weatherDeck)
+    {return sourceY<middleDeck-.08f?middleDeck:sourceY<weatherDeck-.08f?weatherDeck:float.PositiveInfinity;}
     public static int Puffs(int burning){return burning<=0?0:burning<4?1:burning<10?2:3;}
     public static float FireSize(int burning){return ColumnSize+(float)Math.Min(.5,Math.Sqrt(Math.Max(0,burning-1))*.09);}
     public static float RelativeDrift(float speed,float age)

@@ -5,6 +5,8 @@ public class NavalSeaLadder : MonoBehaviour
     public static readonly List<NavalSeaLadder> All=new List<NavalSeaLadder>();
     private readonly List<NavalHullVoxel>[] cells={new List<NavalHullVoxel>(),new List<NavalHullVoxel>()};
     public NavalHull Hull;
+    public float OuterX(int side){return (side==0?-1f:1f)*(Hull.Definition.HullHalfWidth(Hull.Definition.LadderZ)+.35f);}
+    public float DeckX(int side){return (side==0?-1f:1f)*(Hull.Definition.HullHalfWidth(Hull.Definition.LadderZ)-.35f);}
     private int usableRevision=-1;
     private readonly bool[] usable=new bool[2];
     public void Initialize(NavalHull hull,Material material)
@@ -12,9 +14,10 @@ public class NavalSeaLadder : MonoBehaviour
         Hull=hull;All.Add(this);
         for(int side=0;side<2;side++)
         {
-            float x=side==0?-3.35f:3.35f;int first=hull.Voxels.Count;
+            float sign=side==0?-1f:1f,edge=hull.Definition.HullHalfWidth(hull.Definition.LadderZ);
+            float x=sign*(edge+.35f);int first=hull.Voxels.Count;
             for(int rail=-1;rail<=1;rail+=2)
-                LadderBox(hull,material,new Vector3(side==0?-3.1f:3.1f,0.6f,hull.Definition.LadderZ+rail*0.37f),new Vector3(0.65f,0.16f,0.16f),true);
+                LadderBox(hull,material,new Vector3(sign*(edge+.10f),0.6f,hull.Definition.LadderZ+rail*0.37f),new Vector3(0.65f,0.16f,0.16f),true);
             for(int rail=-1;rail<=1;rail+=2)
                 LadderBox(hull,material,new Vector3(x,0.45f,hull.Definition.LadderZ+rail*0.37f),new Vector3(0.14f,4.1f,0.14f),true);
             for(int step=0;step<14;step++)
@@ -71,8 +74,8 @@ public class NavalBoarding
             Vector3 local=ladder.transform.InverseTransformPoint(player.transform.position);
             for(int i=0;i<2;i++)
             {
-                float x=i==0?-3.35f:3.35f;
-                if(!ladder.Usable(i)||Mathf.Abs(local.x)<3.05f||local.y>2.6f+ladder.Hull.Definition.UpperDeckOffset||local.y<-2.5f+ladder.Hull.Definition.UpperDeckOffset)continue;
+                float x=ladder.OuterX(i),edge=ladder.Hull.Definition.HullHalfWidth(ladder.Hull.Definition.LadderZ);
+                if(!ladder.Usable(i)||Mathf.Abs(local.x)<edge+.05f||local.y>2.6f+ladder.Hull.Definition.UpperDeckOffset||local.y<-2.5f+ladder.Hull.Definition.UpperDeckOffset)continue;
                 float distance=Vector2.Distance(new Vector2(local.x,local.z),new Vector2(x,ladder.Hull.Definition.LadderZ))*ladder.Hull.WorldScale;
                 if(distance<nearest){nearby=ladder;nearSide=i;nearest=distance;}
             }
@@ -84,8 +87,9 @@ public class NavalBoarding
     {
         if(!Climbing)return;
         float sign=side==0?-1f:1f;
-        Vector3 target=stage==0?new Vector3(sign*3.7f,feet.y,selected.Hull.Definition.LadderZ):stage==1?
-            new Vector3(sign*3.7f,selected.Hull.Definition.BoardingY,selected.Hull.Definition.LadderZ):stage==2?new Vector3(sign*2.2f,selected.Hull.Definition.BoardingY,selected.Hull.Definition.LadderZ):new Vector3(sign*2.2f,selected.Hull.Definition.WeatherDeck+.035f,selected.Hull.Definition.LadderZ);
+        float outside=Mathf.Abs(selected.OuterX(side))+.35f,deck=Mathf.Abs(selected.DeckX(side));
+        Vector3 target=stage==0?new Vector3(sign*outside,feet.y,selected.Hull.Definition.LadderZ):stage==1?
+            new Vector3(sign*outside,selected.Hull.Definition.BoardingY,selected.Hull.Definition.LadderZ):stage==2?new Vector3(sign*deck,selected.Hull.Definition.BoardingY,selected.Hull.Definition.LadderZ):new Vector3(sign*deck,selected.Hull.Definition.WeatherDeck+.035f,selected.Hull.Definition.LadderZ);
         feet=Vector3.MoveTowards(feet,target,1.5f*dt);
         CharacterController controller=player.GetComponentInChildren<CharacterController>();
         bool enabled=controller!=null&&controller.enabled;if(enabled)controller.enabled=false;

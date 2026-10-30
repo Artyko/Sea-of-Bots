@@ -26,6 +26,11 @@ class ConnectivityChecks
         Check(pieces.Count==2&&pieces[1].Count==1,"Isolated single voxel also detaches");
         absent=new bool[7];
         Check(NavalConnectivity.Components(graph,absent).Count==1,"Repair restores original connections");
+        bool[] foundation={true,false,false,false,false,false,false};
+        List<int> supported=new List<int>{0,1,2},unsupported=new List<int>{4,5,6};
+        Check(NavalStructuralSupport.HasFoundation(supported,foundation),"A component connected to the lower hull remains supported");
+        Check(!NavalStructuralSupport.HasFoundation(unsupported,foundation),"A disconnected superstructure has no support even when it is large");
+        Check(!NavalStructuralSupport.HasFoundation(new List<int>(),foundation),"An empty component is never supported");
         for(int i=0;i<7;i++)absent[i]=true;
         Check(NavalConnectivity.Components(graph,absent).Count==0,"Fully destroyed structure has no components");
         Console.WriteLine("PASS: supported pieces, alternate brackets, severed groups, isolated voxels and repair.");

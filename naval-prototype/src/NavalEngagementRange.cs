@@ -21,20 +21,25 @@ public sealed class NavalEngagementRange
     private void ChooseVariation()
     {duration=durations[phase]+NextFloat()*8f-4f;jitter=NextFloat()*.04f-.02f;CourseBias=NextFloat()*6f-3f;CruiseThrottle=.6f+NextFloat()*.2f;}
     public void Step(float dt,float distance,bool reachable,float ownScale,float otherScale)
+    {Step(dt,distance,reachable,ownScale,otherScale,32f);}
+    public void Step(float dt,float distance,bool reachable,float ownScale,float otherScale,float projectileSpeed)
     {
         dt=Math.Max(0f,dt);age+=dt;
         if(!randomInitialized)Reset(0);
         if(age>=duration){age-=duration;phase=(phase+1+Next(ranges.Length-1))%ranges.Length;ChooseVariation();}
-        Desired=Math.Max(NavalHelmTactics.Clearance(ownScale,otherScale)+6f,NavalGunneryMath.LevelRange*(ranges[phase]+jitter));
+        float levelRange=NavalGunneryMath.LevelRangeFor(projectileSpeed);
+        Desired=Math.Max(NavalHelmTactics.Clearance(ownScale,otherScale)+6f,levelRange*(ranges[phase]+jitter));
         // Do not turn an early long-range approach into an endless broadside orbit.
-        if(!reachable&&distance<NavalGunneryMath.LevelRange*1.7f)unreachable+=dt;else unreachable=0f;
+        if(!reachable&&distance<levelRange*1.7f)unreachable+=dt;else unreachable=0f;
         if(unreachable>=3f&&distance>Desired+8f)Pursuing=true;
         if(reachable){Pursuing=false;KeepBroadside=true;}
         else if(unreachable>=3f)KeepBroadside=false;
     }
     public static float ApproachCourse(float bearing,int side,float distance,float ownSpeed,float enemyAwaySpeed,float bias)
+    {return ApproachCourse(bearing,side,distance,ownSpeed,enemyAwaySpeed,bias,NavalGunneryMath.LevelRange);}
+    public static float ApproachCourse(float bearing,int side,float distance,float ownSpeed,float enemyAwaySpeed,float bias,float levelRange)
     {
-        float angle=Math.Max(15f,Math.Min(65f,65f-(distance-NavalGunneryMath.LevelRange-8f)*.5f));
+        float angle=Math.Max(15f,Math.Min(65f,65f-(distance-levelRange-8f)*.5f));
         if(enemyAwaySpeed>0f)
         {
             float ratio=Math.Max(0f,Math.Min(.97f,(enemyAwaySpeed+.2f)/Math.Max(2.5f,Math.Abs(ownSpeed))));
@@ -43,7 +48,9 @@ public sealed class NavalEngagementRange
         return bearing+(side==1?1f:-1f)*Math.Max(10f,angle+bias);
     }
     public static bool BallisticReach(float distance,float height)
-    {float degrees;return NavalBattleMath.FiringAngle(distance,height,32f,out degrees)&&degrees<=45f;}
+    {return BallisticReach(distance,height,32f);}
+    public static bool BallisticReach(float distance,float height,float projectileSpeed)
+    {float degrees;return NavalBattleMath.FiringAngle(distance,height,projectileSpeed,out degrees)&&degrees<=45f;}
     public static float Course(float bearing,int side,float distance,float desired,bool pursuing)
     {
         // Positive weight closes range; negative opens it. Normal trim remains in gun traverse.

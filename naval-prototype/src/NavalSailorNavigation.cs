@@ -3,7 +3,7 @@
 public partial class NavalRepairSailor
 {
     private readonly NavalMovementWatchdog movementWatchdog=new NavalMovementWatchdog();
-    private float stairRecoveryAt,deckReplanAt;private int stairExitWaypoints,lastStairExitSide;private float blockLogAt;
+    private float stairRecoveryAt,deckReplanAt,deckRouteTrustedUntil;private int stairExitWaypoints,lastStairExitSide;private float blockLogAt;
     private enum RouteResult {Moving,Arrived,Blocked,Fell}
     // All maintenance duties use one movement, arrival and obstruction policy.
     // The caller owns the job-specific response to an obstruction.
@@ -13,13 +13,26 @@ public partial class NavalRepairSailor
         Vector3 target=route[0];bool final=route.Count==1;
         // A stale route must not pull a sailor vertically through an intact deck.
         bool submergedRepair=final&&leak!=null&&NavalTestWorld.Active!=null&&NavalTestWorld.Active.WaterLevelAt(boat.TransformPoint(feet))>boat.TransformPoint(feet).y+2.6f;
-        if(!submergedRepair&&stairExitWaypoints==0&&ledgeWaypoints==0&&Time.time>=deckReplanAt&&Mathf.Abs(target.y-feet.y)*hull.WorldScale>1f&&
+        // Landings are part of a stair passage too. The old check only knew
+        // about the sloping flight, so a sailor standing on a landing saw the
+        // next point on the other deck and repeatedly rebuilt a valid route.
+        // A point on the upper flight and a point on the lower flight are not
+        // one continuous stair transition. Treating them as one suppressed the
+        // stale-route rebuild and sent sailors vertically through the middle deck.
+        bool stairTransition=NavalStairTraffic.SamePassage(new NavalWalkPoint(feet.x,feet.y,feet.z),
+            new NavalWalkPoint(target.x,target.y,target.z),hull.Definition);
+        if(!submergedRepair&&!stairTransition&&stairExitWaypoints==0&&ledgeWaypoints==0&&Time.time>=deckReplanAt&&Time.time>=deckRouteTrustedUntil&&Mathf.Abs(target.y-feet.y)*hull.WorldScale>1f&&
            new Vector2(target.x-feet.x,target.z-feet.z).magnitude*hull.WorldScale<1.2f){
-            deckReplanAt=Time.time+2f;Vector3 goal=route[route.Count-1];
+            deckReplanAt=Time.time+2f;Vector3 oldTarget=target,goal=route[route.Count-1];
             route.Clear();stuck=0;PlanTo(goal);
             if(route.Count==0)return RouteResult.Arrived;
+            // The freshly generated route contains explicit treads and has
+            // passed the static clearance planner. Give it enough time to
+            // cross a complete flight instead of reclassifying every landing
+            // pose as another stale vertical shortcut two seconds later.
+            deckRouteTrustedUntil=Time.time+12f;
             target=route[0];final=route.Count==1;
-            Debug.Log("[NavalPrototype] Rebuilt stale deck route: ship="+boat.name+" feet="+feet+" next="+target+" duty="+Status);
+            Debug.Log("[NavalPrototype] Rebuilt stale deck route: ship="+boat.name+" feet="+feet+" stale="+oldTarget+" next="+target+" duty="+Status);
         }
         float recoveryFloor;
         if(stairExitWaypoints==0&&ledgeWaypoints==0&&Time.time>=stairRecoveryAt&&NavalStairRecovery.Needed(
@@ -51,7 +64,7 @@ public partial class NavalRepairSailor
         stuck=NavalRouteProgress.Step(stuck,before,boat.TransformVector(target-feet).magnitude,dt,reached,Time.time<passageWorkUntil);
         if(closeRepair)route.Clear();else if(reached){route.RemoveAt(0);if(recovering)ledgeWaypoints--;if(stairExitWaypoints>0){stairExitWaypoints--;if(stairExitWaypoints==0)lastStairExitSide=0;}}
         if(feet.y<hull.Floor-.7f)return RouteResult.Fell;
-        if(motionExpired){movementWatchdog.Reset();Debug.Log("[NavalPrototype] Crew route stalled for 8 seconds at "+feet+" target="+target+" ship="+boat.name+" profile="+hull.Definition.Name+" duty="+Status);return RouteResult.Blocked;}
+        if(motionExpired){movementWatchdog.Reset();Debug.Log("[NavalPrototype] Crew route stalled for 8 seconds: sailor="+robot.GetInstanceID()+" at="+feet+" target="+target+" ship="+boat.name+" profile="+hull.Definition.Name+" duty="+Status);return RouteResult.Blocked;}
         if(stairExitWaypoints==0&&stuck>.45f&&RecoverObstruction(target))return RouteResult.Moving;
         if(stuck>timeout){LogRouteBlock(target);return RouteResult.Blocked;}
         return route.Count==0?RouteResult.Arrived:RouteResult.Moving;

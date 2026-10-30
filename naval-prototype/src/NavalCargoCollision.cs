@@ -1,6 +1,6 @@
 ﻿using UnityEngine;
 using System.Collections.Generic;
-// Intact cargo uses five crate panels plus one bounded content volume.
+// Intact cargo uses one outer crate volume plus one bounded content volume.
 // External damage immediately restores exact voxel colliders before subsequent queries.
 public sealed class NavalCargoCollision : MonoBehaviour {
  private NavalHull hull;private NavalCargoCrate crate;
@@ -43,16 +43,16 @@ public sealed class NavalCargoCollision : MonoBehaviour {
   // Inventory changes inside a partially emptied crate never reenable individual colliders.
   if(sides!=shellCount){
    float scale=hull.WorldScale;Vector3 p=crate.Point;
-   Box(0,p+Vector3.up*(.1f/scale),new Vector3(1.3f,.2f,1.3f)/scale,shell);
-   Box(1,p+new Vector3(-.60f,.55f,0)/scale,new Vector3(.16f,.72f,1.35f)/scale,shell);
-   Box(2,p+new Vector3(.60f,.55f,0)/scale,new Vector3(.16f,.72f,1.35f)/scale,shell);
-   Box(3,p+new Vector3(0,.55f,-.60f)/scale,new Vector3(1.35f,.72f,.16f)/scale,shell);
-   Box(4,p+new Vector3(0,.55f,.60f)/scale,new Vector3(1.35f,.72f,.16f)/scale,shell);
-   if(sides==0)for(int i=0;i<5;i++)proxies[i].Shape.enabled=false;
+   float width=crate.Width;
+   // Crew and projectiles never enter a one-metre supply rack. One exact
+   // outer box has the same blocking envelope as the former five panels but
+   // contributes one broad-phase shape instead of five.
+   Box(0,p+Vector3.up*(.465f/scale),new Vector3(width+.05f,.94f,width+.05f)/scale,shell);
+   if(sides==0)proxies[0].Shape.enabled=false;
    shellCount=sides;
   }
   if(items!=contentCount){
-   var proxy=Proxy(5,contents);proxy.Shape.enabled=false;
+   var proxy=Proxy(1,contents);proxy.Shape.enabled=false;
    bool first=true;Bounds bounds=new Bounds();
    foreach(var cell in contents)if(!cell.Missing&&!cell.Detached){
     var box=cell.PhysicsCollider as BoxCollider;if(box==null)continue;

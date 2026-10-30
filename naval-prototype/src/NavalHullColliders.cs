@@ -24,7 +24,7 @@ public sealed class NavalHullColliders : MonoBehaviour
     public int BatchedCount {get;private set;}
     public void Initialize(NavalHull owner)
     {
-        hull=owner;all.Add(this);
+        hull=owner;all.Add(this);float chunkSize=NavalSpatialBatching.ColliderChunkSize(hull.Definition);bool centered=hull.Definition.SteamPowered;
         Dictionary<string,Chunk> groups=new Dictionary<string,Chunk>();
         foreach(NavalHullVoxel cell in hull.Voxels)
         {
@@ -34,7 +34,7 @@ public sealed class NavalHullColliders : MonoBehaviour
                 cell.CargoCollision!=null||cell.Missing||cell.Detached||pose.parent!=transform||!AxisAligned(pose)||!Positive(pose.localScale))continue;
             Vector3 position=pose.localPosition,scale=pose.localScale;
             // Layer, physical material and contact offset must also agree. Built only at construction.
-            string key=Mathf.FloorToInt(position.x/2f)+":"+Mathf.FloorToInt(position.y/2f)+":"+Mathf.FloorToInt(position.z/2f)+":"+
+            string key=NavalSpatialBatching.ColliderChunk(position.x,chunkSize,centered)+":"+NavalSpatialBatching.ColliderChunk(position.y,chunkSize,centered)+":"+NavalSpatialBatching.ColliderChunk(position.z,chunkSize,centered)+":"+
                 cell.gameObject.layer+":"+(collider.sharedMaterial!=null?collider.sharedMaterial.GetInstanceID():0)+":"+collider.contactOffset.ToString("R",System.Globalization.CultureInfo.InvariantCulture);
             Chunk chunk;if(!groups.TryGetValue(key,out chunk)){chunk=new Chunk();groups.Add(key,chunk);chunks.Add(chunk);}
             Vector3 center=position+Vector3.Scale(collider.center,scale),half=Vector3.Scale(collider.size,scale)*.5f;

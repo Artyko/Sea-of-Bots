@@ -37,8 +37,9 @@ public sealed class NavalCrewPassage : MonoBehaviour
   bool valid=crew[a]!=null&&crew[b]!=null&&crew[a].IsAlive()&&crew[b].IsAlive();
   bool pass=false;
   if(valid){float distance=Vector3.Distance(crew[a].transform.position,crew[b].transform.position);
-   if(distance<1.8f&&crew[a].IsPlayerTeam==crew[b].IsPlayerTeam&&
-      (workers[a]!=null&&workers[a].Busy||workers[b]!=null&&workers[b].Busy))pass=true;
+   bool sameTeam=crew[a].IsPlayerTeam==crew[b].IsPlayerTeam;
+   bool navigating=workers[a]!=null&&workers[a].Navigating||workers[b]!=null&&workers[b].Navigating;
+   if(distance<2.8f&&sameTeam&&(navigating||workers[a]!=null&&workers[a].Busy||workers[b]!=null&&workers[b].Busy))pass=true;
    if(distance<2.5f)pass=pass||NavalStairTraffic.FriendlyPass(crew[a].IsPlayerTeam==crew[b].IsPlayerTeam,InPassage(a),InPassage(b),distance);}
   // HoldPosition toggles controllers; reapply a live pass before each Move as well as on review.
   if(pass||ignored[a,b])Physics.IgnoreCollision(first,second,pass);

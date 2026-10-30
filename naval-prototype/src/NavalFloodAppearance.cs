@@ -64,8 +64,10 @@ public class NavalFloodAppearance : MonoBehaviour
     private void WriteCell(int cell,float depth)
     {
         NavalFloodGrid grid=hull.Flood;
-        Vector3 centre=new Vector3(grid.X(cell),hull.Floor+depth*.5f,grid.Z(cell));
-        Vector3 size=depth>0f?new Vector3(grid.CellWidth,depth,grid.CellLength):Vector3.zero;
+        float centreX=grid.X(cell),width=0f;
+        bool visible=depth>0f&&grid.IsActive(cell)&&NavalFloodRenderMath.ClipCell(grid.X(cell),grid.CellWidth,grid.Z(cell),grid.CellLength,hull.Definition,out centreX,out width);
+        Vector3 centre=new Vector3(visible?centreX:grid.X(cell),hull.Floor+depth*.5f,grid.Z(cell));
+        Vector3 size=visible?new Vector3(width,depth,grid.CellLength):Vector3.zero;
         for(int v=0;v<24;v++)vertices[cell*24+v]=centre+Vector3.Scale(corners[v],size);
     }
     public static float Clearance(Transform boat,NavalWater sea)

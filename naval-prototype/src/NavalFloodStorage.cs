@@ -9,12 +9,13 @@ public sealed class NavalFloodStorage
   count=3;bottoms=new float[grid.Water.Length,count];tops=new float[grid.Water.Length,count];fractions=new float[grid.Water.Length,count];
   for(int i=0;i<grid.Water.Length;i++){
    float x=grid.X(i),z=grid.Z(i),dx=grid.CellWidth,dz=grid.CellLength;
+   NavalBallastLayout.Dimensions layout=NavalBallastLayout.For(ship);
    float tankArea=0,tankHeightArea=0;
    for(int side=-1;side<=1;side+=2)for(int end=-1;end<=1;end+=2){
-    float a=Overlap(x-dx*.5f,x+dx*.5f,side*NavalBallastLayout.X-NavalBallastLayout.Width*.5f,side*NavalBallastLayout.X+NavalBallastLayout.Width*.5f);
-    float left=Math.Max(z-dz*.5f,end*NavalBallastLayout.Z-NavalBallastLayout.Length*.5f),right=Math.Min(z+dz*.5f,end*NavalBallastLayout.Z+NavalBallastLayout.Length*.5f);
+    float a=Overlap(x-dx*.5f,x+dx*.5f,side*layout.X-layout.Width*.5f,side*layout.X+layout.Width*.5f);
+    float left=Math.Max(z-dz*.5f,end*layout.Z-layout.Length*.5f),right=Math.Min(z+dz*.5f,end*layout.Z+layout.Length*.5f);
     if(a<=0||right<=left)continue;
-    float height=0;for(int sample=0;sample<12;sample++)height+=NavalBallastLayout.Surface(side*NavalBallastLayout.X,left+(sample+.5f)*(right-left)/12,0,ship.Scale)/12;
+    float height=0;for(int sample=0;sample<12;sample++)height+=NavalBallastLayout.Surface(side*layout.X,left+(sample+.5f)*(right-left)/12,0,ship)/12;
     float area=a*(right-left);tankArea+=area;tankHeightArea+=area*height;
    }
    float fraction=tankArea/(dx*dz),tankHeight=tankArea>0?tankHeightArea/tankArea:0;

@@ -6,6 +6,8 @@ class RaisedStationChecks {
  Check(NavalStationArrival.OnRaisedSupport(.14f,.03f,0,3),"Logged standby capsule contact offset");
  foreach(float radius in new float[]{.12f,.35f,.45f,.6f}){
  float distance=NavalRiderSupportMath.Distance(1.6f,.12f,radius);Check(Math.Abs(distance+radius-1.72f)<.0001f,"Wider support must not reach lower and carry airborne riders");
+ Check(NavalRiderSupportMath.NearShip(3.1f,5.9f,.8f,4f),"Player footprint over a scaled hull passes cheap support broad phase");
+ Check(!NavalRiderSupportMath.NearShip(40f,0f,.8f,4f),"Remote enemy ship is rejected before PhysX support casts");
  }
  foreach(float s in new float[]{2,3,4}){
  Check(!NavalStationArrival.OnRaisedSupport(0,-.1f,0,s),"Cannot accept support below post");

@@ -11,13 +11,20 @@ public sealed class NavalCrewAccessAudit:MonoBehaviour {
   CharacterController body=null;foreach(var worker in hull.RepairWorkers)if(worker!=null&&worker.BodyController!=null&&worker.BodyController.enabled){body=worker.BodyController;break;}
   if(body==null)return;
   if(!prepared){
-   var ship=hull.Definition;Add("helm",new Vector3(0,ship.HelmDeck,NavalShipDefinition.HelmZ(ship)));Add("tiller",stations.EmergencyPost);Add("sails",stations.Post(stations.SailStation));
+   var ship=hull.Definition;Add("helm",new Vector3(0,ship.HelmDeck,NavalShipDefinition.HelmZ(ship)));Add("tiller",stations.EmergencyPost);Add(ship.SteamPowered?"engine telegraph":"sails",stations.Post(stations.SailStation));
    for(int gun=1;gun<=stations.GunCount;gun++)Add("gun "+gun,stations.Post(gun));
+   if(stations.HasMainBattery)for(int slot=0;slot<2;slot++)Add("main battery crew "+slot,stations.MainBatteryCrewPost(slot));
    if(hull.Bilge!=null)for(int i=0;i<hull.Bilge.PumpCount;i++)Add("pump "+i,hull.Bilge.PumpAt(i).Post+new Vector3(0,0,.65f/hull.WorldScale));
    if(hull.Cargo!=null)foreach(var crate in hull.Cargo.Crates)Add("cargo kind="+crate.Kind+" gun="+crate.Gun,crate.Pickup);
-   for(int i=0;i<ship.CrewCount;i++)Add("standby "+i,new Vector3(NavalShipDefinition.StandbyX(ship,i),hull.Floor,NavalShipDefinition.StandbyZ(i)));
-   for(int level=0;level<ship.MaintenanceDeckCount;level++)foreach(float x in new float[]{-2.35f,2.35f})foreach(float z in new float[]{-4.8f,-1.4f,1.4f,4.8f})Add("maintenance deck="+level,new Vector3(x,NavalBallastLayout.Surface(x,z,ship.MaintenanceFloor(level),ship.Scale),z));
-   foreach(float side in new float[]{-1,1})Add("sea ladder",new Vector3(side*2.2f,ship.WeatherDeck,ship.LadderZ));
+   // The last two steam-era sailors belong inside the rotating main mount and
+   // have no ordinary standby post. Auditing the obsolete bow posts reported
+   // false failures after the main battery replaced that area.
+   int standbyCount=ship.SteamPowered?ship.CrewCount-2:ship.CrewCount;
+   for(int i=0;i<standbyCount;i++)Add("standby "+i,NavalShipDefinition.StandbyPost(ship,i));
+   float[] auditX=ship.SteamPowered?new float[]{-.65f,.65f}:new float[]{-2.35f,2.35f};
+   float[] auditZ=ship.SteamPowered?new float[]{-4f,1.4f,3.2f,4f}:new float[]{-4.8f,-1.4f,1.4f,4.8f};
+   for(int level=0;level<ship.MaintenanceDeckCount;level++)foreach(float x in auditX)foreach(float z in auditZ)Add("maintenance deck="+level,new Vector3(x,NavalBallastLayout.Surface(x,z,ship.MaintenanceFloor(level),ship),z));
+   foreach(float side in new float[]{-1,1})Add("sea ladder",new Vector3(side*(ship.HullHalfWidth(ship.LadderZ)-.35f),ship.WeatherDeck,ship.LadderZ));
    prepared=true;
   }
   if(next>=points.Count){Debug.Log("[NavalPrototype] Access audit finished: ship="+hull.Root.name+" profile="+hull.Definition.Name+" checked="+points.Count+" blocked="+blocked);enabled=false;return;}

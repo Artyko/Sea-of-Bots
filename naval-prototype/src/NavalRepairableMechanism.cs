@@ -8,7 +8,7 @@ public sealed class NavalRepairableMechanism
     private readonly List<NavalHullVoxel> cells;
     private readonly NavalMechanismDamage state=new NavalMechanismDamage();
     private int revision=-1,damaged;
-    public readonly bool IsPump,IsCannon;
+    public readonly bool IsPump,IsCannon,IsSteamMain,IsMainBattery;
     private readonly NavalCannonRepairBudget cannonRepair=new NavalCannonRepairBudget();
     public NavalRepairSailor RepairWorker;
     public float PlayerRepairUntil;
@@ -16,15 +16,17 @@ public sealed class NavalRepairableMechanism
     public bool PartsDelivered;
     public float DisplaySeconds,ProgressUntil;
     public string RepairStage;
-    public bool CanFetchParts {get{return PartsDelivered||hull.HasCannonStock;}}
-    public bool RecoverableWithParts {get{return CanFetchParts||hull.CannonSupply!=null&&hull.CannonSupply.PlayerHasKit||RepairWorker!=null&&RepairWorker.CarryingCannonParts(this);}}
+    private readonly string customName;
+    public bool PermanentlyDestroyed {get{return IsCannon&&cannonRepair.Lost;}}
+    public bool CanFetchParts {get{return !PermanentlyDestroyed&&(PartsDelivered||hull.HasCannonStock);}}
+    public bool RecoverableWithParts {get{return !PermanentlyDestroyed&&(CanFetchParts||hull.CannonSupply!=null&&hull.CannonSupply.PlayerHasKit||RepairWorker!=null&&RepairWorker.CarryingCannonParts(this));}}
     public void ReportRepair(float seconds,string stage){DisplaySeconds=seconds;RepairStage=stage;ProgressUntil=Time.time+.3f;}
     public bool RestoringCannon {get;private set;}
     public bool RepairUsed {get{return IsCannon&&cannonRepair.Used;}}
     public float RepairSeconds {get{return IsCannon?NavalCannonRepairBudget.Duration:4f;}}
-    public NavalRepairableMechanism(NavalHull owner,IEnumerable<NavalHullVoxel> members,bool pump,bool cannon=false)
+    public NavalRepairableMechanism(NavalHull owner,IEnumerable<NavalHullVoxel> members,bool pump,bool cannon=false,string name=null,bool steamMain=false,bool mainBattery=false)
     {
-        hull=owner;IsPump=pump;IsCannon=cannon;cells=new List<NavalHullVoxel>(members);
+        hull=owner;IsPump=pump;IsCannon=cannon;IsSteamMain=steamMain;IsMainBattery=mainBattery;customName=name;cells=new List<NavalHullVoxel>(members);
         foreach(NavalHullVoxel cell in cells)
         {
             cell.RepairableEquipment=true;cell.RepairMechanism=this;
@@ -42,7 +44,7 @@ public sealed class NavalRepairableMechanism
     public bool NeedsRepair {get{Refresh();return damaged>0&&CanRepair;}}
     public bool Destroyed {get{Refresh();return IsCannon?damaged>0&&cannonRepair.Used:state.Destroyed;}}
     public bool Functional {get{Refresh();return cells.Count>0&&damaged==0&&(IsCannon||!state.Destroyed);}}
-    public string Name {get{return IsCannon?"Пушка":IsPump?"Помпа":"Штурвал";}}
+    public string Name {get{return customName??(IsCannon?"Пушка":IsPump?"Помпа":"Штурвал");}}
     public bool CompleteCannonRepair(NavalStructure structure,float seconds)
     {
         if(!IsCannon||!CanRepair||!PartsDelivered||structure==null||!cannonRepair.Ready(seconds))return false;
@@ -53,6 +55,15 @@ public sealed class NavalRepairableMechanism
         bool complete=cannonRepair.Complete(damaged==0,seconds);
         if(complete)Debug.Log("[NavalPrototype] Cannon restored once: "+hull.Root.name+" at "+RepairPoint);
         return complete;
+    }
+    public void CatastrophicDestroy()
+    {
+        if(!IsCannon||PermanentlyDestroyed)return;
+        cannonRepair.CatastrophicLoss();PartsDelivered=false;PlayerRepairUntil=0f;ProgressUntil=DisplaySeconds=0f;
+        RepairWorker=null;
+        foreach(var cell in cells)if(cell!=null&&!cell.Missing)cell.SetMissing(true);
+        revision=-1;
+        Debug.Log("[NavalPrototype] Cannon permanently destroyed by ammunition detonation: "+hull.Root.name+" at "+RepairPoint);
     }
     public void Reset(){state.Reset();cannonRepair.Reset();RepairWorker=null;PlayerRepairUntil=0;PartsDelivered=false;ProgressUntil=DisplaySeconds=0;revision=-1;}
 }

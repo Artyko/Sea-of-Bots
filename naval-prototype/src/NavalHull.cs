@@ -14,6 +14,10 @@ public class NavalHullVoxel : MonoBehaviour
     public bool MovableEquipment;
     public bool RigFabric;
     public bool Flammable;
+    public bool Armored;
+    // Metal equipment is not necessarily part of the armoured hydraulic shell.
+    // Keep its impact treatment independent so gun damage never receives wood scars.
+    public bool Metallic;
     public bool MastTimber;
     public float CannonWear;
     public bool Detached;
@@ -27,6 +31,10 @@ public class NavalHullVoxel : MonoBehaviour
     public NavalHullColliders ColliderBatchOwner;
     public int ColliderChunk=-1;
     public bool ColliderBatched;
+    // Fixed visual trim participates in rendering/structural support but does
+    // not need an attached PhysX trigger. Falling structure promotes it to a
+    // normal debris collider.
+    public bool NonPhysicalDecoration;
     public NavalCargoCollision CargoCollision;
     public bool DamageIndexed;
     public void NotifyMaterialChanged(){if(BatchOwner!=null)BatchOwner.MarkDirty(this);if(RigBatchOwner!=null)RigBatchOwner.MarkDirty();}
@@ -37,6 +45,8 @@ public class NavalHullVoxel : MonoBehaviour
     public NavalBallastUnit BallastOwner;
     public NavalHull Owner;
     public Material OriginalSurface;
+    public bool WoodenPatch;
+    public bool PatchOriginalArmored,PatchOriginalMetallic,PatchOriginalFlammable;
     public float ScorchStrength;
     public float InflowRate;
     public float LastWetAt=float.NegativeInfinity;
@@ -51,9 +61,11 @@ public class NavalHullVoxel : MonoBehaviour
         LastWetAt=float.NegativeInfinity;LastWetFlow=0f;
         if (Owner != null) Owner.Revision++;
         GetComponent<Renderer>().enabled = !value && !Batched;
-        PhysicsCollider.enabled = !value&&!ColliderBatched;
+        PhysicsCollider.enabled = !value&&!ColliderBatched&&!NonPhysicalDecoration;
         if (!value && Stream != null) Stream.gameObject.SetActive(false);
     }
+    public void SetNonPhysicalDecoration(bool value)
+    {NonPhysicalDecoration=value;PhysicsCollider.enabled=!Missing&&!ColliderBatched&&!value;}
 }
 
 public class NavalHull
@@ -68,6 +80,8 @@ public class NavalHull
     public readonly List<NavalHullVoxel> Voxels = new List<NavalHullVoxel>();
     private int damagedRevision=-1;
     private readonly List<NavalHullVoxel> damagedVoxels=new List<NavalHullVoxel>();
+    private int deckGapRevision=-1;
+    private readonly List<NavalHullVoxel> deckGaps=new List<NavalHullVoxel>();
     public List<NavalHullVoxel> GetDamagedVoxels()
     {
         if(damagedRevision!=Revision)
@@ -77,6 +91,47 @@ public class NavalHull
             damagedRevision=Revision;
         }
         return damagedVoxels;
+    }
+    private void RefreshDeckGaps()
+    {
+        if(deckGapRevision!=Revision)
+        {
+            deckGaps.Clear();
+            foreach(var cell in GetDamagedVoxels())
+            {
+                if(cell==null||cell.ManagedRig||cell.MovableEquipment||cell.RepairableEquipment||cell.NonPhysicalDecoration)continue;
+                Vector3 size=cell.transform.localScale;
+                if(Mathf.Abs(size.y)<=.35f&&Mathf.Abs(size.x)>=.10f&&Mathf.Abs(size.z)>=.10f)deckGaps.Add(cell);
+            }
+            deckGapRevision=Revision;
+        }
+    }
+    public bool DeckGapAt(Vector3 point,float radiusWorld)
+    {
+        RefreshDeckGaps();
+        for(int i=0;i<deckGaps.Count;i++)
+        {
+            NavalHullVoxel cell=deckGaps[i];Vector3 size=cell.transform.localScale,p=cell.LocalCenter;
+            if(NavalDeckGapMath.Overlaps(point.x,point.y,point.z,radiusWorld,WorldScale,p.x,p.y,p.z,
+                Mathf.Abs(size.x),Mathf.Abs(size.y),Mathf.Abs(size.z)))return true;
+        }
+        return false;
+    }
+    public bool TryNearestDeckGap(Vector3 point,float deckY,float maxWorldDistance,out Vector3 gap)
+    {
+        RefreshDeckGaps();gap=Vector3.zero;float best=maxWorldDistance*maxWorldDistance;
+        for(int i=0;i<deckGaps.Count;i++)
+        {
+            NavalHullVoxel cell=deckGaps[i];if(cell==null)continue;
+            Vector3 p=cell.LocalCenter,size=cell.transform.localScale;
+            // A deck voxel is centred below its walking surface. Reject fallen
+            // horizontal fittings and holes belonging to another deck.
+            float top=p.y+Mathf.Abs(size.y)*.5f;
+            if(Mathf.Abs(top-deckY)*WorldScale>.45f)continue;
+            float dx=(p.x-point.x)*WorldScale,dz=(p.z-point.z)*WorldScale,d=dx*dx+dz*dz;
+            if(d>=best)continue;best=d;gap=new Vector3(p.x,deckY,p.z);
+        }
+        return best<maxWorldDistance*maxWorldDistance;
     }
     private readonly NavalPointIndex damageIndex=new NavalPointIndex();
     private readonly List<int> damageQuery=new List<int>();
@@ -129,7 +184,7 @@ public class NavalHull
     public readonly NavalHullStability Stability;
     public NavalHull():this(NavalShipDefinition.Sloop){}
     public NavalHull(NavalShipDefinition definition)
-    {Definition=definition;Flood=new NavalFloodGrid(12,24,BoatDimensions.HoldWidth,BoatDimensions.HoldLength,definition.Scale,definition.RimY-definition.HoldFloor,definition.DeckCount>2);Flood.ConfigureStorage(definition);Stability=new NavalHullStability(this);}
+    {Definition=definition;Flood=new NavalFloodGrid(12,24,BoatDimensions.HoldWidth,BoatDimensions.HoldLength,definition.Scale,definition.RimY-definition.HoldFloor,definition.DeckCount>2,definition.SteamPowered);Flood.ConfigureStorage(definition);Stability=new NavalHullStability(this);}
     private readonly float[] floodFloors = new float[12*24];
     public float LeftWater { get { return SideWater(true); } }
     public float RightWater { get { return SideWater(false); } }
@@ -163,15 +218,17 @@ public class NavalHull
     public float SinkDepth;
     private const float Cell = 0.25f;
     private Material streamMaterial;
+    private Material repairPatchMaterial;
     private Transform root;
     public Transform Root { get { return root; } }
     private NavalVoxelStyle style;
     public NavalShipPhysics PhysicsBody {get;private set;}
 
-    public void Build(Transform boat, Material wood, Material waterMaterial, Material floorMaterial)
+    public void Build(Transform boat, Material wood, Material waterMaterial, Material floorMaterial,Material patchMaterial=null)
     {
-        RegisterFireMaterial(wood);RegisterFireMaterial(floorMaterial);
+        if(!Definition.Armored)RegisterFireMaterial(wood);RegisterFireMaterial(floorMaterial);
         streamMaterial = waterMaterial;
+        repairPatchMaterial=patchMaterial!=null?patchMaterial:wood;
         root = boat;
         PhysicsBody=boat.gameObject.AddComponent<NavalShipPhysics>();PhysicsBody.Initialize(this);
         style = boat.gameObject.AddComponent<NavalVoxelStyle>();
@@ -244,6 +301,7 @@ public class NavalHull
         NavalHullVoxel voxel = obj.AddComponent<NavalHullVoxel>();
         voxel.Owner = this;
         voxel.Flammable=fireMaterials.Contains(material);
+        voxel.Armored=shell&&Definition.Armored;
         voxel.OriginalSurface = obj.GetComponent<Renderer>().sharedMaterial;
         voxel.LocalCenter = center; voxel.OpeningArea = Cell * Cell;
         voxel.HydraulicShell = shell;
@@ -266,19 +324,48 @@ public class NavalHull
             AddVoxel(boat, material, point, cell, false, solid);
         }
     }
-    public int Damage(Vector3 localPoint, float radius,bool cannon=false,NavalHullVoxel direct=null,float cannonPower=1f)
+    public int Damage(Vector3 localPoint, float radius,bool cannon=false,NavalHullVoxel direct=null,float cannonPower=1f,float armorPower=-1f,bool blastArmor=false)
     {
         using(NavalPerformance.Measure(NavalPerfArea.HullDamage))
         {
-        if(Fire!=null&&cannon)Fire.Impact(localPoint,radius,cannonPower);
-        int removed = 0;
-        foreach (NavalHullVoxel voxel in DamageCandidates(localPoint,radius,direct))
+        float damageRadius=cannon&&Definition.Armored?NavalArmorMath.BlastRadius(radius,Definition.ArmorDamageScale):radius;
+        if(armorPower<0f)armorPower=cannonPower;
+        bool penetrated=direct==null||!direct.Armored||NavalArmorMath.Penetrates(direct.CannonWear,armorPower);
+        if(Fire!=null&&cannon)Fire.Impact(localPoint,damageRadius,cannonPower,penetrated,direct);
+        int removed = 0,blastArmorHit=0,blastArmorBroken=0;
+        foreach (NavalHullVoxel voxel in DamageCandidates(localPoint,damageRadius,direct))
         {
             if(voxel==null||voxel.Missing)continue;
             Vector3 position=root.InverseTransformPoint(voxel.transform.position);
             float distance=(position-localPoint).magnitude;
-            if(distance<=radius||voxel==direct)
+            if(distance<=damageRadius||voxel==direct)
             {
+                if(cannon&&voxel.Armored)
+                {
+                    if(voxel!=direct)
+                    {
+                        if(!blastArmor)
+                        {
+                            voxel.ScorchStrength=Mathf.Max(voxel.ScorchStrength,.25f);style.Impact(voxel.gameObject,voxel.ScorchStrength,true);voxel.NotifyMaterialChanged();
+                            continue;
+                        }
+                        float blastWear=NavalArmorMath.ExplosionArmorWear(armorPower,distance,damageRadius);
+                        if(blastWear<=.001f)continue;
+                        blastArmorHit++;voxel.CannonWear=NavalArmorMath.AddWear(voxel.CannonWear,blastWear);
+                        if(!NavalArmorMath.Broken(voxel.CannonWear))
+                        {
+                            voxel.ScorchStrength=Mathf.Max(voxel.ScorchStrength,Mathf.Clamp(.25f+blastWear*.16f,.25f,.72f));
+                            style.Impact(voxel.gameObject,voxel.ScorchStrength,true);voxel.NotifyMaterialChanged();continue;
+                        }
+                        blastArmorBroken++;voxel.SetMissing(true);removed++;continue;
+                    }
+                    voxel.CannonWear=NavalArmorMath.AddWear(voxel.CannonWear,armorPower);
+                    if(!NavalArmorMath.Broken(voxel.CannonWear))
+                    {
+                        voxel.ScorchStrength=Mathf.Max(voxel.ScorchStrength,.45f);style.Impact(voxel.gameObject,voxel.ScorchStrength,true);voxel.NotifyMaterialChanged();
+                        continue;
+                    }
+                }
                 if(cannon&&voxel.MastTimber)
                 {
                     voxel.CannonWear=NavalMastDurability.Accumulate(voxel.CannonWear,cannonPower);
@@ -291,19 +378,61 @@ public class NavalHull
                 }
                 voxel.SetMissing(true);removed++;
             }
-            else if(distance<radius+0.57f)
+            else if(distance<damageRadius+0.57f)
             {
                 // Stable irregular, voxel-shaped rim. It colours the actual
                 // surviving cells rather than leaving floating decal planes.
                 float noise=Mathf.Repeat(Mathf.Sin(position.x*12.9898f+position.y*78.233f+position.z*37.719f)*43758.5453f,1f);
                 float band=0.35f+noise*0.22f;
-                float strength=Mathf.Clamp01(1f-(distance-radius)/band);
+                float strength=Mathf.Clamp01(1f-(distance-damageRadius)/band);
                 if(strength>0.05f&&strength>voxel.ScorchStrength)
-                {voxel.ScorchStrength=strength;style.Scorch(voxel.gameObject,strength);voxel.NotifyMaterialChanged();}
+                {voxel.ScorchStrength=strength;style.Impact(voxel.gameObject,strength,NavalImpactMaterial.IsMetal(voxel.Armored,voxel.Metallic,false));voxel.NotifyMaterialChanged();}
             }
         }
+        if(blastArmor&&blastArmorHit>0)Debug.Log("[NavalPrototype] Explosion pressure damaged armor: ship="+Root.name+" plates="+blastArmorHit+" broken="+blastArmorBroken+" power="+armorPower.ToString("F2"));
         return removed;
             }
+    }
+    public void ApplyWoodPatch(NavalHullVoxel voxel)
+    {
+        if(voxel==null||repairPatchMaterial==null||!NavalRepairMaterials.ReceivesWoodPatch(voxel))return;
+        if(!voxel.WoodenPatch)
+        {
+            voxel.PatchOriginalArmored=voxel.Armored;voxel.PatchOriginalMetallic=voxel.Metallic;
+            voxel.PatchOriginalFlammable=voxel.Flammable;voxel.WoodenPatch=true;
+        }
+        voxel.Armored=false;voxel.Metallic=false;voxel.Flammable=true;voxel.ScorchStrength=0f;
+        style.Apply(voxel.gameObject,repairPatchMaterial);voxel.NotifyMaterialChanged();
+    }
+    private void ClearWoodPatch(NavalHullVoxel voxel)
+    {
+        if(voxel==null||!voxel.WoodenPatch)return;
+        voxel.Armored=voxel.PatchOriginalArmored;voxel.Metallic=voxel.PatchOriginalMetallic;
+        voxel.Flammable=voxel.PatchOriginalFlammable;voxel.WoodenPatch=false;
+        voxel.GetComponent<Renderer>().sharedMaterial=voxel.OriginalSurface;voxel.NotifyMaterialChanged();
+    }
+    // Brittle iron plate can throw fragments into the ship even when it keeps
+    // the sea out. Spall is deliberately restricted to internal structure and
+    // equipment: it can create repair work, fire or casualties, but it cannot
+    // manufacture a hydraulic opening through an intact shell cell.
+    public int InternalSpall(Vector3 localPoint,float radius,float power)
+    {
+        if(radius<=0f||power<=0f)return 0;
+        if(Fire!=null)Fire.Impact(localPoint,radius*.55f,power,true);
+        int removed=0;
+        foreach(NavalHullVoxel voxel in DamageCandidates(localPoint,radius,null))
+        {
+            if(voxel==null||voxel.Missing||voxel.Detached||voxel.HydraulicShell||voxel.Armored)continue;
+            if(!voxel.RepairableEquipment&&!voxel.InternalBarrier&&!voxel.MovableEquipment)continue;
+            Vector3 position=root.InverseTransformPoint(voxel.transform.position);
+            float distance=(position-localPoint).magnitude;if(distance>radius)continue;
+            float noise=Mathf.Repeat(Mathf.Sin(position.x*19.17f+position.y*43.71f+position.z*91.13f)*15731.743f,1f);
+            float chance=Mathf.Clamp01((1f-distance/Mathf.Max(.01f,radius))*.70f+power*.10f);
+            if(noise>chance)continue;
+            voxel.SetMissing(true);removed++;
+        }
+        if(removed>0)Debug.Log("[NavalPrototype] Internal armor spall damaged equipment: ship="+Root.name+" cells="+removed+" power="+power.ToString("F2")+" point="+localPoint);
+        return removed;
     }
     public void Repair()
     {
@@ -316,6 +445,7 @@ public class NavalHull
             if(voxel.RepairMechanism!=null)equipment.Add(voxel.RepairMechanism);
             voxel.CannonWear=0f;
             if (voxel.Missing) voxel.SetMissing(false);
+            ClearWoodPatch(voxel);
             if(voxel.ScorchStrength>0f)
             {voxel.GetComponent<Renderer>().sharedMaterial=voxel.OriginalSurface;voxel.ScorchStrength=0f;voxel.NotifyVisualChanged();}
         }
@@ -352,7 +482,7 @@ public class NavalHull
             float sea = ocean.Height(point.x, point.z);
             NavalBallastUnit connected=Bilge!=null?Bilge.SeaConnection(voxel):null;
             if(connected!=null&&!connected.Tank.InnerBroken)
-                internalY=boat.TransformPoint(new Vector3(connected.Tank.X,connected.Floor+NavalBallastLayout.Height/WorldScale*connected.Tank.FillFraction,connected.Tank.Z)).y;
+                internalY=boat.TransformPoint(new Vector3(connected.Tank.X,connected.Floor+NavalBallastLayout.For(Definition).Height/WorldScale*connected.Tank.FillFraction,connected.Tank.Z)).y;
             // Partial submergence of a voxel opening changes its effective wet area.
             Vector3 cellSize=voxel.transform.lossyScale;
             float halfHeight=.5f*(Mathf.Abs(boat.right.y*cellSize.x)+Mathf.Abs(boat.up.y*cellSize.y)+Mathf.Abs(boat.forward.y*cellSize.z));
@@ -367,7 +497,7 @@ public class NavalHull
             if(NavalLeakPriority.Score(voxel.InflowRate,voxel.LastWetAt,voxel.LastWetFlow,Time.time)>0f)HasRepairDemand=true;
             if(Fire!=null&&amount>.00001f&&(connected==null||connected.Tank.InnerBroken))
             {
-                Vector3 inward=Mathf.Abs(voxel.LocalCenter.x)>2.9f?new Vector3(-Mathf.Sign(voxel.LocalCenter.x),0,0):new Vector3(0,0,-Mathf.Sign(voxel.LocalCenter.z));
+                Vector3 inward=NavalLeakVisualMath.Inward(voxel.LocalCenter,Definition);
                 Fire.Wash(point,boat.TransformVector(inward),amount/dt);
             }
             Inflow += amount / dt;
@@ -384,9 +514,7 @@ public class NavalHull
                 }
                 voxel.Stream.gameObject.SetActive(true);
                 Vector3 origin = point; origin.y = Mathf.Min(point.y, sea - 0.02f);
-                Vector3 inward = voxel.LocalCenter.y < Floor ? Vector3.up :
-                    (Mathf.Abs(voxel.LocalCenter.x) > 2.9f ? new Vector3(-Mathf.Sign(voxel.LocalCenter.x), 0f, 0f) :
-                    new Vector3(0f, 0f, -Mathf.Sign(voxel.LocalCenter.z)));
+                Vector3 inward = voxel.LocalCenter.y < Floor ? Vector3.up : NavalLeakVisualMath.Inward(voxel.LocalCenter,Definition);
                 voxel.Stream.Animate(boat.InverseTransformPoint(origin), inward, amount / dt, Time.time);
             }
             else if (voxel.Stream != null) voxel.Stream.gameObject.SetActive(false);

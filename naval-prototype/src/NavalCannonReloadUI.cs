@@ -21,5 +21,6 @@ public partial class NavalStations
             float progress=functional?Mathf.Clamp01(1f-remaining/NavalGunneryMath.ReloadSeconds):0f;
             NavalWorldProgressBar.Draw(camera,guns[gun].TransformPoint(new Vector3(0f,1.5f,0f)),progress,functional,remaining<=0f,!functional?"DAMAGED":remaining<=0f?"READY":remaining.ToString("F1")+" s",guns[gun].GetInstanceID());
         }
+        DrawMainBatteryReloadBar(camera);
     }
 }

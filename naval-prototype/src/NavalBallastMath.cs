@@ -48,6 +48,16 @@ public static class NavalBallastWall
             Math.Abs(z)-sz*.5f<=NavalBallastLayout.InnerZ+.01f;
         return (outside?1:0)|(inside?2:0);
     }
+    public static int Faces(NavalShipDefinition ship,float tankX,float x,float y,float z,float sx,float sy,float sz,float floor)
+    {
+        NavalBallastLayout.Dimensions d=NavalBallastLayout.For(ship);
+        float top=NavalBallastLayout.Surface(tankX,z,floor,ship),height=d.Height/ship.Scale;
+        if(y>floor+height+.001f)return 0;
+        bool outside=Math.Abs(x)+sx*.5f>=Math.Abs(tankX)+d.Width*.5f-.01f;
+        bool inside=Math.Abs(x)-sx*.5f<=Math.Abs(tankX)-d.Width*.5f+.01f||y+sy*.5f>=top-.01f||
+            Math.Abs(z)+sz*.5f>=d.Z+d.Length*.5f-.01f||Math.Abs(z)-sz*.5f<=d.InnerZ+.01f;
+        return (outside?1:0)|(inside?2:0);
+    }
 }
 
 // Unobstructed water overtopping an intact lip, reduced by the interior water level.
@@ -166,6 +176,17 @@ public static class NavalBallastLayout
     public const float X=2.45f,Z=3f,Width=.8f,Length=4.4f,Height=1.2f;
     public const float RampRun=1.8f;
     public const int Steps=6;
+    public struct Dimensions
+    {
+        public float X,Z,Width,Length,Height,RampRun;public int Steps;
+        public Dimensions(float x,float z,float width,float length,float height,float rampRun,int steps)
+        {X=x;Z=z;Width=width;Length=length;Height=height;RampRun=rampRun;Steps=steps;}
+        public float InnerZ {get{return Z-Length*.5f;}}
+    }
+    // The ironclad uses low double-bottom wing tanks fitted inside its tapered
+    // shell.  The sailing layout is intentionally retained verbatim.
+    public static Dimensions For(NavalShipDefinition ship)
+    {return ship.SteamPowered?new Dimensions(1.55f,3.70f,.25f,.90f,.78f,.60f,4):new Dimensions(X,Z,Width,Length,Height,RampRun,Steps);}
     public static float InnerZ {get{return Z-Length*.5f;}}
     public static float Capacity(float scale)
     {return Width*Height*(Length-RampRun/scale*(Steps-1f)/(2f*Steps))*scale*scale;}
@@ -174,5 +195,13 @@ public static class NavalBallastLayout
         if(Math.Abs(x)<X-Width*.5f||Math.Abs(x)>X+Width*.5f||Math.Abs(z)<InnerZ||Math.Abs(z)>Z+Length*.5f)return floor;
         int step=Math.Max(1,Math.Min(Steps,1+(int)((Math.Abs(z)-InnerZ)/(RampRun/scale/Steps))));
         return floor+Height*step/(Steps*scale);
+    }
+    public static float Capacity(NavalShipDefinition ship)
+    {Dimensions d=For(ship);return d.Width*d.Height*(d.Length-d.RampRun/ship.Scale*(d.Steps-1f)/(2f*d.Steps))*ship.Scale*ship.Scale;}
+    public static float Surface(float x,float z,float floor,NavalShipDefinition ship)
+    {
+        Dimensions d=For(ship);if(Math.Abs(x)<d.X-d.Width*.5f||Math.Abs(x)>d.X+d.Width*.5f||Math.Abs(z)<d.InnerZ||Math.Abs(z)>d.Z+d.Length*.5f)return floor;
+        int step=Math.Max(1,Math.Min(d.Steps,1+(int)((Math.Abs(z)-d.InnerZ)/(d.RampRun/ship.Scale/d.Steps))));
+        return floor+d.Height*step/(d.Steps*ship.Scale);
     }
 }

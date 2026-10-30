@@ -13,7 +13,7 @@ public partial class NavalRepairSailor
  {
   if(cannonPartsVisual==null&&mode!=0){cannonPartsVisual=gameObject.AddComponent<NavalCannonPartsVisual>();cannonPartsVisual.Initialize(model,footOffset);}
   if(cannonPartsVisual!=null)cannonPartsVisual.Pose(mode);
-  if(hammer!=null)hammer.gameObject.SetActive(mode==0||mode==3);
+  ShowHammer(mode==0||mode==3);
  }
  private void CancelCannonParts(){cannonPartsStage=0;cannonKit.Drop();cannonPickupTime=0;PartsPose(0);}
  private bool PlanPartsPickup()

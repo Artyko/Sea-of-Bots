@@ -5,7 +5,8 @@ using UnityEngine;
 [DefaultExecutionOrder(200)]
 public partial class NavalWorldMap : MonoBehaviour
 {
-    public const string WaterMarker="NAVAL_OCEAN_SURFACE";
+    public const string WaterMarker=NavalEraMarker.SailWater;
+    public const string SteamWaterMarker=NavalEraMarker.SteamWater;
     public static NavalWorldMap Active;
     private readonly List<Renderer> preview=new List<Renderer>();
     private readonly List<Vector3> border=new List<Vector3>();
@@ -34,11 +35,15 @@ public partial class NavalWorldMap : MonoBehaviour
     private QueryCache Cache(Transform ship)
     {int id=ship.GetInstanceID();QueryCache cache;if(!queries.TryGetValue(id,out cache)){cache=new QueryCache();queries.Add(id,cache);}return cache;}
     public static bool TryGetSeaOrigin(out Vector3 point)
+    {NavalEra era;string error;return TryGetSeaContext(out point,out era,out error);}
+    public static bool TryGetSeaContext(out Vector3 point,out NavalEra era,out string error)
     {
-        foreach(ObjectPlacedInLevel obj in Object.FindObjectsByType<ObjectPlacedInLevel>(FindObjectsSortMode.None))
-            if(obj.name==WaterMarker)
-            {point=obj.transform.position+Vector3.up*(obj.transform.lossyScale.y*0.5f);return true;}
-        point=Vector3.zero;return false;
+        ObjectPlacedInLevel[] placed=Object.FindObjectsByType<ObjectPlacedInLevel>(FindObjectsSortMode.None);
+        List<string> names=new List<string>(placed.Length);ObjectPlacedInLevel marker=null;
+        foreach(ObjectPlacedInLevel obj in placed)
+        {names.Add(obj.name);if(NavalEraMarker.IsWater(obj.name))marker=obj;}
+        if(!NavalEraMarker.TryResolve(names,out era,out error)){point=Vector3.zero;return false;}
+        point=marker.transform.position+Vector3.up*(marker.transform.lossyScale.y*0.5f);return true;
     }
     public void Initialize(FirstPersonMover player,Vector3 seaOrigin)
     {
@@ -48,7 +53,7 @@ public partial class NavalWorldMap : MonoBehaviour
         foreach(ObjectPlacedInLevel obj in placed){RegisterIsland(obj);RegisterScenery(obj);}
         Debug.Log("[NavalPrototype] Island solid barriers: "+islandSolids.Count);
         foreach(ObjectPlacedInLevel obj in placed)
-            if(obj.name==WaterMarker)foreach(Renderer r in obj.GetComponentsInChildren<Renderer>())if(r.enabled){preview.Add(r);r.enabled=false;}
+            if(NavalEraMarker.IsWater(obj.name))foreach(Renderer r in obj.GetComponentsInChildren<Renderer>())if(r.enabled){preview.Add(r);r.enabled=false;}
         gameObject.AddComponent<NavalMapRenderBatch>().Build(placed);
         for(int i=0;i<100;i++)border.Add(new Vector3(-150f+i*3f,0f,-150f));
         for(int i=0;i<100;i++)border.Add(new Vector3(150f,0f,-150f+i*3f));
@@ -85,7 +90,7 @@ public partial class NavalWorldMap : MonoBehaviour
     }
     private void RegisterScenery(ObjectPlacedInLevel obj)
     {
-        if(obj==null||obj.name==WaterMarker)return;
+        if(obj==null||NavalEraMarker.IsWater(obj.name))return;
         foreach(Collider collider in obj.GetComponentsInChildren<Collider>())if(collider!=null&&collider.enabled&&!collider.isTrigger&&collider.bounds.size.sqrMagnitude>.001f)
         {int id=scenerySolids.Count;Bounds bounds=collider.bounds;scenerySolids.Add(bounds);Vector3 min=bounds.min,max=bounds.max;sceneryIndex.Add(id,min.x,min.y,min.z,max.x,max.y,max.z);knownLand.Add(collider);}
     }

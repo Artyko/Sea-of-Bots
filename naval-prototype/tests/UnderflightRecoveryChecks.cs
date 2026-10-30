@@ -10,8 +10,14 @@ class UnderflightRecoveryChecks {
  foreach(var profile in NavalShipDefinition.Choices)foreach(float radius in new float[]{.35f,.5f,.8f}){
   var p=new NavalWalkPoint(0,profile.HoldFloor,-.2f);var goal=new NavalWalkPoint(1.4f,profile.WeatherDeck,2);
   foreach(int side in new int[]{-1,1}){var exit=NavalStairRecovery.Exit(p,goal,profile,profile.HoldFloor,side,radius)[0];
-   Check((Math.Abs(exit.X)-profile.StairWidth*.5f)*profile.Scale>=radius+.29f,"Exit clears actual native capsule plus arrival margin");
+   Check((Math.Abs(exit.X)-profile.StairWidth*.5f)*profile.Scale>=radius+.79f,"Exit clears actual native capsule plus recovery hysteresis");
   }
+ }
+ foreach(var profile in NavalShipDefinition.SteamChoices){
+  var exit=NavalStairRecovery.Exit(new NavalWalkPoint(.62f,.85f,.08f),new NavalWalkPoint(.58f,.825f,2.47f),profile,.825f,1,.8f)[0];Check(exit.X>=1.14f,"Ironclad underflight exit clears the collider and controller by an additional safety margin");
+  var bypass=NavalShipRoutes.Plan(new NavalWalkPoint(.58f,.825f,2.47f),new NavalWalkPoint(-.58f,.825f,-4.2f),profile);
+  foreach(var point in bypass)if(point.Y>.70f&&point.Y<.95f&&point.Z>-3.15f&&point.Z<.65f)
+   Check(Math.Abs(point.X)>=NavalStairRecovery.SideLane(profile)-.001f,"Planned middle-deck route uses the same proven side lane as runtime recovery");
  }
  var brig=NavalShipDefinition.Brigantine;float floor;
  Check(NavalStairRecovery.Needed(new NavalWalkPoint(.34f,-1.32f,-1.36f),new NavalWalkPoint(.47f,-1.29f,-1.78f),brig,out floor),"v217 floor-level plank route under staircase must recover");
@@ -30,6 +36,7 @@ class UnderflightRecoveryChecks {
  Check(Math.Abs(route[0].X)>ship.StairWidth*.5f+.6f/ship.Scale,"Clear capsule beyond staircase edge");
  Check(route[0].Y==feet.Y&&route[0].Z==feet.Z,"Leave sideways without climbing through treads");
  Check(route[1].Y==floor,"Descend to actual floor before new route");
+ Check(Math.Abs(route[2].X)==Math.Abs(route[1].X)&&(route[2].Z>=.8f||route[2].Z<=-3.25f),"Remain in side aisle until clear of the stair footprint");
  var last=route[route.Count-1];Check(last.X==goal.X&&last.Y==goal.Y&&last.Z==goal.Z,"Keep original job destination");
  }
  Check(!NavalStairRecovery.Needed(target,target,ship,out floor),"Ordinary stair traffic unchanged");

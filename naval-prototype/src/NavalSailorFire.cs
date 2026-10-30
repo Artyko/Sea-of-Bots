@@ -8,7 +8,6 @@ public partial class NavalRepairSailor
     private int fireCursor,fireReplans;
     private float firePriorityCheck;
     private static readonly float[] fireWorkCorridors={1.35f,.9f,1.8f};
-    private static readonly float[] fireWaterPosts={4.6f,2f,-2f,-4.6f,3f,-3f};
     public bool FightingFire {get{return fireJob!=null;}}
     private string FireStatus {get{return fireStage==1?"Getting firefighting water":fireStage==2?"Filling fire bucket":fireStage==3?"Going to fire":"Extinguishing fire";}}
     private bool FireReach(Vector3 stand,NavalFireTarget target)
@@ -34,9 +33,19 @@ public partial class NavalRepairSailor
     }
     private bool FireWorkPoint(NavalFireTarget target,out Vector3 stand)
     {
+        // Bow fires are attacked from the open rear quarter of the semi-open
+        // main mount. Generic offsets put the sailor inside its side shield.
+        if(hull.Definition.SteamPowered&&target.Point.z>3.55f)
+        {
+            float side=target.Point.x<0?-1f:1f;
+            stand=new Vector3(side*1.35f,hull.Definition.WeatherDeck,3.40f);
+            if(FireReach(stand,target)&&ClearBody(stand)&&Supported(stand))return true;
+        }
+        float workDeck=NavalFireWorkDeck.ForTarget(target.Point.y,hull.Definition);
         for(int deck=0;deck<hull.Definition.DeckCount;deck++)
         {
             float floor=deck==0?hull.Definition.WeatherDeck:deck==1?hull.Floor:.825f;
+            if(Mathf.Abs(floor-workDeck)>.01f)continue;
             for(int sideIndex=0;sideIndex<2;sideIndex++)for(int corridor=0;corridor<fireWorkCorridors.Length;corridor++)for(int step=-1;step<=1;step++)
             {
                 float nearSide=target.Point.x<0?-1f:1f;float side=sideIndex==0?nearSide:-nearSide;
@@ -52,7 +61,7 @@ public partial class NavalRepairSailor
         if(fireJob!=null&&fireJob.Claim==this)fireJob.Claim=null;
         if(fireWater>0&&hull!=null&&feet.y<hull.Definition.WeatherDeck)hull.Flood.Add(hull.Flood.Index(feet.x,feet.z),fireWater);
         fireWater=0;fireJob=null;fireStage=0;
-        if(bucket!=null)bucket.Hide();if(hammer!=null)hammer.gameObject.SetActive(true);
+        if(bucket!=null)bucket.Hide();ShowHammer(true);
     }
     private bool TickFire(float dt,bool allowed)
     {
@@ -94,16 +103,25 @@ public partial class NavalRepairSailor
             }
             fireCursor+=4;
             if(fireJob==null)return false;
+            Debug.Log("[NavalPrototype] Firefighter assigned: ship="+hull.Root.name+" sailor="+GetInstanceID()+" target="+fireJob.Point+" stand="+fireStand+" powder="+(fireJob.Powder!=null));
             if(interrupt)ReleasePump();
             waitingForRepair=returning=changingPost=false;route.Clear();stuck=0;fireStage=1;fireTime=fireElapsed=0;
             fireReplans=0;rejectedFireSources.Clear();
-            if(!PlanFireWater()){CancelFire();fireRetry=Time.time+2;return false;}
+            if(!PlanFireWater()){Debug.Log("[NavalPrototype] Firefighter has no reachable water: ship="+hull.Root.name+" sailor="+GetInstanceID());CancelFire();fireRetry=Time.time+2;return false;}
             if(bucket==null){bucket=gameObject.AddComponent<NavalBucketVisual>();bucket.Initialize();}
-            if(hammer!=null)hammer.gameObject.SetActive(false);
+            ShowHammer(false);
         }
         fireElapsed+=dt;
         if(fireElapsed>35f){CancelFire();route.Clear();fireRetry=Time.time+5;BeginReturn();return true;}
         robot.DisableAI();
+        if(route.Count>0)
+        {
+            // A fire stand is a line-of-sight work area, not a pin-sized
+            // station. If a gunner or shield stops the capsule slightly short
+            // but the flames are already reachable, start dousing instead of
+            // pushing for eight seconds and throwing the full bucket away.
+            if(fireStage==3&&route.Count==1&&FireReach(feet,fireJob))route.Clear();
+        }
         if(route.Count>0)
         {
             RouteResult movement=FollowRoute(dt,4f);
@@ -135,8 +153,19 @@ public partial class NavalRepairSailor
             else if(fireStage==4&&fireTime>=.8f)
             {
                 Vector3 point=boat.TransformPoint(fireJob.Point),hand=robot.transform.position+Vector3.up*.4f;
-                if(Vector3.Distance(hand,point)<6f&&FireReach(feet,fireJob))system.Douse(point,fireWater);
+                bool reached=Vector3.Distance(hand,point)<6f&&FireReach(feet,fireJob);
+                // The main mount can train across a previously clear hose line.
+                // Keep the filled bucket and move to another supported point
+                // instead of pouring into the shield or through the deck.
+                if(!reached&&++fireReplans<=3)
+                {
+                    Vector3 alternative;
+                    if(FireWorkPoint(fireJob,out alternative))
+                    {fireStand=alternative;route.Clear();PlanTo(alternative);fireStage=3;fireTime=0;return true;}
+                }
+                if(reached)system.Douse(point,fireWater);
                 else if(feet.y<hull.Definition.WeatherDeck)hull.Flood.Add(hull.Flood.Index(feet.x,feet.z),fireWater);
+                Debug.Log("[NavalPrototype] Firefighter poured: ship="+hull.Root.name+" sailor="+GetInstanceID()+" target="+fireJob.Point+" litres="+fireWater.ToString("F2")+" reached="+reached);
                 fireWater=0;CancelFire();fireRetry=0;route.Clear();BeginReturn();return true;
             }
         }

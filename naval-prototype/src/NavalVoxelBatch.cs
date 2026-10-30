@@ -21,10 +21,10 @@ public class NavalVoxelBatch : MonoBehaviour
     private readonly Dictionary<Vector3Int,Chunk> chunks=new Dictionary<Vector3Int,Chunk>();
     public void Initialize(NavalHull owner)
     {
-        hull=owner;var geometries=new Dictionary<Mesh,Geometry>();
+        hull=owner;var geometries=new Dictionary<Mesh,Geometry>();float chunkSize=NavalSpatialBatching.ChunkSize(hull.Definition);
         foreach(NavalHullVoxel cell in hull.Voxels)if(!cell.ManagedRig&&cell.transform.parent==transform)
         {
-            Vector3 p=cell.transform.localPosition;Vector3Int key=new Vector3Int(Mathf.FloorToInt(p.x/2f),Mathf.FloorToInt(p.y/2f),Mathf.FloorToInt(p.z/2f));
+            Vector3 p=cell.transform.localPosition;Vector3Int key=new Vector3Int(Mathf.FloorToInt(p.x/chunkSize),Mathf.FloorToInt(p.y/chunkSize),Mathf.FloorToInt(p.z/chunkSize));
             Chunk chunk;if(!chunks.TryGetValue(key,out chunk))
             {
                 chunk=new Chunk();chunk.Object=new GameObject("HullRenderChunk");chunk.Object.transform.SetParent(transform,false);

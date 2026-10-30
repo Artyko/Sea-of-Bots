@@ -30,8 +30,8 @@ public static class NavalRigMath
     }
     public static float SailPower(int remaining, int total, bool attached)
     { return attached && total > 0 ? Math.Max(0f, Math.Min(1f, (float)remaining / total)) : 0f; }
-    public static float RudderRate(float speed, float rudder)
-    { return Math.Abs(speed) < 0.05f ? 0f : rudder * 3f * speed; }
+    public static float RudderRate(float speed, float rudder,float steeringScale=1f)
+    { return Math.Abs(speed) < 0.05f ? 0f : rudder * 3f * speed*Math.Max(0f,steeringScale); }
     public static float StepRudder(float current,float target,float dt)
     {
         target=Math.Max(-1f,Math.Min(1f,target));

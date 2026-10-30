@@ -33,7 +33,7 @@ public partial class NavalRepairSailor
         bailPickup=pickup;bailOutlet=new Vector3(pickup.x<0f?-2.05f:2.05f,0.825f,2.6f);
         waitingForRepair=false;returning=false;changingPost=false;bailState=1;bailTime=0f;BailRoute(pickup);
         if(bucket==null){bucket=gameObject.AddComponent<NavalBucketVisual>();bucket.Initialize();}
-        if(hammer!=null)hammer.gameObject.SetActive(false);
+        ShowHammer(false);
         return true;
     }
     private bool TickBailing(float dt,bool allowed)
@@ -104,6 +104,6 @@ public partial class NavalRepairSailor
         if(BucketWater>0f&&hull!=null)bucketLoad.Return(hull.Flood,feet.x,feet.z);
         bucketLoad.Dump();bailState=0;
         if(bucket!=null)bucket.Hide();
-        if(hammer!=null)hammer.gameObject.SetActive(true);
+        ShowHammer(true);
     }
 }

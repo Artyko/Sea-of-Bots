@@ -17,6 +17,7 @@ public sealed class NavalCubeSmoke : MonoBehaviour
  private MeshRenderer visual;
  private bool vertexColour;
  private int cursor,active;
+ public int ActiveCount {get{return active;}}
  private void Initialize()
  {
   GameObject child=new GameObject("Naval solid cube smoke");child.transform.SetParent(transform,false);

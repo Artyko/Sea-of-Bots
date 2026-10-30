@@ -17,7 +17,7 @@ public sealed class NavalBallastUnit
         {
             var cell=ship.Voxels[i];cells.Add(cell);cell.BallastOwner=this;cell.InternalBarrier=true;
             Vector3 size=cell.transform.localScale;originalSize[cell]=size;
-            int faces=NavalBallastWall.Faces(tank.X,cell.LocalCenter.x,cell.LocalCenter.y,cell.LocalCenter.z,size.x,size.y,size.z,Floor,ship.WorldScale);
+            int faces=NavalBallastWall.Faces(ship.Definition,tank.X,cell.LocalCenter.x,cell.LocalCenter.y,cell.LocalCenter.z,size.x,size.y,size.z,Floor);
             if((faces&1)!=0)outerFaces.Add(cell);if((faces&2)!=0)innerFaces.Add(cell);
         }
     }
@@ -36,14 +36,15 @@ public sealed class NavalBallastUnit
     public bool Covers(NavalHullVoxel opening)
     {
         Vector3 p=opening.LocalCenter;
-        return p.x*Tank.X>0&&Mathf.Abs(p.x)>=2.9f&&Mathf.Abs(p.z-Tank.Z)<=NavalBallastLayout.Length*.5f+.15f&&
-            p.y>=Floor-.15f&&p.y<=NavalBallastLayout.Surface(Tank.X,p.z,Floor,hull.WorldScale)+.15f;
+        NavalBallastLayout.Dimensions d=NavalBallastLayout.For(hull.Definition);
+        return p.x*Tank.X>0&&Mathf.Abs(p.x)>=Mathf.Abs(Tank.X)+d.Width*.5f-.15f&&Mathf.Abs(p.z-Tank.Z)<=d.Length*.5f+.15f&&
+            p.y>=Floor-.15f&&p.y<=NavalBallastLayout.Surface(Tank.X,p.z,Floor,hull.Definition)+.15f;
     }
     public Vector3 RepairAccess(Vector3 hole,Vector3 stand)
     {
-        float top=NavalBallastLayout.Surface(Tank.X,hole.z,Floor,hull.WorldScale);
-        if(stand.y>=top-.1f)return new Vector3(Mathf.Clamp(hole.x,Tank.X-NavalBallastLayout.Width*.5f,Tank.X+NavalBallastLayout.Width*.5f),top+.015f,hole.z);
-        return new Vector3(Mathf.Sign(Tank.X)*(Mathf.Abs(Tank.X)-NavalBallastLayout.Width*.5f-.015f),Mathf.Clamp(hole.y,Floor,top),hole.z);
+        NavalBallastLayout.Dimensions d=NavalBallastLayout.For(hull.Definition);float top=NavalBallastLayout.Surface(Tank.X,hole.z,Floor,hull.Definition);
+        if(stand.y>=top-.1f)return new Vector3(Mathf.Clamp(hole.x,Tank.X-d.Width*.5f,Tank.X+d.Width*.5f),top+.015f,hole.z);
+        return new Vector3(Mathf.Sign(Tank.X)*(Mathf.Abs(Tank.X)-d.Width*.5f-.015f),Mathf.Clamp(hole.y,Floor,top),hole.z);
     }
     public bool Connects(NavalHullVoxel opening)
     {
@@ -56,7 +57,8 @@ public sealed class NavalBallastUnit
     public float SeaTarget(Transform boat,float sea)
     {
         Vector3 bottom=boat.TransformPoint(new Vector3(Tank.X,Floor,Tank.Z));
-        return Tank.Capacity*(float)section.FractionBelow(NavalBallastLayout.Width*hull.WorldScale,NavalBallastLayout.Height,NavalHullStability.Roll(boat),sea-bottom.y);
+        NavalBallastLayout.Dimensions d=NavalBallastLayout.For(hull.Definition);
+        return Tank.Capacity*(float)section.FractionBelow(d.Width*hull.WorldScale,d.Height,NavalHullStability.Roll(boat),sea-bottom.y);
     }
     public void MarkForRepair(float now)
     {
@@ -80,30 +82,31 @@ public partial class NavalBilgeSystem
     public float BallastSide(bool port)
     {float total=0;foreach(NavalBallastUnit u in ballast){if((u.Tank.X<0)==port)total+=u.Tank.Water;total+=u.Tank.SpillPending*.5f;}return total;}
     public float BallastLongitudinalMoment {get{float total=0;foreach(NavalBallastUnit u in ballast)total+=u.Tank.Total*u.Tank.Z/(BoatDimensions.HoldLength*.5f);return total;}}
-    private void BuildBallast(Material wood,Material trim)
+    private void BuildBallast(Material wood,Material trim,Material metal)
     {
-        transferTanks=new NavalBallastTank[4*hull.Definition.MaintenanceDeckCount];
-        for(int deck=0;deck<hull.Definition.MaintenanceDeckCount;deck++)BuildBallastDeck(wood,trim,hull.Definition.MaintenanceFloor(deck));
+        int decks=hull.Definition.SteamPowered?1:hull.Definition.MaintenanceDeckCount;
+        transferTanks=new NavalBallastTank[4*decks];
+        for(int deck=0;deck<decks;deck++)BuildBallastDeck(hull.Definition.SteamPowered?metal:wood,trim,hull.Definition.MaintenanceFloor(deck));
     }
     private void BuildBallastDeck(Material wood,Material trim,float floor)
     {
         // Larger side reservoirs have permanent end ramps inside their own footprint.
-        float height=NavalBallastLayout.Height/hull.WorldScale;
-        float run=NavalBallastLayout.RampRun/hull.WorldScale;
-        float bodyLength=NavalBallastLayout.Length-run;
+        NavalBallastLayout.Dimensions d=NavalBallastLayout.For(hull.Definition);
+        float height=d.Height/hull.WorldScale,run=d.RampRun/hull.WorldScale,bodyLength=d.Length-run;
         for(int side=-1;side<=1;side+=2)for(int end=-1;end<=1;end+=2)
         {
-            float x=side*NavalBallastLayout.X,z=end*NavalBallastLayout.Z;int first=hull.Voxels.Count;
-            float bodyZ=end*(NavalBallastLayout.InnerZ+run+bodyLength*.5f);
-            hull.AddDecorationBox(transform,wood,new Vector3(x,floor+height*.5f,bodyZ),new Vector3(NavalBallastLayout.Width,height,bodyLength),true);
-            for(int step=0;step<NavalBallastLayout.Steps;step++)
+            float x=side*d.X,z=end*d.Z;int first=hull.Voxels.Count;
+            float bodyZ=end*(d.InnerZ+run+bodyLength*.5f);
+            hull.AddDecorationBox(transform,wood,new Vector3(x,floor+height*.5f,bodyZ),new Vector3(d.Width,height,bodyLength),true);
+            for(int step=0;step<d.Steps;step++)
             {
-                float rise=height*(step+1)/NavalBallastLayout.Steps;
-                float stepZ=end*(NavalBallastLayout.InnerZ+(step+.5f)*run/NavalBallastLayout.Steps);
-                hull.AddDecorationBox(transform,trim,new Vector3(x,floor+rise*.5f,stepZ),new Vector3(NavalBallastLayout.Width,rise,run/NavalBallastLayout.Steps),true);
+                float rise=height*(step+1)/d.Steps;
+                float stepZ=end*(d.InnerZ+(step+.5f)*run/d.Steps);
+                hull.AddDecorationBox(transform,trim,new Vector3(x,floor+rise*.5f,stepZ),new Vector3(d.Width,rise,run/d.Steps),true);
             }
-            for(int band=-1;band<=1;band++)hull.AddDecorationBox(transform,trim,new Vector3(x,floor+height+.006f,bodyZ+band*bodyLength*.3f),new Vector3(NavalBallastLayout.Width,.012f,.08f),true);
-            var tank=new NavalBallastTank(NavalBallastLayout.Capacity(hull.WorldScale),x,z);
+            for(int band=-1;band<=1;band++)hull.AddDecorationBox(transform,trim,new Vector3(x,floor+height+.006f,bodyZ+band*bodyLength*.3f),new Vector3(d.Width,.012f,.08f),true);
+            if(hull.Definition.SteamPowered)for(int cell=first;cell<hull.Voxels.Count;cell++){hull.Voxels[cell].Metallic=true;hull.Voxels[cell].Flammable=false;}
+            var tank=new NavalBallastTank(NavalBallastLayout.Capacity(hull.Definition),x,z);
             transferTanks[ballast.Count]=tank;ballast.Add(new NavalBallastUnit(hull,tank,first,floor));
         }
     }

@@ -5,13 +5,23 @@ class FirePowderChecks
  static void Main()
  {
   var dry=new NavalFireState(false);Check(dry.Ignite(0),"Dry wood ignites");
-  Check(!dry.Step(1,false,1)&&dry.Burning&&dry.Burned==1,"Fire is gradual, not instant voxel removal");
+  Check(!dry.Step(1,false,1)&&dry.Burning&&dry.Burned>.8f&&dry.Burned<1f&&dry.Intensity>.3f,"Fire grows gradually, not instant voxel removal");
+  var developed=new NavalFireState(false);developed.Ignite(0,.9f);Check(developed.Cool(1,1.8f)&&developed.Burning,"One bucket knocks down but does not erase an established fire");
+  Check(!developed.Cool(2,1.8f)&&!developed.Burning,"A second bucket extinguishes the cooled fire");
   dry.Douse(1);Check(!dry.Burning&&!dry.Ignite(18),"Water extinguishes and prevents immediate re-ignition");
-  Check(dry.Ignite(19)&&dry.Burned==1,"Drying permits re-ignition without healing charred fuel");
+  float charred=dry.Burned;Check(dry.Ignite(19)&&dry.Burned==charred,"Drying permits re-ignition without healing charred fuel");
   Check(dry.Step(25,false,44)&&!dry.Burning&&!dry.Ignite(100),"Burned-out wood produces exactly one destruction event");
   Check(!dry.Step(1,false,101),"No duplicate burn damage");
   var cloth=new NavalFireState(true);cloth.Ignite(0);Check(cloth.Step(10,false,10),"Cloth burns faster than timber");
   var submerged=new NavalFireState(false);submerged.Ignite(0);Check(!submerged.Step(.25f,true,.25f)&&!submerged.Burning,"Submergence extinguishes before burn damage");
+  Check(NavalArmorMath.InternalFireChance(5.2f,2f)>NavalArmorMath.InternalFireChance(1.55f,.2f),"Heavy internal burst has greater fire risk");
+  Check(NavalArmorMath.InternalFireChance(5.2f,2f)<.25f&&NavalArmorMath.InternalFireChance(1.55f,.2f)<.08f,"v251 internal ignition remains exceptional rather than ship-wide");
+  Check(NavalFireSystem.FireLimit==12,"Per-ship fire simulation is bounded before collider rebuilds and crew routing dominate frame time");
+  Check(NavalArmorMath.InternalFireLimit(5.2f,4f)==3&&NavalArmorMath.InternalFireLimit(1.55f,.2f)==1,"Internal burst fire count is caliber and residual-energy bounded");
+  var directReady=new NavalPowderState();Check(!NavalExplosiveImpact.DirectHit(directReady,.5f)&&directReady.Lit,"Direct shell hit always lights surviving ready ammunition");
+  var directInstant=new NavalPowderState();Check(NavalExplosiveImpact.DirectHit(directInstant,.05f)&&directInstant.Spent,"Direct ready-ammunition hit preserves immediate detonation chance");
+  var directMagazine=new NavalMagazineState();Check(!NavalExplosiveImpact.DirectHit(directMagazine,.5f)&&directMagazine.Lit,"Penetrating direct hit always lights an enclosed magazine");
+  var wetDirect=new NavalPowderState();wetDirect.Douse();Check(!NavalExplosiveImpact.DirectHit(wetDirect,0)&&!wetDirect.Lit,"Flooded ammunition remains inert on impact");
   int lit=0;for(int i=0;i<1000;i++){var test=new NavalPowderState();if(test.Ignite((i+.5f)/1000))lit++;}
   Check(lit==400,"Each direct-hit roll has a 40 percent ignition interval");
   int instant=0,fuses=0;for(int i=0;i<1000;i++){var t=new NavalPowderState();if(t.Impact((i+.5f)/1000))instant++;else if(t.Lit)fuses++;}
@@ -36,6 +46,8 @@ class FirePowderChecks
   Check(!NavalFireResponseMath.YieldHelm(false,false,1)&&!NavalFireResponseMath.YieldHelm(true,true,1)&&!NavalFireResponseMath.YieldHelm(true,false,2),"Ordinary fire, existing firefighter and spare hands preserve helm");
   Check(NavalFireResponseMath.InterruptPump(true,false)&&!NavalFireResponseMath.InterruptPump(true,true),"Fuse can interrupt routine pumping but not critical flood pumping");
   Check(NavalFireResponseMath.NeedsResponder(true,false,true,true)&&!NavalFireResponseMath.NeedsResponder(true,true,false,true),"Urgent fire requests one responder without duplicate staffing");
-  Console.WriteLine("PASS: finite wood/cloth fuel, wetting/drying, 40% hit ignition, 12-second warning, heat/chain ignition, last-moment dousing, submerged powder, single detonation and bucket mass conservation.");
+  Check(!NavalFireResponseMath.ReservesMaintenance(false,true),"Engine watch no longer suppresses an ordinary-fire responder");
+  Check(NavalFireResponseMath.ReservesMaintenance(true,false),"Actual repair work still reserves the maintenance slot");
+  Console.WriteLine("PASS: staged fire growth and bucket cooling, finite fuel, AP internal ignition, wetting/drying, fuses, submerged powder, single detonation and bucket mass conservation.");
  }
 }

@@ -100,7 +100,10 @@ public class NavalWater : MonoBehaviour
         simulationTime += Mathf.Min(Time.deltaTime, 0.05f);
         bool laptop=NavalPerformance.LaptopMode;
         if(Time.time<nextMeshAt||laptop&&Time.frameCount<nextMeshFrame)return;
-        nextMeshAt=Time.time+1f/(laptop?20f:30f);nextMeshFrame=Time.frameCount+(laptop?2:1);
+        // Integrated GPUs pay both the CPU mesh upload and the GPU cost of a
+        // double-sided 101x101 surface. Buoyancy still samples the wave field
+        // every frame; only visual mesh uploads are paced more conservatively.
+        nextMeshAt=Time.time+1f/(laptop?12f:30f);nextMeshFrame=Time.frameCount+(laptop?3:1);
         buildWatch.Restart();
         float offsetX = Mathf.Floor((Focus.x - transform.position.x) / 40f) * 40f;
         float offsetZ = Mathf.Floor((Focus.z - transform.position.z) / 40f) * 40f;

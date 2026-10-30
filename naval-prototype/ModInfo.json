@@ -1,10 +1,10 @@
 ﻿{
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v231.dll",
+  "MainDLLFileName": "NavalPrototype-v254.dll",
   "Author": "Kirill",
-  "Version": 231,
-  "Description": "Laptop FPS pass: batch the editable naval map for play, reject distant shore physics, and reduce Intel water and sail uploads without changing simulation.",
+  "Version": 254,
+  "Description": "Steam ironclads with damage-aware crew routing, extended underwater ballistics, inter-deck smoke venting, and blast-damaged armour.",
   "ModDependencies": [],
   "Tags": []
 }

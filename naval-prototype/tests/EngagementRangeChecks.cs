@@ -22,6 +22,10 @@ class EngagementRangeChecks
    Check(state.Desired<NavalGunneryMath.LevelRange*.9f,"All varied ranges have ballistic margin");
   }
   Check(max-min>20,"Meaningful close/medium/far distance variation");
+  float steamMinimum=NavalSteamRangeTactics.MinimumDistance(210,NavalHelmTactics.Clearance(4,4));
+  Check(steamMinimum>120,"Steam ironclad begins opening range well before physical contact");
+  Check(NavalSteamRangeTactics.EscapeUrgency(steamMinimum+1,210,NavalHelmTactics.Clearance(4,4))==0,"Safe gun range does not force an escape turn");
+  Check(NavalSteamRangeTactics.EscapeUrgency(70,210,NavalHelmTactics.Clearance(4,4))>.5f,"Knife-fighting distance strongly overrides the firing course");
   for(int side=1;side<=2;side++)foreach(float distance in new[]{55f,65f,80f,110f})
   {
    float course=NavalEngagementRange.Course(0,side,distance,75,false);

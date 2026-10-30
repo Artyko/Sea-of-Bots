@@ -14,7 +14,7 @@ public class NavalFloodGrid
     private float summaryTotal,summaryPort,summaryStarboard,summaryLong;
     public readonly float[] RightSill,ForwardSill;
     private readonly float[] delta,centerX,centerZ,worldColumn;
-    public NavalFloodGrid(int columns, int rows, float width, float length, float scale, float maximumDepth = float.MaxValue,bool tapered=false)
+    public NavalFloodGrid(int columns, int rows, float width, float length, float scale, float maximumDepth = float.MaxValue,bool tapered=false,bool ironclad=false)
     {
         Columns=columns; Rows=rows; Width=width; Length=length; Scale=scale;
         CellWidth=width/columns; CellLength=length/rows;
@@ -23,7 +23,7 @@ public class NavalFloodGrid
         water=new float[columns*rows];Water=new NavalFloodCells(water); delta=new float[water.Length];
         centerX=new float[water.Length];centerZ=new float[water.Length];worldColumn=new float[columns];
         for(int i=0;i<water.Length;i++){centerX[i]=((i%columns)+.5f)*CellWidth-width*.5f;centerZ[i]=((i/columns)+.5f)*CellLength-length*.5f;}
-        if(tapered){activeCells=new bool[water.Length];for(int i=0;i<water.Length;i++)activeCells[i]=Math.Abs(centerX[i])<NavalHullOutline.HalfWidth(centerZ[i],true);}
+        if(tapered){activeCells=new bool[water.Length];for(int i=0;i<water.Length;i++)activeCells[i]=Math.Abs(centerX[i])<NavalHullOutline.HalfWidth(centerZ[i],true,ironclad);}
         RightSill=new float[water.Length];ForwardSill=new float[water.Length];
         for(int i=0;i<water.Length;i++){RightSill[i]=ForwardSill[i]=float.NegativeInfinity;}
     }

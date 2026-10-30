@@ -12,7 +12,11 @@ public partial class NavalStations
     private Transform[] aimShip;
     private Vector2[] shotError;
     private int[] aimKind,lastKind;
+    private bool[] aimBelowWaterline;
     private float[] aimRetry,visibilityAt;
+    private float[] leadAt;
+    private Vector3[] leadCache;
+    private bool[] leadValid;
     private bool[] visibilityCache;
     private NavalHullVoxel[] aimCell;
     private readonly bool[] featureAvailable=new bool[4];
@@ -47,15 +51,16 @@ public partial class NavalStations
     {
         aimShip=new Transform[count];shotError=new Vector2[count];
         visibilityAt=new float[count];visibilityCache=new bool[count];
-        aimKind=new int[count];lastKind=new int[count];aimRetry=new float[count];aimCell=new NavalHullVoxel[count];
+        leadAt=new float[count];leadCache=new Vector3[count];leadValid=new bool[count];
+        aimKind=new int[count];lastKind=new int[count];aimRetry=new float[count];aimCell=new NavalHullVoxel[count];aimBelowWaterline=new bool[count];
         for(int i=0;i<count;i++){aimKind[i]=lastKind[i]=-1;}
     }
     private bool TryAimSolution(int gun,Vector3 target,out float wantedYaw,out float angle)
     {
         wantedYaw=angle=0f;
-        Vector3 muzzle=barrels[gun].TransformPoint(new Vector3(0f,0f,1.38f));
+        Vector3 muzzle=barrels[gun].TransformPoint(new Vector3(0f,0f,hull.Definition.GunMuzzleZ));
         Vector3 delta=target-muzzle,flat=delta;flat.y=0f;float elevation;
-        if(!NavalBattleMath.FiringAngle(flat.magnitude,delta.y,32f,out elevation))return false;
+        if(!NavalBattleMath.FiringAngle(flat.magnitude,delta.y,hull.Definition.ProjectileSpeed,out elevation))return false;
         // Gravity is world vertical even when this ship rolls or pitches.
         Vector3 launch=flat.normalized*Mathf.Cos(elevation*Mathf.Deg2Rad)+Vector3.up*Mathf.Sin(elevation*Mathf.Deg2Rad);
         Vector3 local=boat.InverseTransformDirection(launch);
@@ -68,8 +73,8 @@ public partial class NavalStations
     {
         for(int gun=0;gun<GunCount;gun++)if(Functional(gun+1))
         {
-            Vector3 delta=point-barrels[gun].TransformPoint(new Vector3(0f,0f,1.38f));
-            if(NavalEngagementRange.BallisticReach(new Vector2(delta.x,delta.z).magnitude,delta.y))return true;
+            Vector3 delta=point-barrels[gun].TransformPoint(new Vector3(0f,0f,hull.Definition.GunMuzzleZ));
+            if(NavalEngagementRange.BallisticReach(new Vector2(delta.x,delta.z).magnitude,delta.y,hull.Definition.ProjectileSpeed))return true;
         }
         return false;
     }
@@ -82,15 +87,23 @@ public partial class NavalStations
     }
     private Vector3 Lead(int gun,Vector3 point,Vector3 velocity)
     {
-        Vector3 muzzle=barrels[gun].TransformPoint(new Vector3(0f,0f,1.38f));
+        Vector3 muzzle=barrels[gun].TransformPoint(new Vector3(0f,0f,hull.Definition.GunMuzzleZ));
+        // A shell keeps the vessel's velocity at the instant it leaves the
+        // muzzle.  Lead is therefore based on relative, not world, velocity.
+        velocity-=FiringPlatformVelocity();
         Vector3 predicted=point;
         for(int i=0;i<3;i++)
         {
             Vector3 delta=predicted-muzzle;float horizontal=new Vector2(delta.x,delta.z).magnitude,angle;
-            if(!NavalBattleMath.FiringAngle(horizontal,delta.y,32f,out angle))break;
-            predicted=point+velocity*NavalGunneryMath.FlightTime(horizontal,angle);
+            if(!NavalBattleMath.FiringAngle(horizontal,delta.y,hull.Definition.ProjectileSpeed,out angle))break;
+            predicted=point+velocity*NavalGunneryMath.FlightTime(horizontal,angle,hull.Definition.ProjectileSpeed);
         }
         return predicted;
+    }
+    private Vector3 FiringPlatformVelocity()
+    {
+        NavalTestWorld world=NavalTestWorld.Active;
+        return world==null?Vector3.zero:(EnemyControlled?world.EnemyVelocity:world.ShipVelocity);
     }
     private bool ReachableLead(int gun,Vector3 point,Vector3 velocity,out Vector3 predicted)
     {
@@ -116,7 +129,7 @@ public partial class NavalStations
     }
     private NavalHullVoxel FirstVisibleCell(int gun,NavalHullVoxel target,bool rigTriggers=false)
     {
-        Vector3 muzzle=barrels[gun].TransformPoint(new Vector3(0f,0f,1.38f)),delta=target.transform.position-muzzle;
+        Vector3 muzzle=barrels[gun].TransformPoint(new Vector3(0f,0f,hull.Definition.GunMuzzleZ)),delta=target.transform.position-muzzle;
         int count;
         while(true)
         {
@@ -135,7 +148,7 @@ public partial class NavalStations
     {
         victim.PrepareTargetIndex();
         for(int i=0;i<8;i++){hullProbes[i]=null;hullProbeScores[i]=float.PositiveInfinity;}
-        Vector3 muzzle=barrels[gun].TransformPoint(new Vector3(0f,0f,1.38f));
+        Vector3 muzzle=barrels[gun].TransformPoint(new Vector3(0f,0f,hull.Definition.GunMuzzleZ));
         Matrix4x4 hullMatrix=victim.boat.localToWorldMatrix;
         foreach(NavalHullVoxel cell in victim.shellTargets)
         {
@@ -184,7 +197,7 @@ public partial class NavalStations
     private bool VisibleMechanism(int gun,NavalStations victim,int station,NavalHullVoxel cell)
     {
         if(!AboveWater(cell))return false;
-        Vector3 muzzle=barrels[gun].TransformPoint(new Vector3(0f,0f,1.38f));
+        Vector3 muzzle=barrels[gun].TransformPoint(new Vector3(0f,0f,hull.Definition.GunMuzzleZ));
         Vector3 view=victim.boat.InverseTransformPoint(muzzle);
         if(!NavalTargetVisibility.Broadside(view.x,view.z))return false;
         Vector3 offset=cell.transform.position-muzzle;
@@ -215,9 +228,12 @@ public partial class NavalStations
     }
     private bool LockedTargetVisible(int gun,Transform target)
     {
-        // During reload reuse LOS briefly; recheck every ready frame before firing.
-        if(Time.time<readyAt[gun]&&Time.time<visibilityAt[gun])return visibilityCache[gun];
-        visibilityCache[gun]=ComputeLockedTargetVisible(gun,target);visibilityAt[gun]=Time.time+.2f;
+        // Native ray casts over two voxel ships were repeated every rendered
+        // frame once a gun was ready. 12.5 Hz is above the mount response rate
+        // and still validates line of sight immediately before firing.
+        if(Time.time<visibilityAt[gun])return visibilityCache[gun];
+        visibilityCache[gun]=ComputeLockedTargetVisible(gun,target);
+        visibilityAt[gun]=Time.time+(Time.time<readyAt[gun]?.24f:.08f);
         return visibilityCache[gun];
     }
     private bool ComputeLockedTargetVisible(int gun,Transform target)
@@ -239,7 +255,7 @@ public partial class NavalStations
     private bool Feature(int gun,NavalStations victim,int kind,out NavalHullVoxel selected)
     {
         selected=null;float best=float.MaxValue;victim.PrepareTargetIndex();
-        if(kind==0)return HullZone(gun,victim,Vector3.zero,false,out selected);
+        if(kind==0)return HullZone(gun,victim,Vector3.zero,false,false,out selected);
         if(kind==1||kind==3)
         {
             int targetSide=victim.TargetSide(boat.position),preferred=targetSide+(victim.GunCount>2&&Random.value>.5f?2:0);
@@ -288,18 +304,19 @@ public partial class NavalStations
         bool[] available=featureAvailable;NavalHullVoxel[] cells=featureCells;
         System.Array.Clear(available,0,available.Length);System.Array.Clear(cells,0,cells.Length);
         bool hullVisible=HullVisible(gun,victim);
+        bool belowWaterline=NavalGunneryMath.AimBelowWaterline(Random.value,hull.Definition.RifledWeapons);
         for(int kind=0;kind<4;kind++)
         {
             if(kind==2||kind==0&&!hullVisible)continue;
-            if(kind==0?!HullZone(gun,victim,velocity,false,out cells[kind]):!Feature(gun,victim,kind,out cells[kind]))continue;
+            if(kind==0?!HullZone(gun,victim,velocity,false,belowWaterline,out cells[kind]):!Feature(gun,victim,kind,out cells[kind]))continue;
             Vector3 predicted;
             available[kind]=ReachableLead(gun,cells[kind].transform.position,velocity,out predicted);
         }
         int chosen=NavalGunneryMath.Choose(Random.value,lastKind[gun],available);
-        if(chosen<0&&HullZone(gun,victim,velocity,true,out cells[0]))chosen=0;
+        if(chosen<0&&HullZone(gun,victim,velocity,true,false,out cells[0])){chosen=0;belowWaterline=false;}
         if(chosen<0&&!hullVisible&&OnlyRigVisible(gun,victim)&&RigFeature(gun,victim,velocity,out cells[2]))chosen=2;
         if(chosen<0)return false;
-        aimKind[gun]=chosen;aimCell[gun]=cells[chosen];aimShip[gun]=target;visibilityAt[gun]=0f;
+        aimKind[gun]=chosen;aimBelowWaterline[gun]=chosen==0&&belowWaterline;aimCell[gun]=cells[chosen];aimShip[gun]=target;visibilityAt[gun]=0f;leadAt[gun]=0f;leadValid[gun]=false;
         // Draw once per shot, so aiming stays stable while the cannon reloads.
         float distance=Vector3.Distance(boat.position,target.position);
         shotError[gun]=Random.insideUnitCircle*(Mathf.Atan2(NavalGunneryMath.Spread(distance),Mathf.Max(1f,distance))*Mathf.Rad2Deg);
@@ -317,14 +334,20 @@ public partial class NavalStations
             {if(Time.time>=aimRetry[gun])aimRetry[gun]=Time.time+.35f;return false;}
         }
         Vector3 point;
-        if(!ReachableLead(gun,aimCell[gun].transform.position,velocity,out point))
+        if(Time.time>=leadAt[gun]||!leadValid[gun])
+        {
+            leadValid[gun]=ReachableLead(gun,aimCell[gun].transform.position,velocity,out leadCache[gun]);
+            leadAt[gun]=Time.time+(Time.time<readyAt[gun]?.16f:.08f);
+        }
+        point=leadCache[gun];
+        if(!leadValid[gun])
         {
             // A target can move out of the gun arc. Reconsider reachable parts.
-            aimShip[gun]=null;aimRetry[gun]=Time.time;return false;
+            aimShip[gun]=null;aimRetry[gun]=Time.time;leadAt[gun]=0f;return false;
         }
         if(!AimAndFire(gun,point,dt,sailor))return false;
-        lastKind[gun]=aimKind[gun];aimShip[gun]=null;aimRetry[gun]=0f;
-        Debug.Log("[NavalPrototype] AI target: "+targetNames[lastKind[gun]]);
+        lastKind[gun]=aimKind[gun];aimShip[gun]=null;aimRetry[gun]=0f;leadAt[gun]=0f;leadValid[gun]=false;
+        Debug.Log("[NavalPrototype] AI target: "+(lastKind[gun]==0&&aimBelowWaterline[gun]?"below waterline":targetNames[lastKind[gun]]));
         return true;
             }
     }

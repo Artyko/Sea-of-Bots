@@ -5,20 +5,27 @@ public static class NavalStairTraffic
 {
  public static float Lane(float scale,float width){return Math.Max(0,Math.Min(Math.Min(width*.26f,.55f/scale),width*.5f-.85f/scale));}
  public static bool InPassage(NavalWalkPoint point,NavalShipDefinition ship)
+ {return PassageLevel(point,ship)>=0;}
+ public static int PassageLevel(NavalWalkPoint point,NavalShipDefinition ship)
  {
-  if(AtFlight(point,ship,0))return true;
-  return ship.DeckCount>2&&AtFlight(point,ship,ship.UpperDeckOffset);
+  if(AtFlight(point,ship,0))return 0;
+  if(ship.DeckCount>2&&AtFlight(point,ship,ship.UpperDeckOffset))return 1;
+  return -1;
  }
+ public static bool SamePassage(NavalWalkPoint a,NavalWalkPoint b,NavalShipDefinition ship)
+ {int level=PassageLevel(a,ship);return level>=0&&level==PassageLevel(b,ship);}
  private static bool AtFlight(NavalWalkPoint p,NavalShipDefinition ship,float offset)
  {
   if(Math.Abs(p.X)>ship.StairWidth*.5f+.45f/ship.Scale||p.Z< -3.85f||p.Z>1.05f)return false;
-  float expected=p.Z< -3?ship.HoldFloor:p.Z>.5f?.825f:NavalWalkRoutes.SurfaceY(p.Z,ship.HoldFloor);
+  float floor=offset==0?ship.HoldFloor:ship.UpperStairFloor;
+  float expected=p.Z< -3?floor:p.Z>.5f?.825f:NavalWalkRoutes.SurfaceY(p.Z,floor);
   float rise=(p.Y-offset-expected)*ship.Scale;return rise>-.35f&&rise<.7f;
  }
  private static bool Tread(NavalWalkPoint p,NavalShipDefinition ship,float offset)
  {
+  float floor=offset==0?ship.HoldFloor:ship.UpperStairFloor;
   return Math.Abs(p.X)<ship.StairWidth*.5f+.05f&&p.Z> -3.05f&&p.Z<.55f&&
-   Math.Abs(p.Y-offset-NavalWalkRoutes.SurfaceY(p.Z,ship.HoldFloor))*ship.Scale<.4f;
+   Math.Abs(p.Y-offset-NavalWalkRoutes.SurfaceY(p.Z,floor))*ship.Scale<.4f;
  }
  public static List<NavalWalkPoint> Apply(NavalWalkPoint start,List<NavalWalkPoint> route,NavalShipDefinition ship)
  {

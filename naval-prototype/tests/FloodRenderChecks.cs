@@ -4,7 +4,7 @@ class FloodRenderChecks
     static void Check(bool value,string name){if(!value)throw new Exception(name);}
     static void Main()
     {
-        foreach(var ship in new[]{NavalShipDefinition.Sloop,NavalShipDefinition.Brigantine})
+        foreach(var ship in new[]{NavalShipDefinition.Sloop,NavalShipDefinition.Brigantine,NavalShipDefinition.Ironclad})
         {
             var grid=new NavalFloodGrid(12,24,BoatDimensions.HoldWidth,BoatDimensions.HoldLength,ship.Scale,ship.RimY-ship.HoldFloor);
             var view=new NavalFloodRenderState(grid.Water.Length);
@@ -23,6 +23,14 @@ class FloodRenderChecks
             grid.Add(0,grid.MaxCellVolume);Check(view.Refresh(grid)&&view.WetCount==1,"Flood can reappear after draining");
             Check(view.Depths[0]<=ship.RimY-ship.HoldFloor+.00001f,"Mesh stays within maximum flood bounds");
         }
-        Console.WriteLine("PASS: dry/stable upload suppression, local depth, changed cells, cumulative threshold, mass conservation, draining and restoration on both ships.");
+        var iron=NavalShipDefinition.Ironclad;float centre,width;
+        Check(NavalFloodRenderMath.ClipCell(2.20f,.50f,0f,.50f,iron,out centre,out width),"Side flood cell clips instead of disappearing");
+        Check(centre+width*.5f<=iron.HullHalfWidth(.25f)-.08f/iron.Scale+.0001f,"Flood mesh stays inset behind tapered armour");
+        var shaped=new NavalFloodGrid(12,24,BoatDimensions.HoldWidth,BoatDimensions.HoldLength,iron.Scale,4f,true,true);
+        int outerBow=shaped.Index(2.6f,5.5f);Check(shaped.IsActive(outerBow),"Index remaps an outer bow request to an active ironclad column");
+        var side=NavalLeakVisualMath.Inward(new UnityEngine.Vector3(iron.HullHalfWidth(0),.5f,0),iron);
+        var end=NavalLeakVisualMath.Inward(new UnityEngine.Vector3(0,.5f,6),iron);
+        Check(side.x<0&&side.z==0&&end.z<0&&end.x==0,"Leak jets point through the real tapered side or end into the hull");
+        Console.WriteLine("PASS: flood upload suppression, mass conservation, ironclad-shaped active cells, clipped internal water and tapered-shell leak directions.");
     }
 }

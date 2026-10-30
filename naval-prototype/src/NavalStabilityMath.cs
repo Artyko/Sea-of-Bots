@@ -111,4 +111,17 @@ public sealed class NavalStabilityMath
         }
         if(tank.SpillPending>0)mass.Add(tank.SpillPending,0,floor*scale);
     }
+    public void AddTank(ref NavalMassMoments mass,NavalBallastTank tank,NavalShipDefinition ship,float floor)
+    {
+        NavalBallastLayout.Dimensions d=NavalBallastLayout.For(ship);
+        if(tank.Water>0)
+        {
+            double width=d.Width*ship.Scale,height=d.Height;
+            section.Solve(width,0,height,Angle,width*height*tank.Water/tank.Capacity);
+            double phi=Angle*Math.PI/180,c=Math.Cos(phi),s=Math.Sin(phi);
+            double localX=section.CenterX*c+section.CenterY*s,localY=-section.CenterX*s+section.CenterY*c;
+            mass.Add(tank.Water,tank.X*ship.Scale+localX,floor*ship.Scale+localY);
+        }
+        if(tank.SpillPending>0)mass.Add(tank.SpillPending,0,floor*ship.Scale);
+    }
 }

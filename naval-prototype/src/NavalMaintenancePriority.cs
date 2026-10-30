@@ -5,10 +5,10 @@ public static class NavalMaintenancePriority
  {return quiet&&!fire&&!leaks&&!pumpDemand&&!critical&&!trim&&!pumpBroken;}
  public static bool CanClaimCannon(bool allowed,bool otherRepairer)
  {return allowed&&!otherRepairer;}
- public static bool DeferEquipment(bool cannon,bool pump,bool fire,bool pumpDemand)
- {return !pump&&(fire||pumpDemand);}
- public static int RepairTier(bool equipment,bool pump,bool cannon)
- {return !equipment?3:pump?2:cannon?0:1;}
+ public static bool DeferEquipment(bool cannon,bool pump,bool fire,bool pumpDemand,bool steamMain=false)
+ {return !pump&&!steamMain&&(fire||pumpDemand);}
+ public static int RepairTier(bool equipment,bool pump,bool cannon,bool steamMain=false)
+ {return !equipment?3:pump||steamMain?2:cannon?0:1;}
  public static bool DeferOrdinaryFire(bool leaks,bool leakCovered)
  {return leaks&&!leakCovered;}
 }

@@ -1,54 +1,75 @@
 ﻿using UnityEngine;
 using System.Collections.Generic;
 public sealed class NavalCargoCrate {
- public readonly NavalCargoStock Stock;public readonly Vector3 Point,Pickup;public readonly int Kind,Gun;
+ public readonly NavalCargoStock Stock;public readonly Vector3 Point,Pickup;public readonly int Kind,Gun;public readonly float Width;
  private readonly NavalHull hull;private readonly List<NavalHullVoxel> shell=new List<NavalHullVoxel>(),contents=new List<NavalHullVoxel>();
  private int shown=-1;private bool updating,damageDirty=true;
  public void NotifyDamage(){if(!updating)damageDirty=true;}
  public int CollisionShapes {get{return collision!=null?collision.ActiveShapes:CollisionSources;}}
+ public int CompactCollisionShapes {get{return collision!=null&&collision.Compact?collision.ActiveShapes:0;}}
  public bool CompactCollision {get{return collision!=null&&collision.Compact;}}
  public int CollisionSources {get{return shell.Count+contents.Count;}}
+ public bool ExplosiveAmmunition {get{return Kind==0&&Gun<0&&shell.Count+contents.Count>0;}}
+ public Vector3 ExplosivePoint {get{return Point+Vector3.up*(.58f/hull.WorldScale);}}
+ public List<NavalHullVoxel> ExplosiveCells()
+ {var result=new List<NavalHullVoxel>(shell.Count+contents.Count);result.AddRange(shell);result.AddRange(contents);return result;}
  public bool UpdatingContents {get{return updating;}}
  private NavalCargoCollision collision;
  public NavalCargoCrate(NavalHull owner,Vector3 point,int kind,int gun,Material wood,Material trim,Material iron){
- hull=owner;Point=point;Kind=kind;Gun=gun;Stock=new NavalCargoStock(kind==1?40:kind==2?1:20);
- Pickup=point+new Vector3(point.x>0?-1.65f:1.65f,0,0)/hull.WorldScale;
+ hull=owner;Point=point;Kind=kind;Gun=gun;Width=hull.Definition.SteamPowered?1f:1.3f;Stock=new NavalCargoStock(kind==1?40:kind==2?1:20);
+  Pickup=hull.Definition.SteamPowered?new Vector3(point.x>0?.92f:-.92f,point.y,point.z):point+new Vector3(point.x>0?-1.65f:1.65f,0,0)/hull.WorldScale;
  if(gun<0){var pickup=NavalCargoLayout.Pickup(hull.Definition,new NavalWalkPoint(point.x,point.y,point.z));Pickup=new Vector3(pickup.X,pickup.Y,pickup.Z);}
+ // Steam ready-use ammunition is stored inside each gun mounting. It remains
+ // a logical replenishment target, but no loose steel crate or collider is
+ // placed in the weather-deck passage.
+ if(NavalCargoLayout.IntegratedReadyUse(hull.Definition)&&gun>=0){shown=Stock.Count;return;}
  int first=hull.Voxels.Count;
- Box(wood,new Vector3(0,.10f,0),new Vector3(1.3f,.20f,1.3f));
+ float half=Width*.5f-.05f;
+ Box(wood,new Vector3(0,.10f,0),new Vector3(Width,.20f,Width));
  // Open slatted sides, broad corner posts and contrasting rim.
  for(int side=-1;side<=1;side+=2){
   for(int row=0;row<3;row++){
-   Box(wood,new Vector3(side*.60f,.28f+row*.22f,0),new Vector3(.10f,.18f,1.3f));
-   Box(wood,new Vector3(0,.28f+row*.22f,side*.60f),new Vector3(1.3f,.18f,.10f));
+   Box(wood,new Vector3(side*half,.28f+row*.22f,0),new Vector3(.10f,.18f,Width));
+   Box(wood,new Vector3(0,.28f+row*.22f,side*half),new Vector3(Width,.18f,.10f));
   }
-  Box(trim,new Vector3(side*.60f,.85f,0),new Vector3(.14f,.12f,1.35f));
-  Box(trim,new Vector3(0,.85f,side*.60f),new Vector3(1.35f,.12f,.14f));
-  for(int end=-1;end<=1;end+=2)Box(trim,new Vector3(side*.59f,.48f,end*.59f),new Vector3(.16f,.9f,.16f));
+  Box(trim,new Vector3(side*half,.85f,0),new Vector3(.14f,.12f,Width+.05f));
+  Box(trim,new Vector3(0,.85f,side*half),new Vector3(Width+.05f,.12f,.14f));
+  for(int end=-1;end<=1;end+=2)Box(trim,new Vector3(side*half,.48f,end*half),new Vector3(.16f,.9f,.16f));
  }
  for(int i=first;i<hull.Voxels.Count;i++)shell.Add(hull.Voxels[i]);first=hull.Voxels.Count;
  if(kind==0){
-  for(int layer=0;layer<2;layer++)for(int x=0;x<3;x++)for(int z=0;z<3;z++)Ball(iron,new Vector3((x-1)*.37f,.38f+layer*.35f,(z-1)*.37f),.34f);
-  for(int x=-1;x<=1;x+=2)Ball(iron,new Vector3(x*.185f,1.04f,0),.34f);
+  if(hull.Definition.RifledWeapons){
+   for(int layer=0;layer<2;layer++)for(int x=0;x<3;x++)for(int z=0;z<3;z++)Shell(iron,new Vector3((x-1)*.34f,.42f+layer*.42f,(z-1)*.34f));
+   for(int x=-1;x<=1;x+=2)Shell(iron,new Vector3(x*.18f,1.18f,0));
+  }else{
+   for(int layer=0;layer<2;layer++)for(int x=0;x<3;x++)for(int z=0;z<3;z++)Ball(iron,new Vector3((x-1)*.37f,.38f+layer*.35f,(z-1)*.37f),.34f);
+   for(int x=-1;x<=1;x+=2)Ball(iron,new Vector3(x*.185f,1.04f,0),.34f);
+  }
  }else if(kind==1){
   // Long boards visibly protrude above the open rim, with alternating wood colours.
   for(int row=0;row<5;row++)for(int x=0;x<3;x++)
    Box((row+x)%2==0?trim:wood,new Vector3((x-1)*.32f,.28f+row*.13f,0),new Vector3(.25f,.10f,1.12f));
   for(int x=-1;x<=1;x++)Box(x==0?wood:trim,new Vector3(x*.3f,1.05f,.28f),new Vector3(.22f,1.55f,.12f));
  }else {
-  // A barrel-shaped cannon tube and wooden carriage parts extend above the crate.
-  for(int ring=0;ring<5;ring++)for(int side=0;side<4;side++){
-   float angle=side*Mathf.PI*.5f;
-   Box(iron,new Vector3(Mathf.Cos(angle)*.18f,.38f+ring*.23f,Mathf.Sin(angle)*.18f),new Vector3(.18f,.23f,.18f));
+  if(hull.Definition.RifledWeapons){
+   Box(iron,new Vector3(0,.55f,0),new Vector3(.42f,1.25f,.42f));
+   Box(trim,new Vector3(.38f,.62f,0),new Vector3(.24f,.72f,.62f));
+   Box(iron,new Vector3(-.38f,.62f,0),new Vector3(.18f,1.15f,.18f));
+  }else{
+   // A barrel-shaped cannon tube and wooden carriage parts extend above the crate.
+   for(int ring=0;ring<5;ring++)for(int side=0;side<4;side++){
+    float angle=side*Mathf.PI*.5f;
+    Box(iron,new Vector3(Mathf.Cos(angle)*.18f,.38f+ring*.23f,Mathf.Sin(angle)*.18f),new Vector3(.18f,.23f,.18f));
+   }
+   Box(trim,new Vector3(.40f,.88f,0),new Vector3(.16f,1.35f,.8f));
+   Box(wood,new Vector3(-.4f,.48f,0),new Vector3(.18f,.35f,1f));
   }
-  Box(trim,new Vector3(.40f,.88f,0),new Vector3(.16f,1.35f,.8f));
-  Box(wood,new Vector3(-.4f,.48f,0),new Vector3(.18f,.35f,1f));
  }
  for(int i=first;i<hull.Voxels.Count;i++)contents.Add(hull.Voxels[i]);shown=Stock.Count;
  collision=hull.Root.gameObject.AddComponent<NavalCargoCollision>();collision.Initialize(hull,this,shell,contents);
  }
  private static Mesh ballMesh;
- private void Ball(Material material,Vector3 offset,float diameter){
+ private static void EnsureBallMesh(){
   if(ballMesh==null){
    var vertices=new List<Vector3>();var triangles=new List<int>();
    const int rings=4,sides=6;
@@ -60,7 +81,15 @@ public sealed class NavalCargoCrate {
     triangles.Add(i);triangles.Add(i+1);triangles.Add(i+sides+1);triangles.Add(i+1);triangles.Add(i+sides+2);triangles.Add(i+sides+1);}
    ballMesh=new Mesh();ballMesh.name="Cargo cannonball low-poly";ballMesh.SetVertices(vertices);ballMesh.SetTriangles(triangles,0);ballMesh.RecalculateNormals();ballMesh.RecalculateBounds();
   }
+ }
+ private void Ball(Material material,Vector3 offset,float diameter){
+  EnsureBallMesh();
   var cell=hull.AddVoxel(hull.Root,material,Point+offset/hull.WorldScale,Vector3.one*(diameter/hull.WorldScale),false,true);
+  cell.GetComponent<MeshFilter>().sharedMesh=ballMesh;
+ }
+ private void Shell(Material material,Vector3 offset){
+  EnsureBallMesh();
+  var cell=hull.AddVoxel(hull.Root,material,Point+offset/hull.WorldScale,new Vector3(.20f,.52f,.20f)/hull.WorldScale,false,true);
   cell.GetComponent<MeshFilter>().sharedMesh=ballMesh;
  }
  private void Box(Material mat,Vector3 offset,Vector3 size){hull.AddDecorationBox(hull.Root,mat,Point+offset/hull.WorldScale,size/hull.WorldScale,true);}
@@ -77,5 +106,6 @@ public sealed class NavalCargoCrate {
  }finally{updating=false;if(collision!=null)collision.RefreshShapes();}}
  public int Take(int amount){Refresh();int n=Stock.Take(amount);Refresh();return n;}
  public int Put(int amount){Refresh();int n=Stock.Put(amount);Refresh();return n;}
+ public void DestroyAmmunition(){Refresh();Stock.Take(Stock.Count);Refresh();}
  public void Reset(){Stock.Reset();shown=-1;damageDirty=false;Refresh();if(collision!=null)collision.TryCompact();}
 }

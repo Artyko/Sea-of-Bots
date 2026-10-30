@@ -10,7 +10,7 @@ public partial class NavalTestWorld
                 {"F3","CPU-замеры"},{"F4","Выбор кораблей"},{"F6","Включить / выключить мод"},{"F7","Сильные / слабые волны"},
                 {"F8","Вернуться на палубу"},{"F9","Пробоина слева"},{"F10 (держать)","Тестовая откачка"},
                 {"F11","Пробоина справа"},{"F12","Убрать / создать врага"},{"E","Станция / лестница"},
-                {"W/S у снастей","Паруса / задний ход"},{"C у снастей","Автопаруса экипажа"},{"ЛКМ / Space","Выстрел из пушки"},{"Space в воде","Подняться к поверхности"},
+                {"W/S у поста","Движитель / задний ход"},{"C у поста","Автоуправление экипажа"},{"ЛКМ / Space","Выстрел из пушки"},{"Space в воде","Подняться к поверхности"},
                 {"Ctrl в воде","Погружаться"},{"B (держать)","Набрать ведро у борта / воды"},{"V","Вылить воду на огонь"},{"Y","Тест: поджечь выбранное"},{"G","Повредить выбранное"},{"R (держать)","Чинить выбранное"},
                 {"Shift + R","Восстановить судно"},{"Q у помпы","Выбрать режим помпы"},{"T (держать)","Работать помпой"},{"H","Скрыть список клавиш"}
             };
@@ -38,7 +38,7 @@ public partial class NavalTestWorld
         if(ShipMenuOpen){Cursor.lockState=CursorLockMode.None;Cursor.visible=true;}
     }
     private string ShipName(NavalShipDefinition definition)
-    {return definition==NavalShipDefinition.Sloop?"Шлюп":definition==NavalShipDefinition.Brigantine?"Бригантина":definition==NavalShipDefinition.Galleon?"Галеон":definition.Name;}
+    {return definition==NavalShipDefinition.Sloop?"Шлюп":definition==NavalShipDefinition.Brigantine?"Бригантина":definition==NavalShipDefinition.Galleon?"Галеон":definition==NavalShipDefinition.Ironclad?"Броненосный корвет":definition.Name;}
     private void SelectProfile(bool own,NavalShipDefinition definition)
     {
         if(own)
@@ -56,7 +56,7 @@ public partial class NavalTestWorld
     }
     private void Row(float x,float y,string label,string value)
     {GUI.Label(new Rect(x,y,125f,19f),label,hudText);GUI.Label(new Rect(x+125f,y,140f,19f),value,hudText);}
-    private readonly string[][] hudNumbers={new string[13],new string[13]};
+    private readonly string[][] hudNumbers={new string[18],new string[18]};
     private readonly NavalHull[] hudNumberShips=new NavalHull[2];
     private readonly float[] hudNumberAt=new float[2];
     private readonly int[] hudNumberRevision={-1,-1};
@@ -66,8 +66,8 @@ public partial class NavalTestWorld
         if(hudNumberShips[index]==ship&&hudNumberRevision[index]==ship.Revision&&Time.realtimeSinceStartup<hudNumberAt[index])return values;
         hudNumberShips[index]=ship;hudNumberRevision[index]=ship.Revision;hudNumberAt[index]=Time.realtimeSinceStartup+.2f;
         values[0]=(own?(allies!=null?allies.LivingCrew:0):enemy.LivingCrew)+" / "+definition.CrewCount;
-        values[1]=controls.WorkingGuns+" / "+controls.GunCount;
-        values[2]=(controls.SailSetting*100f).ToString("F0")+"% / "+((own?rig.SailPowerFactor:enemy.SailPower)*100f).ToString("F0")+"%";
+        values[1]=controls.WorkingGuns+" / "+controls.GunCount+(controls.HeelInhibitedGuns>0?" · крен −"+controls.HeelInhibitedGuns:"");
+        values[2]=(controls.SailSetting*100f).ToString("F0")+"% / "+((own?rig.PowerFactor:enemy.SailPower)*100f).ToString("F0")+"%";
         float waterSpeed=own?SpeedThroughWater:enemy.SpeedThroughWater;
         values[3]=waterSpeed.ToString("F1")+" м/с · "+NavalShipSpeedMath.Knots(waterSpeed).ToString("F1")+" уз";
         float roll=NavalHullStability.Roll(ship.Root);
@@ -86,12 +86,18 @@ public partial class NavalTestWorld
         values[10]=(ship.Cargo!=null?ship.Cargo.Total(2):controls.AvailableCannonKits)+" компл.";
         values[11]=(ship.Cargo!=null?ship.Cargo.Total(0):0)+" шт.";
         values[12]=(ship.Cargo!=null?ship.Cargo.Total(1):0)+" шт.";
+        NavalSteamPlant steam=ship.Root.GetComponent<NavalSteamPlant>();
+        values[13]=steam!=null?(steam.Pressure*100f).ToString("F0")+"% · "+steam.Coal.ToString("F1"):"—";
+        values[14]=steam!=null?(steam.BoilerIntegrity*100f).ToString("F0")+"% / "+(steam.EngineIntegrity*100f).ToString("F0")+"%":"—";
+        values[15]=steam!=null?(steam.FunnelIntegrity*100f).ToString("F0")+"%":"—";
+        values[16]=steam!=null?(steam.PropulsionMainIntegrity*100f).ToString("F0")+" / "+(steam.PumpMainIntegrity*100f).ToString("F0")+" / "+(steam.AuxiliaryMainIntegrity*100f).ToString("F0")+"%":"—";
+        values[17]=steam!=null?steam.PumpAssist.ToString("F1")+"×"+(steam.HasLiveSteamLeak?" · УТЕЧКА ПАРА":""):"—";
         return values;
     }
     private void ShipCard(float x,bool own)
     {
         const float y=14f,width=278f;
-        GUI.Box(new Rect(x,y,width,355f),"");
+        GUI.Box(new Rect(x,y,width,457f),"");
         GUI.Label(new Rect(x+12f,y+7f,width-24f,23f),own?"СВОЙ КОРАБЛЬ":"ПРОТИВНИК",hudTitle);
         NavalHull ship=own?hull:enemy!=null?enemy.Hull:null;
         NavalStations controls=own?stations:enemy!=null?enemy.Controls:null;
@@ -105,7 +111,7 @@ public partial class NavalTestWorld
             string[] values=ShipNumbers(own,ship,controls,definition);
             Row(x+12f,line,"Матросы",values[0]);line+=18f;
             Row(x+12f,line,"Пушки",values[1]);line+=18f;
-            Row(x+12f,line,"Паруса / целость",values[2]);line+=18f;
+            Row(x+12f,line,definition.SteamPowered?"Телеграф / тяга":"Паруса / целость",values[2]);line+=18f;
             Row(x+12f,line,"Ход по воде",values[3]);line+=18f;
             Row(x+12f,line,"Крен",values[4]);line+=18f;
             Row(x+12f,line,"Вода",values[5]);line+=18f;
@@ -114,17 +120,26 @@ public partial class NavalTestWorld
             Row(x+12f,line,"Повреждения",values[8]);line+=18f;
             Row(x+12f,line,"Балласт",values[9]);line+=18f;
             Row(x+12f,line,"Запчасти пушек",values[10]);line+=18f;
-            Row(x+12f,line,"Ядра",values[11]);line+=18f;
+            Row(x+12f,line,definition.RifledWeapons?"Снаряды":"Ядра",values[11]);line+=18f;
             Row(x+12f,line,"Доски в ящиках",values[12]);
+            if(definition.SteamPowered)
+            {
+                line+=18f;Row(x+12f,line,"Давление / уголь",values[13]);
+                line+=18f;Row(x+12f,line,"Котёл / машина",values[14]);
+                line+=18f;Row(x+12f,line,"Труба",values[15]);
+                line+=18f;Row(x+12f,line,"Пар: ход/помпа/всп.",values[16]);
+                line+=18f;Row(x+12f,line,"Режим помпы",values[17]);
+            }
         }
-        GUI.Label(new Rect(x+12f,y+306f,width-24f,18f),own?(Spectating?"Смена судна после перезапуска арены":"Сменить свой — начать бой заново"):"Заменить противника — 250 м",hudText);
+        GUI.Label(new Rect(x+12f,y+408f,width-24f,18f),own?(Spectating?"Смена судна после перезапуска арены":"Сменить свой — начать бой заново"):"Заменить противника — 250 м",hudText);
         bool enabled=GUI.enabled;
         GUI.enabled=enabled&&ShipMenuOpen;
-        for(int index=0;index<NavalShipDefinition.Choices.Length;index++)
+        NavalShipDefinition[] choices=NavalSessionSettings.Choices;
+        for(int index=0;index<choices.Length;index++)
         {
-            NavalShipDefinition choice=NavalShipDefinition.Choices[index];
+            NavalShipDefinition choice=choices[index];
             GUI.enabled=enabled&&ShipMenuOpen&&!(own&&Spectating)&&(definition!=choice||!own&&ship==null);
-            if(GUI.Button(new Rect(x+12f+index*85f,y+327f,82f,22f),ShipName(choice)))SelectProfile(own,choice);
+            if(GUI.Button(new Rect(x+12f+index*85f,y+429f,82f,22f),ShipName(choice)))SelectProfile(own,choice);
         }
         GUI.enabled=enabled;
     }
@@ -139,22 +154,23 @@ public partial class NavalTestWorld
         float scale=NavalHudLayout.Scale(Screen.width,Screen.height);
         GUI.matrix=Matrix4x4.TRS(Vector3.zero,Quaternion.identity,Vector3.one*scale);
         ShipCard(14f,true);ShipCard(302f,false);
-        GUI.Label(new Rect(16f,372f,600f,22f),ShipMenuOpen?"ВЫБОР КОРАБЛЕЙ — F4 закрыть меню":"F4 — выбор кораблей  |  H — список клавиш",hudText);
+        GUI.Label(new Rect(16f,474f,600f,22f),ShipMenuOpen?"ВЫБОР КОРАБЛЕЙ — F4 закрыть меню":"F4 — выбор кораблей  |  H — список клавиш",hudText);
         if(showHelp)
         {
-            GUI.Box(new Rect(14f,399f,350f,416f),"");
-            GUI.Label(new Rect(26f,406f,254f,22f),"УПРАВЛЕНИЕ",hudTitle);
+            GUI.Box(new Rect(14f,453f,350f,416f),"");
+            GUI.Label(new Rect(26f,460f,254f,22f),"УПРАВЛЕНИЕ",hudTitle);
             string[,] rows=Spectating?spectatorHelp:liveHelp;
             for(int i=0;i<rows.GetLength(0);i++)
             {
-                GUI.Label(new Rect(26f,433f+i*19f,110f,19f),rows[i,0],hudText);
-                GUI.Label(new Rect(136f,433f+i*19f,220f,19f),rows[i,1],hudText);
+                GUI.Label(new Rect(26f,487f+i*19f,110f,19f),rows[i,0],hudText);
+                GUI.Label(new Rect(136f,487f+i*19f,220f,19f),rows[i,1],hudText);
             }
         }
-        float infoY=showHelp?822f:402f;
+        float infoY=showHelp?876f:456f;
         string distance=enemy!=null?Vector3.Distance(boat.position,enemy.Boat.position).ToString("F0")+" м":"—";
-        GUI.Label(new Rect(16f,infoY,650f,20f),"До противника: "+distance+"  |  "+(Spectating?"Наблюдатель":swimming?"Плавание":"На ногах")+"  |  Волны: "+(rough?"сильные":"слабые"),hudText);
-        GUI.Label(new Rect(16f,infoY+20f,650f,20f),"v231"+(NavalPerformance.LaptopMode?" ECO":"")+"  |  FPS: "+(1000f/Mathf.Max(1f,frameMilliseconds)).ToString("F0")+"  |  Вода CPU: "+ocean.BuildMilliseconds.ToString("F1")+" мс",hudText);
+        string wave=rough?"сильные":NavalSessionSettings.Era==NavalEra.Steam?"умеренные":"слабые";
+        GUI.Label(new Rect(16f,infoY,650f,20f),"До противника: "+distance+"  |  "+(Spectating?"Наблюдатель":swimming?"Плавание":"На ногах")+"  |  Волны: "+wave,hudText);
+        GUI.Label(new Rect(16f,infoY+20f,650f,20f),"v254 "+NavalSessionSettings.Era+(NavalPerformance.LaptopMode?" ECO":"")+"  |  FPS: "+(1000f/Mathf.Max(1f,frameMilliseconds)).ToString("F0")+"  |  Вода CPU: "+ocean.BuildMilliseconds.ToString("F1")+" мс",hudText);
         GUI.matrix=previous;
         NavalPerformance.Draw();
     }

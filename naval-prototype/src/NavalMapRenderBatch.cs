@@ -33,7 +33,7 @@ public sealed class NavalMapRenderBatch : MonoBehaviour
         var groups=new Dictionary<Key,Group>();Matrix4x4 toLocal=transform.worldToLocalMatrix;
         foreach(ObjectPlacedInLevel obj in placed)
         {
-            if(obj==null||obj.name==NavalWorldMap.WaterMarker)continue;
+            if(obj==null||NavalEraMarker.IsWater(obj.name))continue;
             foreach(MeshFilter filter in obj.GetComponentsInChildren<MeshFilter>())
             {
                 Mesh source=filter.sharedMesh;MeshRenderer renderer=filter.GetComponent<MeshRenderer>();

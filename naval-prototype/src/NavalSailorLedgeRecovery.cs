@@ -18,10 +18,33 @@ public partial class NavalRepairSailor
     private bool TryPlanLedgeRecovery(Vector3 goal)
     {
         ledgeWaypoints=0;
-        float deck=hull.Definition.DeckCount>2&&feet.y>1.1f?hull.Definition.WeatherDeck:.825f;
-        if(NavalShipRoutes.InStairwell(new NavalWalkPoint(feet.x,feet.y,feet.z),hull.Definition)||!NavalLedgeRecoveryMath.Needed(feet.y-(deck-.825f),hull.WorldScale))return false;
+        // A missed moving-deck carry used to leave a routed sailor at a fixed
+        // world position while the ship sailed away. The ordinary ledge path
+        // then tried to walk dozens of local metres back and was rebuilt every
+        // frame. This is not an overboard rescue (those sailors are handled by
+        // NavalSailorRescue); restore only a routed, deck-height body to a clear
+        // weather-deck muster point and continue through the normal planner.
+        if(NavalLedgeRecoveryMath.Detached(feet.x,feet.y,feet.z,hull.Definition.HullHalfWidth(feet.z),
+            hull.Definition.WeatherDeck,hull.WorldScale))
+        {
+            float recoveredZ=NavalLedgeRecoveryMath.RecoveryZ(feet.z);
+            float recoveredX=NavalLedgeRecoveryMath.RecoveryX(feet.x,hull.Definition.HullHalfWidth(recoveredZ),hull.WorldScale);
+            Vector3 recovered=new Vector3(recoveredX,hull.Definition.WeatherDeck,recoveredZ);
+            Vector3 lost=feet;feet=recovered;route.Clear();stuck=0f;moveSpeed=0f;HoldPosition();
+            Append(NavalShipRoutes.Plan(new NavalWalkPoint(recovered.x,recovered.y,recovered.z),
+                new NavalWalkPoint(goal.x,goal.y,goal.z),hull.Definition));
+            Debug.Log("[NavalPrototype] Crew moving-deck attachment recovered: ship="+boat.name+" lost="+lost+" restored="+recovered+" duty="+Status);
+            return true;
+        }
+        float deck=NavalLedgeRecoveryMath.DeckBelow(feet.y,hull.Floor,hull.Definition.WeatherDeck,hull.Definition.DeckCount);
+        NavalWalkPoint footPoint=new NavalWalkPoint(feet.x,feet.y,feet.z);
+        if(NavalShipRoutes.InStairwell(footPoint,hull.Definition)||NavalStairTraffic.InPassage(footPoint,hull.Definition)||!NavalLedgeRecoveryMath.Needed(feet.y-(deck-.825f),hull.WorldScale))return false;
         Vector3 inside=new Vector3(NavalLedgeRecoveryMath.InwardX(feet.x),feet.y,NavalLedgeRecoveryMath.InwardZ(feet.z));
-        foreach(float inward in new float[]{0f,-.5f,.5f,-1f,1f})foreach(float shift in new float[]{0f,-.6f,.6f,-1.2f,1.2f})
+        // A sailor is most often standing on a cargo rim.  Step toward the
+        // clear centre aisle before trying longitudinal hops that can merely
+        // land on the next crate in the row.
+        float centre=feet.x<0f?.65f:-.65f;
+        foreach(float inward in new float[]{centre,centre*.5f,0f,-centre*.5f,-centre})foreach(float shift in new float[]{0f,-.6f,.6f,-1.2f,1.2f})
         {
             Vector3 upper=inside;upper.x=Mathf.Clamp(upper.x+inward,-2.1f,2.1f);upper.z=Mathf.Clamp(upper.z+shift,-5.3f,5.3f);
             if(new Vector2(upper.x-feet.x,upper.z-feet.z).magnitude*hull.WorldScale<.6f)continue;

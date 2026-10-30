@@ -44,6 +44,7 @@ public class NavalSailorGait : MonoBehaviour
     public void Moved(float distance)
     {if(distance>0.002f){clock.Advance(distance,stride);lastMove=Time.time;}}
     public void Stop(){lastMove=-100f;}
+    public void InvalidatePose(){idleApplied=false;weight=0f;}
     private void LateUpdate()
     {
         if(robot==null||!robot.IsAlive()){Restore();enabled=false;return;}

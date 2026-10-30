@@ -5,7 +5,10 @@ using UnityEngine.Rendering;
 // Cosmetic capacity is bounded. Overflow replaces the next old slot, never a projectile.
 public sealed class NavalSmokeBatch : MonoBehaviour
 {
-    private const int Capacity=512,PaletteLimit=64;
+    // A long battle used to retain 512 transparent puffs plus 576 solid fire
+    // cubes per ship. The meshes were bounded but still rebuilt and rendered
+    // every frame, which explains the gradual 57 -> 8 FPS collapse in v249.
+    public const int Capacity=256,PaletteLimit=24;
     private struct Puff {public Vector3 Position,Velocity;public float Life,Total,Size,Rise,Expansion,Gravity;public int Palette;public int[] Opacity;public Color Tint;}
     private readonly Puff[] particles=new Puff[Capacity];
     private readonly List<Vector3> vertices=new List<Vector3>(Capacity*24),normals=new List<Vector3>(Capacity*24);
@@ -19,6 +22,9 @@ public sealed class NavalSmokeBatch : MonoBehaviour
     private Mesh mesh;
     private MeshRenderer renderer;
     private int cursor,active;
+    public int ActiveCount {get{return active;}}
+    public int SolidFireCount {get{return fireCubes!=null?fireCubes.ActiveCount:0;}}
+    public int PaletteCount {get{return materials.Count;}}
     private static readonly Vector3[] directions={Vector3.right,Vector3.left,Vector3.up,Vector3.down,Vector3.forward,Vector3.back};
     public void Emit(Vector3 position,Vector3 velocity,Material source,float duration,float radius)
     {
@@ -29,12 +35,12 @@ public sealed class NavalSmokeBatch : MonoBehaviour
             visual.AddComponent<MeshFilter>().sharedMesh=mesh;renderer=visual.AddComponent<MeshRenderer>();
             renderer.shadowCastingMode=ShadowCastingMode.Off;renderer.receiveShadows=false;renderer.enabled=false;
         }
-        int shade=Random.Range(0,8),palette=-1;
+        int shade=Random.Range(0,4),palette=-1;
         for(int i=0;i<materials.Count;i++)if(sources[i]==source&&shades[i]==shade){palette=i;break;}
         if(palette<0&&materials.Count<PaletteLimit)
         {
             palette=materials.Count;Material material=new Material(source);
-            Color color=source.color*Mathf.Lerp(.8f,1.18f,shade/7f);color.a=1f;material.color=color;
+            Color color=source.color*Mathf.Lerp(.82f,1.16f,shade/3f);color.a=1f;material.color=color;
             materials.Add(material);sources.Add(source);shades.Add(shade);triangles.Add(new List<int>(Capacity*36/8));
             renderer.sharedMaterials=materials.ToArray();
         }
@@ -50,12 +56,12 @@ public sealed class NavalSmokeBatch : MonoBehaviour
         particles[slot]=new Puff{Position=position,Velocity=velocity,Life=duration,Total=duration,Size=radius,Palette=palette,Rise=.5f,Expansion=1.3f,Tint=source.color};
         cursor=(slot+1)%Capacity;
     }
-    public void EmitDebris(Vector3 position,Vector3 velocity,Material source)
+    public void EmitDebris(Vector3 position,Vector3 velocity,Material source,float size=.18f)
     {
-        Emit(position,velocity,source,2.4f,.18f);int slot=(cursor+Capacity-1)%Capacity;
+        Emit(position,velocity,source,2.4f,size);int slot=(cursor+Capacity-1)%Capacity;
         Puff puff=particles[slot];puff.Gravity=9.8f;puff.Expansion=0;particles[slot]=puff;
     }
-    public void EmitPlume(Vector3 position,Vector3 velocity,Material source,float size=.55f,float duration=NavalSmokePlumeMath.Lifetime)
+    public void EmitPlume(Vector3 position,Vector3 velocity,Material source,float size=.55f,float duration=NavalSmokePlumeMath.Lifetime,float expansion=NavalSmokePlumeMath.Expansion,float rise=NavalSmokePlumeMath.RiseSpeed)
     {
         if(source==null)return;
         // Emit performs the shared lazy mesh initialization and bounded-slot selection.
@@ -87,7 +93,7 @@ public sealed class NavalSmokeBatch : MonoBehaviour
                 plumePalettes.Add(source,opacity);renderer.SetSharedMaterials(materials);
             }
         }
-        puff.Opacity=opacity;puff.Rise=NavalSmokePlumeMath.RiseSpeed;puff.Expansion=NavalSmokePlumeMath.Expansion;particles[slot]=puff;
+        puff.Opacity=opacity;puff.Rise=rise;puff.Expansion=expansion;particles[slot]=puff;
     }
     public void EmitFireColumn(Vector3 point,Vector3 sourceVelocity,Material material,float duration,float size)
     {

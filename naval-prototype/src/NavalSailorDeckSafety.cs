@@ -19,8 +19,14 @@ public partial class NavalRepairSailor
                 }
             }
             Vector3 previousLocal=lastDeckPose.inverse.MultiplyPoint3x4(robot.transform.position-Vector3.up*footOffset);
-            // Preserve real knockback/falls: carry only a nearby sailor still inside the previous hull footprint.
-            if(InsideWalkingDeck(previousLocal)&&boat.TransformVector(previousLocal-feet).sqrMagnitude<.64f)
+            // A CharacterController can be held for one frame by a rail while
+            // the ship advances beneath it. Keep carrying a planned inboard
+            // footing through that small contact error; genuine knockback and
+            // overboard falls are still outside the grace envelope.
+            float radius=body!=null?body.radius*Mathf.Abs(body.transform.lossyScale.x):.38f;
+            bool near=NavalCrewDeckSafety.Near(previousLocal.x,previousLocal.z,hull.Definition.HullHalfWidth(previousLocal.z),hull.WorldScale,radius);
+            bool heightClose=Mathf.Abs(previousLocal.y-feet.y)*hull.WorldScale<.65f;
+            if((InsideWalkingDeck(previousLocal)||InsideWalkingDeck(feet)&&near&&heightClose)&&boat.TransformVector(previousLocal-feet).sqrMagnitude<1.44f)
             {feet=previousLocal;HoldPosition();}
         }
         lastDeckPose=current;deckCarryReady=true;

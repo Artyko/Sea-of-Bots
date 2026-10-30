@@ -7,6 +7,9 @@ public struct NavalWalkPoint
 public static class NavalWalkRoutes
 {
     public const int StepCount=48;
+    // The former .8 landing sat on the lip of the weather-deck opening.  A
+    // full-size capsule could skip the last tread and then replan forever.
+    public const float TopLandingZ=1.05f;
     public static bool InStairwell(float x,float y,float z,float halfWidth=1.1f,float holdFloor=BoatDimensions.HoldFloor)
     {
         if(System.Math.Abs(x)>=halfWidth||z<=-3.7f||z>=.85f||y<=holdFloor+.15f||y>=.825f)return false;
@@ -21,7 +24,13 @@ public static class NavalWalkRoutes
         return holdFloor+(.825f-holdFloor)*step/StepCount;
     }
     public static bool Reached(float dx,float dy,float dz,float scale)
-    {return (dx*dx+dz*dz)*scale*scale<.20f*.20f&&dy*scale>-.32f&&dy*scale<.65f;}
+    {
+        // A stair waypoint describes a whole tread, not a 20 cm pin. A full
+        // capsule naturally rides 0.6-0.8 m to one side of that pin while the
+        // ship rolls; accepting the tread prevents mirrored sailors waiting
+        // forever at x=+/-0.3 while preserving tight longitudinal progress.
+        return System.Math.Abs(dx)*scale<.82f&&System.Math.Abs(dz)*scale<.25f&&dy*scale>-.32f&&dy*scale<.65f;
+    }
     private static NavalWalkPoint Step(int index,float holdFloor)
     {
         float y=holdFloor+(0.825f-holdFloor)*(index+1)/StepCount;
@@ -30,7 +39,7 @@ public static class NavalWalkRoutes
     public static List<NavalWalkPoint> Down(float holdFloor=BoatDimensions.HoldFloor)
     {
         List<NavalWalkPoint> points=new List<NavalWalkPoint>();
-        points.Add(new NavalWalkPoint(0f,0.825f,0.8f));points.Add(new NavalWalkPoint(0f,0.825f,0.43f));
+        points.Add(new NavalWalkPoint(0f,0.825f,TopLandingZ));points.Add(new NavalWalkPoint(0f,0.825f,0.43f));
         for(int i=StepCount-2;i>=0;i-=2)points.Add(Step(i,holdFloor));
         points.Add(new NavalWalkPoint(0f,holdFloor,-3.65f));return points;
     }
@@ -39,6 +48,6 @@ public static class NavalWalkRoutes
         List<NavalWalkPoint> points=new List<NavalWalkPoint>();
         for(int i=0;i<StepCount;i+=2)
         {NavalWalkPoint p=Step(i,holdFloor);if(p.Y>=y+0.03f&&p.Z>=z-0.1f)points.Add(p);}
-        points.Add(new NavalWalkPoint(0f,0.825f,0.43f));points.Add(new NavalWalkPoint(0f,0.825f,0.8f));return points;
+        points.Add(new NavalWalkPoint(0f,0.825f,0.43f));points.Add(new NavalWalkPoint(0f,0.825f,TopLandingZ));return points;
     }
 }

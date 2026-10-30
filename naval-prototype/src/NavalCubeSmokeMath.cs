@@ -3,7 +3,7 @@
 public static class NavalCubeSmokeMath
 {
  public const float RiseSpeed=3.6f;
- public const int Capacity=576,ShadeLevels=8;
+ public const int Capacity=192,ShadeLevels=8;
  public static float Grey(float height,float lifetime)
  {
   float t=Math.Max(0,Math.Min(1,height/Math.Max(1,RiseSpeed*lifetime*.75f)));

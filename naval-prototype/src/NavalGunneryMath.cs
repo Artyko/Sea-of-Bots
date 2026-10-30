@@ -2,6 +2,7 @@
 public static class NavalGunneryMath
 {
     public const float ReloadSeconds=5f;
+    public const float BelowWaterlineChance=.38f;
     public const float MinimumPitch=-25f,MaximumPitch=45f;
     public static bool WithinTraverse(float yaw,float pitch)
     {return Math.Abs(yaw)<=30f&&pitch>=MinimumPitch&&pitch<=MaximumPitch;}
@@ -20,7 +21,13 @@ public static class NavalGunneryMath
         return -1;
     }
     public static float Spread(float distance){return Math.Min(6f,.4f+Math.Max(0f,distance)*.045f);}
+    public static bool AimBelowWaterline(float roll,bool rifled)
+    {return rifled&&roll<BelowWaterlineChance;}
+    public static float DesiredHullDepth(bool belowWaterline)
+    {return belowWaterline?-.52f:.12f;}
     public const float LevelRange=32f*32f/9.81f;
+    public static float LevelRangeFor(float speed)
+    {float value=Math.Max(1f,speed);return value*value/9.81f;}
     public static float ApproachWeight(float distance)
     {
         if(distance>LevelRange*1.25f)return 1f;
@@ -28,5 +35,7 @@ public static class NavalGunneryMath
         return Math.Max(-1f,Math.Min(.15f,(distance-45f)/20f));
     }
     public static float FlightTime(float horizontalDistance,float angle)
-    {return horizontalDistance/(32f*(float)Math.Cos(angle*Math.PI/180f));}
+    {return FlightTime(horizontalDistance,angle,32f);}
+    public static float FlightTime(float horizontalDistance,float angle,float speed)
+    {return horizontalDistance/(Math.Max(1f,speed)*(float)Math.Cos(angle*Math.PI/180f));}
 }

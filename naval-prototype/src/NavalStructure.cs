@@ -11,10 +11,11 @@ public class NavalStructure : MonoBehaviour
     private readonly List<Vector3> positions=new List<Vector3>(), sizes=new List<Vector3>();
     private readonly List<Quaternion> rotations=new List<Quaternion>();
     private readonly List<bool> triggers=new List<bool>();
+    private readonly List<bool> nonPhysical=new List<bool>();
     private readonly List<GameObject> debris=new List<GameObject>();
     private List<int>[] edges;
     private bool dirty,initialCleanup=true;
-    private bool[] absent;
+    private bool[] absent,foundation;
     private NavalConnectivityWorkspace connectivity;
     private readonly Dictionary<NavalHullVoxel,int> cellIndices=new Dictionary<NavalHullVoxel,int>();
     public void MarkDirty(){dirty=true;}
@@ -26,7 +27,7 @@ public class NavalStructure : MonoBehaviour
             cell.StructureOwner=this;cellIndices.Add(cell,cells.Count);
             cells.Add(cell); parents.Add(cell.transform.parent);
             positions.Add(cell.transform.localPosition); sizes.Add(cell.transform.localScale);
-            rotations.Add(cell.transform.localRotation); triggers.Add(cell.PhysicsCollider.isTrigger);
+            rotations.Add(cell.transform.localRotation); triggers.Add(cell.PhysicsCollider.isTrigger);nonPhysical.Add(cell.NonPhysicalDecoration);
         }
         edges=new List<int>[cells.Count];
         Bounds[] bounds=new Bounds[cells.Count];
@@ -52,7 +53,24 @@ public class NavalStructure : MonoBehaviour
         }
         // Pre-existing unconnected decorative islands are removed from the
         // hovering geometry on the first update as well as after damage.
-        absent=new bool[cells.Count];connectivity=new NavalConnectivityWorkspace(cells.Count);dirty=true;
+        absent=new bool[cells.Count];foundation=new bool[cells.Count];
+        int foundations=0;
+        for(int i=0;i<cells.Count;i++)
+        {
+            // The low hydraulic shell and floor are the structural foundation.
+            // Upper armour and fittings must retain a continuous attachment to
+            // this band; being the largest disconnected object is not support.
+            foundation[i]=cells[i].HydraulicShell&&cells[i].LocalCenter.y<=hull.Definition.HoldFloor+.10f;
+            if(foundation[i])foundations++;
+        }
+        // Defensive fallback for an unforeseen profile with no low shell.  It
+        // preserves the old hull instead of dropping an entire ship at spawn.
+        if(foundations==0&&cells.Count>0)
+        {
+            float lowest=float.MaxValue;for(int i=0;i<cells.Count;i++)lowest=Mathf.Min(lowest,cells[i].LocalCenter.y);
+            for(int i=0;i<cells.Count;i++)if(cells[i].HydraulicShell&&cells[i].LocalCenter.y<=lowest+.10f)foundation[i]=true;
+        }
+        connectivity=new NavalConnectivityWorkspace(cells.Count);dirty=true;
     }
     private static Vector3Int Bucket(Vector3 p)
     {return new Vector3Int(Mathf.FloorToInt(p.x*2f),Mathf.FloorToInt(p.y*2f),Mathf.FloorToInt(p.z*2f));}
@@ -64,11 +82,9 @@ public class NavalStructure : MonoBehaviour
         dirty=false;
         for(int i=0;i<cells.Count;i++)absent[i]=cells[i].Missing||cells[i].Detached;
         List<List<int>> components=connectivity.Evaluate(edges,absent);
-        int main=-1,largest=0;
-        for(int i=0;i<components.Count;i++)if(components[i].Count>largest){main=i;largest=components[i].Count;}
-        for(int i=0;i<components.Count;i++)if(i!=main){
+        for(int i=0;i<components.Count;i++)if(!NavalStructuralSupport.HasFoundation(components[i],foundation)){
             if(initialCleanup){Debug.Log("[NavalPrototype] Removed unsupported spawn detail: ship="+hull.Definition.Name+" cells="+components[i].Count+" at="+cells[components[i][0]].LocalCenter);foreach(int index in components[i])cells[index].SetMissing(true);}
-            else Drop(components[i],shipVelocity);
+            else{Debug.Log("[NavalPrototype] Unsupported structure falling: ship="+hull.Definition.Name+" cells="+components[i].Count+" at="+cells[components[i][0]].LocalCenter);Drop(components[i],shipVelocity);}
         }
         initialCleanup=false;
             }
@@ -83,7 +99,7 @@ public class NavalStructure : MonoBehaviour
         {
             NavalHullVoxel cell=cells[index];cell.Detached=true;
             cell.Batched=false;cell.GetComponent<Renderer>().enabled=!cell.Missing;
-            cell.transform.SetParent(group.transform,true);cell.NotifyVisualChanged();cell.PhysicsCollider.isTrigger=false;
+            cell.transform.SetParent(group.transform,true);cell.NotifyVisualChanged();cell.SetNonPhysicalDecoration(false);cell.PhysicsCollider.isTrigger=false;
         }
         Rigidbody body=group.AddComponent<Rigidbody>();
         body.mass=Mathf.Clamp(component.Count*0.4f,0.5f,500f);
@@ -100,7 +116,7 @@ public class NavalStructure : MonoBehaviour
         {
             Transform cell=cells[i].transform;cell.SetParent(parents[i],false);
             cell.localPosition=positions[i];cell.localRotation=rotations[i];cell.localScale=sizes[i];
-            cells[i].Detached=false;cells[i].NotifyVisualChanged();cells[i].PhysicsCollider.isTrigger=triggers[i];
+            cells[i].Detached=false;cells[i].NotifyVisualChanged();cells[i].PhysicsCollider.isTrigger=triggers[i];cells[i].SetNonPhysicalDecoration(nonPhysical[i]);
             if(cells[i].Stream!=null)cells[i].Stream.gameObject.SetActive(false);
         }
         foreach(GameObject group in debris)Destroy(group);debris.Clear();
@@ -113,7 +129,7 @@ public class NavalStructure : MonoBehaviour
         int i;if(!cellIndices.TryGetValue(voxel,out i))return;
         Transform cell=voxel.transform;
         cell.SetParent(parents[i],false);cell.localPosition=positions[i];cell.localRotation=rotations[i];cell.localScale=sizes[i];
-        voxel.Detached=false;voxel.NotifyVisualChanged();voxel.PhysicsCollider.isTrigger=triggers[i];
+        voxel.Detached=false;voxel.NotifyVisualChanged();voxel.PhysicsCollider.isTrigger=triggers[i];voxel.SetNonPhysicalDecoration(nonPhysical[i]);
         voxel.SetMissing(false);voxel.ScorchStrength=0f;
         voxel.LastWetAt=float.NegativeInfinity;voxel.LastWetFlow=0f;
         cell.GetComponent<Renderer>().sharedMaterial=voxel.OriginalSurface;voxel.NotifyVisualChanged();

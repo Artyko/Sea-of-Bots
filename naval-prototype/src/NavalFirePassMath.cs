@@ -2,19 +2,20 @@
 public sealed class NavalFirePassMath
 {
  public int Phase {get;private set;} // 0 idle, 1 acquire, 2 firing pass, 3 separate
+ public string PhaseName {get{return Phase==1?"acquire":Phase==2?"broadside":Phase==3?"separate":"idle";}}
  public int Side {get;private set;}
  public float Heading {get;private set;}
  public float Throttle {get;private set;}
  private float age,noShot,lost,yaw,previous,anchor,outOfRange;
  public void Reset(){Phase=Side=0;age=noShot=lost=yaw=outOfRange=0;}
  private void Separate(float bearing){Phase=3;age=0;Heading=bearing+180+(Side==1?-15:15);}
- public bool Step(float dt,float ownHeading,float bearing,float distance,float clearance,int port,int starboard,int firingSide,bool shot,bool reachable)
+ public bool Step(float dt,float ownHeading,float bearing,float distance,float clearance,int port,int starboard,int firingSide,bool shot,bool reachable,int preferredSide=0,float firingDuration=45f,float quietSeconds=12f,float separationSeconds=20f)
  {
   dt=Math.Max(0,dt);
   if(port+starboard==0){Reset();return false;}
   if(Phase==0){
    if(!reachable||distance>clearance+32)return false;
-   Side=NavalBroadsideMath.HelmSide(ownHeading,bearing,port,starboard,0,firingSide);
+   Side=preferredSide==1&&port>0||preferredSide==2&&starboard>0?preferredSide:NavalBroadsideMath.HelmSide(ownHeading,bearing,port,starboard,0,firingSide);
    Phase=1;age=noShot=lost=yaw=0;previous=ownHeading;anchor=NavalBroadsideMath.Heading(bearing,Side);
   }
   outOfRange=reachable?0:outOfRange+dt;
@@ -33,9 +34,9 @@ public sealed class NavalFirePassMath
    // Track the moving target with bounded heading changes rather than a fixed old bearing.
    Heading=NavalHelmIntentMath.Heading(Heading,NavalBroadsideMath.Heading(bearing,Side),dt,12f);Throttle=.65f;
    lost=firingSide==Side?0:lost+dt;
-   if(age>45||lost>6||noShot>12||yaw>85&&noShot>8)Separate(bearing);
+   if(age>firingDuration||lost>6||noShot>quietSeconds||yaw>85&&noShot>Math.Min(8f,quietSeconds))Separate(bearing);
   }
-  if(Phase==3){Throttle=1;if(age>20||age>10&&distance>clearance+18){Reset();return false;}}
+  if(Phase==3){Throttle=1;if(age>separationSeconds||age>Math.Min(10f,separationSeconds*.65f)&&distance>clearance+18){Reset();return false;}}
   return true;
  }
 }

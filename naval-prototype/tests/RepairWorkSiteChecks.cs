@@ -65,6 +65,8 @@ class RepairWorkSiteChecks
   GC.Collect();int gen=GC.CollectionCount(0);var watch=Stopwatch.StartNew();for(int i=0;i<200000;i++)Consume+=ScanOld(30);watch.Stop();double oldMs=watch.Elapsed.TotalMilliseconds;int oldGC=GC.CollectionCount(0)-gen;
   GC.Collect();gen=GC.CollectionCount(0);watch.Restart();for(int i=0;i<200000;i++)Consume+=ScanNew(30);watch.Stop();int newGC=GC.CollectionCount(0)-gen;
   Check(ScanOld(30)==ScanNew(30),"Benchmarks choose identical point");
+  Check(Math.Abs(NavalRepairWorkSites.EndZ(NavalShipDefinition.Ironclad,6f)-5.05f)<.001f,"Steam bow repair post stays inside the tapered collision hull");
+  Check(Math.Abs(NavalRepairWorkSites.EndZ(NavalShipDefinition.Brigantine,-6f)+5.5f)<.001f,"Sail end-wall repair geometry is unchanged");
   Console.WriteLine("PASS: 6000 complete ordered repair searches on both ships; physical probes remain live. 200000 equivalent candidate scans "+oldMs.ToString("F1")+" -> "+watch.Elapsed.TotalMilliseconds.ToString("F1")+" ms; Gen0 "+oldGC+" -> "+newGC+" (not Unity FPS).");
  }
 }

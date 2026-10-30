@@ -6,14 +6,14 @@ public partial class NavalRepairSailor
  private int plankStage,plankReplans;
  private float plankPickupTime,plankRetryAt;
  private NavalCannonPartsVisual plankVisual;
- private bool NeedsPlanks(NavalHullVoxel cell){return cell!=null&&!cell.RepairableEquipment&&(cell.HydraulicShell||cell.InternalBarrier);}
+ private bool NeedsPlanks(NavalHullVoxel cell){return NavalRepairMaterials.NeedsPlanks(cell);}
  private bool CanSupplyPlanks {get{return planks.Count>0||Time.time>=plankRetryAt&&hull.HasPlankStock;}}
  private string PlankStatus {get{return plankStage==1?"Going to planks":plankStage==2?"Taking planks":"Carrying repair planks";}}
  private void PlankPose(int mode)
  {
   if(plankVisual==null&&mode!=0){plankVisual=gameObject.AddComponent<NavalCannonPartsVisual>();plankVisual.Initialize(model,footOffset,true);}
   if(plankVisual!=null)plankVisual.Pose(mode);
-  if(hammer!=null)hammer.gameObject.SetActive(mode==0||mode==3);
+  ShowHammer(mode==0||mode==3);
  }
  private void CancelPlankTrip(){plankStage=0;plankPickupTime=0;PlankPose(0);}
  private bool PlanPlankPickup()

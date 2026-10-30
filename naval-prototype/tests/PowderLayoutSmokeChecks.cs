@@ -13,6 +13,8 @@ class PowderLayoutSmokeChecks
  {
   int rare=0;for(int i=0;i<100000;i++)if(NavalFireIgnition.FromCannon((i+.5f)/100000))rare++;
   Check(rare==2000,"Ordinary damage ignites only 2 percent of uniform rolls");
+  Check(NavalFireIgnition.ImpactChance(5.2f,false)==0,"Armour-stopped main shell cannot ignite timber behind the plate");
+  Check(NavalFireIgnition.ImpactChance(5.2f,true)>.02f&&NavalFireIgnition.ImpactChance(5.2f,true)<=.16f,"Penetrating main shell fire is possible but never guaranteed");
   Check(NavalPowderState.ImpactChance==.4f&&NavalPowderState.ImpactChance>NavalFireIgnition.CannonChance*5,"Powder is substantially more dangerous than ordinary hull damage");
   int cells=0,bottom=0,middle=0;
   for(int y=0;y<NavalPowderLayout.Layers;y++)for(int x=-2;x<=2;x++)for(int z=-2;z<=2;z++)if(NavalPowderLayout.Cell(x,y,z))
@@ -24,7 +26,7 @@ class PowderLayoutSmokeChecks
   Check(cells==128&&bottom<middle,"Detailed barrel has tapered ends and a wider belly");
   foreach(var ship in NavalShipDefinition.Choices)
   {
-   Check(NavalPowderLayout.Count(ship)==ship.GunCount/2,"Storage count follows ship profile");
+    Check(NavalPowderLayout.Count(ship)==(ship.DeckCount>2?4:ship.GunCount/2),"Storage count follows ship profile");
    Check(NavalPowderLayout.Height>=1.4f&&NavalPowderLayout.Height<ship.HoldClearance,"Waist-high barrel fits beneath hold ceiling");
    for(int i=0;i<NavalPowderLayout.Count(ship);i++)
    {
@@ -37,12 +39,21 @@ class PowderLayoutSmokeChecks
     foreach(float mast in ship.MastZ)Check(Math.Sqrt(x*x+(z-mast)*(z-mast))*ship.Scale>NavalPowderLayout.Diameter*.5f+.65f,"Barrels clear mast foundations");
     for(int gun=0;gun<ship.GunCount;gun++){double dx=x-NavalShipDefinition.GunSide(gun)*ship.GunPostX,dz=z-NavalShipDefinition.GunZ(ship,gun);Check(Math.Sqrt(dx*dx+dz*dz)*ship.Scale>2,"Barrels clear gunner stations");}
    }
-  }
+   }
+   var ironclad=NavalShipDefinition.Ironclad;
+   Check(NavalPowderLayout.Count(ironclad)==0,"Ironclad has no exposed powder barrels");
+   Check(NavalMagazineLayout.Count(ironclad)==2,"Ironclad has two protected ammunition magazines");
+   for(int i=0;i<NavalMagazineLayout.Count(ironclad);i++)
+   {
+    float x=NavalMagazineLayout.X(i),z=NavalMagazineLayout.Z(i),half=NavalMagazineLayout.Width*.5f/ironclad.Scale;
+    Check(Math.Abs(x)+half<ironclad.HullHalfWidth(z),"Magazine remains inside armoured hull");
+    Check(Math.Abs(x)-half>.84f,"Magazine leaves the central crew route clear");
+   }
   int previous=0;for(int i=0;i<=120;i++)
   {int level=NavalSmokePlumeMath.Level(12-i*.1f,12);Check(level>=previous&&level<8,"Opacity stages only fade as smoke rises");previous=level;}
   Check(NavalSmokePlumeMath.Level(12,12)==0&&NavalSmokePlumeMath.Level(0,12)==7,"Dense base and faint final smoke stage");
   float fine=Rise(1f/60),coarse=Rise(.05f);
   Check(fine>25&&fine<30&&Math.Abs(fine-coarse)<.15f,"Smoke climbs gradually to 25-30m with consistent timestep behaviour");
-  Console.WriteLine("PASS: 2% hull ignition, larger wooden 128-voxel deck barrels on all profiles, stairs/tank path clearance and fading plume rise "+fine.ToString("F1")+"m (CPU model; no Unity visual test).");
+   Console.WriteLine("PASS: sail-era powder barrels, steam-era protected magazines, route clearance and fading plume rise "+fine.ToString("F1")+"m (CPU model; no Unity visual test).");
  }
 }

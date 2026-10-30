@@ -3,6 +3,7 @@
 public partial class NavalRepairSailor
 {
     private float avoidanceAt,hopTime,hopPrevious,recoveryDashUntil,recoveryWindow;
+    private bool deckGapEscape;
     private int recoveryAttempts;
     private readonly Vector3[] escapeNodes=new Vector3[81];
     private readonly int[] escapeParents=new int[81],escapeQueue=new int[81];
@@ -16,9 +17,12 @@ public partial class NavalRepairSailor
     private bool Supported(Vector3 p)
     {
         if(!InsideWalkingDeck(p)||NavigationStairs(p))return false;
-        RaycastHit hit;Vector3 world=boat.TransformPoint(p);
-        return Physics.Raycast(world+boat.up*.25f,-boat.up,out hit,.55f,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore)&&
-            hit.collider.transform.IsChildOf(boat)&&Mathf.Abs(boat.InverseTransformPoint(hit.point).y-p.y)*hull.WorldScale<.3f;
+        // A ray can still hit the intact half of a plank beneath the capsule.
+        // Reject the candidate when any part of the body footprint overlaps a
+        // destroyed deck cell, otherwise the escape grid plans into the same
+        // hole that triggered recovery.
+        if(hull.DeckGapAt(p,NavigationRadius))return false;
+        return NavalPhysicsQueries.HasLocalSupport(hull,p);
     }
     private bool NavigationClear(Vector3 a,Vector3 b)
     {
@@ -39,6 +43,23 @@ public partial class NavalRepairSailor
         int steps=Mathf.Max(1,Mathf.CeilToInt(boat.TransformVector(b-a).magnitude/.6f));
         for(int i=1;i<=steps;i++)if(!Supported(Vector3.Lerp(a,b,(float)i/steps)))return false;
         return NavigationClear(a,b);
+    }
+    private bool RecoverDeckGap()
+    {
+        // This is only entered when damage removed the supporting cell under a
+        // sailor. Search concentrically so the escape is short and bounded;
+        // the path itself may begin over the hole, but its endpoint must have
+        // full-footprint support and unobstructed body clearance.
+        for(int ring=1;ring<=6;ring++)for(int n=0;n<16;n++)
+        {
+            float angle=n*Mathf.PI/8f;
+            Vector3 point=feet+new Vector3(Mathf.Sin(angle),0,Mathf.Cos(angle))*(ring*.2f);
+            if(!Supported(point)||!ClearBody(point)||!NavigationClear(feet,point))continue;
+            route.Insert(0,point);deckGapEscape=true;stuck=0;moveSpeed=0;
+            Debug.Log("[NavalPrototype] Crew deck-gap escape: ship="+boat.name+" feet="+feet+" safe="+point+" duty="+Status);
+            return true;
+        }
+        return false;
     }
     private readonly System.Collections.Generic.List<Vector3> escapeWaypoints=new System.Collections.Generic.List<Vector3>(32);
     private bool GridEscape(Vector3 target,int skipWaypoints=0)

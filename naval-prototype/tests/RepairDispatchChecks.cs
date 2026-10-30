@@ -17,6 +17,8 @@ class RepairDispatchChecks
         Check(!NavalRepairDispatch.Pending(true,false,true,.2f,20,20),"hole claimed by another sailor does not demand a duplicate waiting worker");
         Check(!NavalRepairDispatch.Pending(true,true,false,.2f,20,20),"irreparable equipment never holds a repairer");
         Check(NavalRepairDispatch.RetryDelay(true)==1f&&NavalRepairDispatch.RetryDelay(false)==3f,"live blocked jet receives short retry");
+        Check(NavalRepairDispatch.SamePatch(0,0,0,.3f,.1f,.2f),"neighbouring voxels from one hole are scanned as one repair site");
+        Check(!NavalRepairDispatch.SamePatch(0,0,0,1f,0,0),"separate leaks remain separate candidates");
         foreach(float floor in new float[]{BoatDimensions.HoldFloor,NavalShipDefinition.Brigantine.HoldFloor})
         {
             Check(NavalRepairDispatch.PreferCurrentDeck(floor,floor,false),"hold floor stays first choice");

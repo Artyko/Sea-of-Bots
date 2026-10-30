@@ -46,11 +46,12 @@ public class NavalPlayerRepair : MonoBehaviour
         if(elapsed<duration)return;
         if(mechanism!=null&&mechanism.IsCannon)
         {mechanism.CompleteCannonRepair(structure,elapsed);target=null;elapsed=0f;scanAt=0f;return;}
-        if(mechanism==null&&hull.Cargo!=null&&!hull.Cargo.UsePlayerBoard()){elapsed=0f;return;}
+        bool usesBoard=NavalRepairMaterials.NeedsPlanks(target);
+        if(usesBoard&&hull.Cargo!=null&&!hull.Cargo.UsePlayerBoard()){elapsed=0f;return;}
         Vector3 patch=target.LocalCenter;
         foreach(NavalHullVoxel cell in hull.Voxels)
             if((cell.HydraulicShell||cell.InternalBarrier||cell.RepairableEquipment)&&(cell.Missing||cell.Detached)&&(cell.LocalCenter-patch).sqrMagnitude<=0.85f*0.85f)
-                structure.RestoreCell(cell);
+                {structure.RestoreCell(cell);if(usesBoard&&!cell.Missing&&!cell.Detached)hull.ApplyWoodPatch(cell);}
         target=null;elapsed=0f;scanAt=0f;
     }
     private NavalHullVoxel FindTarget()

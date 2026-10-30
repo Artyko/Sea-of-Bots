@@ -22,7 +22,7 @@ public sealed class NavalCombatPosition
         Vector3 enemyForward=enemy.forward;enemyForward.y=0;enemyForward.Normalize();
         Vector3 offsetFromTarget=own.position-enemy.position;offsetFromTarget.y=0;
         bool escaping=enemyVelocity.magnitude>1f&&Vector3.Dot(enemyVelocity,radial)>.8f&&Vector3.Dot(offsetFromTarget.normalized,enemyForward)<-.3f;
-        if(pursuit.Step(Mathf.Min(Time.deltaTime,.05f),targetRetreating,escaping,guns.WorkingGuns>0))
+        if(!hull.Definition.SteamPowered&&pursuit.Step(Mathf.Min(Time.deltaTime,.05f),targetRetreating,escaping,guns.WorkingGuns>0))
         {
             pursuitQuarter=NavalPursuitMath.Quarter(other.PortWorking,other.StarboardWorking,pursuitQuarter);
             Vector3 enemyRight=Vector3.Cross(Vector3.up,enemyForward);
@@ -32,7 +32,7 @@ public sealed class NavalCombatPosition
             // Keep closing irrespective of ballistic reach; range no longer triggers a distant broadside turn.
             Vector3 interception=enemyVelocity+correctionToStern*.3f;
             float targetBearing=Mathf.Atan2(radial.x,radial.z)*Mathf.Rad2Deg;
-            workingSide=NavalBroadsideMath.HelmSide(own.eulerAngles.y,targetBearing,guns.PortWorking,guns.StarboardWorking,workingSide,guns.FiringSideAtShip(enemy));
+            workingSide=NavalBroadsideMath.HelmSide(own.eulerAngles.y,targetBearing,guns.PortCombatWorking,guns.StarboardCombatWorking,workingSide,guns.FiringSideAtShip(enemy));
             Vector3 firing=Quaternion.Euler(0,NavalBroadsideMath.Heading(targetBearing,workingSide),0)*Vector3.forward;
             float pursuitBlend=NavalPursuitMath.FireBlend(correctionToStern.magnitude);
             Vector3 closeCourse=Vector3.Lerp(interception.sqrMagnitude>.01f?interception.normalized:enemyForward,firing,pursuitBlend);
@@ -42,7 +42,7 @@ public sealed class NavalCombatPosition
             return closeCourse.sqrMagnitude>.001f?closeCourse:enemyForward;
         }
         bool reachable=guns.CanReachShipRange(enemy);
-        rangePlan.Step(Mathf.Min(Time.deltaTime,.05f),distance,reachable,hull.WorldScale,other.ShipScale);
+        rangePlan.Step(Mathf.Min(Time.deltaTime,.05f),distance,reachable,hull.WorldScale,other.ShipScale,guns.ProjectileSpeed);
         float radius=rangePlan.Desired;
         if(Time.time>=reviewAt)
         {
@@ -56,8 +56,10 @@ public sealed class NavalCombatPosition
             anchor=enemy.position+right*x+forward*z+lead;
         }
         float bearing=Mathf.Atan2(radial.x,radial.z)*Mathf.Rad2Deg;
-        workingSide=NavalBroadsideMath.HelmSide(own.eulerAngles.y,bearing,guns.PortWorking,guns.StarboardWorking,
+        workingSide=NavalBroadsideMath.HelmSide(own.eulerAngles.y,bearing,guns.PortCombatWorking,guns.StarboardCombatWorking,
             workingSide,guns.FiringSideAtShip(enemy));
+        if(hull.Definition.SteamPowered)
+            workingSide=NavalSteamDamageControlTactics.HealthierSide(workingSide,guns.PortCombatWorking,guns.StarboardCombatWorking,hull.LeftWater,hull.RightWater);
         float broadsideBearing=NavalBroadsideMath.Heading(bearing,workingSide);
         Vector3 broadside=Quaternion.Euler(0f,broadsideBearing,0f)*Vector3.forward;
         Vector3 correction=anchor-own.position;correction.y=0f;
@@ -71,13 +73,33 @@ public sealed class NavalCombatPosition
             wanted=NavalEngagementRange.Course(bearing,workingSide,distance,rangePlan.Desired,false);
             // Small stable variation stays inside the gun traverse; never swap to a nose-on chase here.
             wanted+=rangePlan.CourseBias+Mathf.Clamp(Mathf.DeltaAngle(wanted,cruiseBearing),-2f,2f);
+            // Begin the turn while the heavy gun finishes loading. Use the
+            // gun's predicted interception bearing rather than the raw target
+            // bearing, and leave enough traverse reserve for hull lag.
+            // Collision clearance still wins at knife-fighting distance.
+            if(guns.MainBatteryHelmPriority&&distance>clearance+8f)
+            {
+                wanted=guns.MainBatteryHelmCourse(own.eulerAngles.y,bearing,workingSide);
+            }
         }
-        else wanted=NavalEngagementRange.ApproachCourse(bearing,workingSide,distance,ownSpeed,Vector3.Dot(enemyVelocity,radial),rangePlan.CourseBias*.3f);
+        else wanted=NavalEngagementRange.ApproachCourse(bearing,workingSide,distance,ownSpeed,Vector3.Dot(enemyVelocity,radial),rangePlan.CourseBias*.3f,NavalGunneryMath.LevelRangeFor(guns.ProjectileSpeed));
         Vector3 course=Quaternion.Euler(0f,wanted,0f)*Vector3.forward;
+        if(hull.Definition.SteamPowered)
+        {
+            float escape=NavalSteamRangeTactics.EscapeUrgency(distance,rangePlan.Desired,clearance);
+            if(escape>0f)
+            {
+                // Preserve a usable broadside while adding a dominant radial
+                // opening component. This takes precedence over GK helm assist
+                // at unsafe range, so a ready gun cannot steer into a collision.
+                Vector3 opening=broadside-radial*(1.35f+escape);
+                throttle=1f;return opening.sqrMagnitude>.001f?opening.normalized:-radial;
+            }
+        }
         float separation=NavalHelmTactics.Approach(distance,hull.WorldScale,other.ShipScale);
         if(distance<clearance&&separation<0f)course= broadside+radial*separation;
         // Keep enough headway to complete the turn against a moving target.
-        bool aligning=Mathf.Abs(Mathf.DeltaAngle(own.eulerAngles.y,broadsideBearing))>20f;
+        bool aligning=Mathf.Abs(Mathf.DeltaAngle(own.eulerAngles.y,wanted))>20f;
         if(!reachable&&!rangePlan.KeepBroadside)throttle=1f;
         else if(aligning||distance>rangePlan.Desired+8f)throttle=Mathf.Max(throttle,.8f);
         else throttle=Mathf.Min(throttle,rangePlan.CruiseThrottle);

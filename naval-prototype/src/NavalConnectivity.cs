@@ -7,6 +7,19 @@ public static class NavalConnectivity
     {return new NavalConnectivityWorkspace(edges.Length).Evaluate(edges,absent);}
 }
 
+// A component is structurally supported only while it still has a path to an
+// intact foundation cell.  Keeping this test independent of Unity makes the
+// support rule deterministic and directly testable.
+public static class NavalStructuralSupport
+{
+    public static bool HasFoundation(List<int> component,bool[] foundation)
+    {
+        if(component==null||foundation==null)return false;
+        foreach(int index in component)if(index>=0&&index<foundation.Length&&foundation[index])return true;
+        return false;
+    }
+}
+
 public sealed class NavalConnectivityWorkspace
 {
     private readonly bool[] visited;

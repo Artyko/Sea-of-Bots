@@ -20,7 +20,7 @@ public sealed partial class NavalFireSystem
         Vector3 end=origin+direction.normalized*2.5f+Vector3.down*.8f;
         foreach(var target in flames)if(target.Active&&InWash(target.Cell.transform.position,origin,end))target.Flame.Douse(Time.time);
         foreach(var target in powder)if(target.Active&&
-            (InWash(hull.Root.TransformPoint(target.PowderPoint),origin,end)||InWash(hull.Root.TransformPoint(target.PowderPoint)-hull.Root.up*(NavalPowderLayout.Height*.5f),origin,end)))target.Powder.Douse();
+            (InWash(hull.Root.TransformPoint(target.PowderPoint),origin,end)||InWash(hull.Root.TransformPoint(target.PowderPoint)-hull.Root.up*(target.ExplosiveHeight*.5f),origin,end)))target.Powder.Douse();
     }
     private static bool InWash(Vector3 p,Vector3 a,Vector3 b)
     {return NavalFireEnvironmentMath.Washed(p.x,p.y,p.z,a.x,a.y,a.z,b.x,b.y,b.z);}
@@ -35,11 +35,34 @@ public sealed partial class NavalFireSystem
     private void TickFireWater()
     {
         foreach(var target in flames)if(target.Active&&WaterTouches(target.Cell.transform.position))target.Flame.Douse(Time.time);
-        foreach(var target in powder)if(target.Active){Vector3 basePoint=hull.Root.TransformPoint(target.PowderPoint)-hull.Root.up*(NavalPowderLayout.Height*.5f);if(WaterTouches(basePoint))target.Powder.Douse();}
+        foreach(var target in powder)if(target.Active){Vector3 basePoint=hull.Root.TransformPoint(target.PowderPoint)-hull.Root.up*(target.ExplosiveHeight*.5f);if(WaterTouches(basePoint))target.Powder.Douse();}
     }
     private readonly System.Collections.Generic.List<NavalFireTarget> smokeSources=new System.Collections.Generic.List<NavalFireTarget>(4);
     private Vector3 SmokeOrigin(NavalFireTarget target)
-    {return target.Powder!=null?hull.Root.TransformPoint(target.PowderPoint)+hull.Root.up*(NavalPowderLayout.Height*.5f):target.Cell.transform.position+Vector3.up*.3f;}
+    {return target.Powder!=null?hull.Root.TransformPoint(target.PowderPoint)+hull.Root.up*(target.ExplosiveHeight*.5f):target.Cell.transform.position+Vector3.up*.3f;}
+    private Vector3 SmokeOutlet(Vector3 worldPoint)
+    {
+        Vector3 local=hull.Root.InverseTransformPoint(worldPoint);
+        if(!NavalSmokePlumeMath.NeedsVent(local.y,hull.Definition.WeatherDeck))return worldPoint;
+        // At most two enclosed decks exist. Route upward one deck at a time,
+        // preferring a real battle-damage opening near the fire. If none is
+        // available, use the permanent companionway shared by both flights.
+        for(int level=0;level<2;level++)
+        {
+            float deck=NavalSmokePlumeMath.NextVentDeck(local.y,.825f,hull.Definition.WeatherDeck);
+            if(float.IsPositiveInfinity(deck))break;
+            Vector3 opening;
+            if(!hull.TryNearestDeckGap(local,deck,5f,out opening))
+            {
+                float half=Mathf.Max(.08f,hull.Definition.StairWidth*.32f);
+                opening=new Vector3(Mathf.Clamp(local.x,-half,half),deck,NavalSmokePlumeMath.StairVentZ);
+            }
+            // Offset is specified in world metres and remains consistent when
+            // the same routing is used by differently scaled ship profiles.
+            local=new Vector3(opening.x,deck+.22f/hull.WorldScale,opening.z);
+        }
+        return hull.Root.TransformPoint(local);
+    }
     private void EmitFireSmoke(float dt)
     {
         smokeClock+=dt;if(smokeClock<NavalSmokePlumeMath.ColumnInterval)return;smokeClock-=NavalSmokePlumeMath.ColumnInterval;
@@ -62,7 +85,7 @@ public sealed partial class NavalFireSystem
         int budget=NavalSmokePlumeMath.MaxColumnPuffsPerTick;
         for(int column=0;column<smokeSources.Count;column++)
         {
-            var target=smokeSources[column];Vector3 point=SmokeOrigin(target);float duration=NavalSmokePlumeMath.Lifetime;
+            var target=smokeSources[column];Vector3 point=SmokeOutlet(SmokeOrigin(target));float duration=NavalSmokePlumeMath.Lifetime;
             RaycastHit ceiling;
             if(Physics.Raycast(point+Vector3.up*.15f,Vector3.up,out ceiling,30f,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore))
                 duration=Mathf.Min(duration,Mathf.Max(.15f,(ceiling.distance-.3f)/NavalSmokePlumeMath.RiseSpeed));
@@ -71,7 +94,7 @@ public sealed partial class NavalFireSystem
             float size=NavalSmokePlumeMath.FireSize(smokeLoad[column]);Vector3 velocity=SmokeSourceVelocity(point);
             for(int puff=0;puff<count;puff++)
             {
-                Vector3 spread=count==1?Vector3.zero:new Vector3((puff-(count-1)*.5f)*size*.35f,0,0);
+                Vector3 spread=count==1?Vector3.zero:hull.Root.right*((puff-(count-1)*.5f)*size*.35f);
                 effects.EmitFireColumn(point+spread,velocity,smoke,duration,size);
             }
         }

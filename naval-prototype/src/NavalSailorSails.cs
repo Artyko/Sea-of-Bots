@@ -12,7 +12,7 @@ public partial class NavalRepairSailor
     {
         Vector3 delta=sailDuty.SailRopePoint-boat.TransformPoint(stand);
         Vector3 horizontal=Vector3.ProjectOnPlane(delta,boat.up);
-        if(!NavalSailWorkLayout.InReach(horizontal.sqrMagnitude,(stand.y-hull.Definition.WeatherDeck)*hull.WorldScale))return false;
+        if(!NavalSailWorkLayout.InReach(horizontal.sqrMagnitude,(stand.y-hull.Definition.PropulsionDeck)*hull.WorldScale))return false;
         Vector3 hand=boat.TransformPoint(stand)+boat.up*1.2f;return RepairSightClear(hand,sailDuty.SailRopePoint-hand);
     }
     private bool PlanSailApproach()
@@ -29,9 +29,9 @@ public partial class NavalRepairSailor
     }
     public bool HandlingSails {get{return sailDuty!=null;}}
     public bool CanHandleSails {get{return robot!=null&&robot.IsAlive()&&!stranded&&!Rescuing&&!Defending&&!Assaulting&&
-        !HandlingSails&&(nextTaskPending||!MaintenanceDuty)&&leak==null&&Time.time>=sailRetry;}}
+        !HandlingSails&&!DeliveringAmmo&&(nextTaskPending||!MaintenanceDuty)&&leak==null&&Time.time>=sailRetry;}}
     public bool CanBorrowForRecoverySails {get{
-        if(robot==null||!robot.IsAlive()||stranded||Rescuing||Defending||Assaulting||HandlingSails||fireJob!=null||FinalAttackDuty||Time.time<sailRetry)return false;
+        if(robot==null||!robot.IsAlive()||stranded||Rescuing||Defending||Assaulting||HandlingSails||DeliveringAmmo||fireJob!=null||FinalAttackDuty||Time.time<sailRetry)return false;
         return NavalSailRecoveryPolicy.MayBorrow(RepairingCannon,waitingForRepair,returning,pumpDuty,hull.CombatCritical,hull.UrgentTrim,
             bailState!=0,BucketWater>0,RepairingLeak,OtherLeakRepairer(),route.Count>0);
     }}
@@ -45,24 +45,31 @@ public partial class NavalRepairSailor
         if(!CanHandleSails||stations.SailOperator!=null)return;
         Release();route.Clear();returning=changingPost=false;
         sailDuty=stations;stations.SailOperator=this;sailSettled=0;
-        Debug.Log("[NavalPrototype] Sail hand assigned: "+boat.name+" recovery="+stations.ReverseManeuver+" from="+feet);
         feet=boat.InverseTransformPoint(robot.transform.position-Vector3.up*footOffset);
         sailElapsed=0;sailReplans=0;rejectedSailStands.Clear();
-        if(!PlanSailApproach()){sailRetry=Time.time+5;ReleaseSails();BeginReturn();}
+        if(!PlanSailApproach()){sailRetry=Time.time+5;ReleaseSails();BeginReturn();return;}
+        // Log an assignment only after a supported, collision-free approach
+        // actually exists.  The old preflight message made failed retries look
+        // like hundreds of different sailors fighting over the telegraph.
+        Debug.Log("[NavalPrototype] Propulsion hand assigned: "+boat.name+" station="+stations.PropulsionName+" recovery="+stations.ReverseManeuver+" from="+feet);
     }
     private void ReleaseSails()
     {
         if(sailDuty!=null&&sailDuty.SailOperator==this)sailDuty.SailOperator=null;
         if(sailHauling!=null)sailHauling.StopHauling();
-        sailDuty=null;sailSettled=0;if(hammer!=null)hammer.gameObject.SetActive(true);
+        sailDuty=null;sailSettled=0;ShowHammer(true);
     }
     private bool TickSails(float dt)
     {
         if(sailDuty==null)return false;
         bool emergency=!FinalAttackDuty&&!sailDuty.LastAttackApproach&&!sailDuty.ReverseManeuver&&(hull.HasRepairDemand||hull.CombatCritical||hull.UrgentTrim||hull.Fire!=null&&hull.Fire.HasFire);
-        if(emergency&&!sailDuty.RescueStop||sailDuty.ManualSails&&!sailDuty.RescueStop||sailDuty.PlayerStation==sailDuty.SailStation||hull.Sunk)
+        // A steam telegraph can remain in manual mode while its engineer is
+        // still required to raise pressure. Treating ManualSails like the
+        // sailing rig here assigned and dismissed the same engineer each frame.
+        bool manualSailingRig=NavalPropulsionCrewPolicy.ManualDismissal(sailDuty.ManualSails,sailDuty.SteamPowered);
+        if(emergency&&!sailDuty.RescueStop||manualSailingRig&&!sailDuty.RescueStop||sailDuty.PlayerStation==sailDuty.SailStation||hull.Sunk)
         {ReleaseSails();BeginReturn();return true;}
-        sailElapsed+=dt;if(sailElapsed>45f){sailRetry=Time.time+5;ReleaseSails();BeginReturn();return true;}
+        sailElapsed+=dt;if(sailElapsed>45f&&!AtSailControls){sailRetry=Time.time+5;ReleaseSails();BeginReturn();return true;}
         robot.DisableAI();
         if(route.Count>0&&AtSailControls)route.Clear();
         if(route.Count>0)
@@ -78,13 +85,24 @@ public partial class NavalRepairSailor
             return true;
         }
         if(!AtSailControls){if(!PlanSailApproach()){sailRetry=Time.time+5;ReleaseSails();BeginReturn();}return true;}
-        HoldPosition();Walking(false,dt);if(hammer!=null)hammer.gameObject.SetActive(false);
-        if(sailHauling==null){sailHauling=robot.gameObject.AddComponent<NavalSailHaulingAnimation>();sailHauling.Initialize(model);}
-        sailHauling.Haul(sailDuty.SailRopePoint);
+        HoldPosition();Walking(false,dt);ShowHammer(false);
+        if(!sailDuty.SteamPowered)
+        {
+            if(sailHauling==null){sailHauling=robot.gameObject.AddComponent<NavalSailHaulingAnimation>();sailHauling.Initialize(model);}
+            sailHauling.Haul(sailDuty.SailRopePoint);
+        }
         Vector3 facing=sailDuty.SailRopePoint-robot.transform.position;facing.y=0;
         if(facing.sqrMagnitude>.01f)robot.transform.rotation=Quaternion.LookRotation(facing);
         sailSettled=sailDuty.SailOperatorSettled?sailSettled+dt:0;
         if(sailSettled>=.8f){ReleaseSails();BeginReturn();}
         return true;
     }
+}
+
+public static class NavalPropulsionCrewPolicy
+{
+    public static bool NeedsSeparateOperator(bool steamPowered)
+    {return !steamPowered;}
+    public static bool ManualDismissal(bool manual,bool steamPowered)
+    {return manual&&!steamPowered;}
 }

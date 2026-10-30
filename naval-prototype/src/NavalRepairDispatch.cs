@@ -11,4 +11,6 @@ public static class NavalRepairDispatch
     {return damaged&&available&&repairable&&(flow>.00001f||now-wetAt<=5f);}
     public static bool PreferCurrentDeck(float feetY,float holdFloor,bool onStairs)
     {return !onStairs&&(Math.Abs(feetY-.825f)<.25f||Math.Abs(feetY-holdFloor)<.25f);}
+    public static bool SamePatch(float ax,float ay,float az,float bx,float by,float bz)
+    {float dx=ax-bx,dy=ay-by,dz=az-bz;return dx*dx+dy*dy+dz*dz<.60f*.60f;}
 }

@@ -12,7 +12,10 @@ public partial class NavalStations : MonoBehaviour
     public bool EmergencySteering {get{return helmMechanism!=null&&!helmMechanism.Functional;}}
     public float SteeringFactor {get{return EmergencySteering?1f/3f:1f;}}
     public Vector3 EmergencyPost {get{return TillerPost;}}
-    private Vector3 TillerPost {get{return new Vector3(-1.2f,hull.Definition.MaintenanceFloor(hull.Definition.MaintenanceDeckCount-1),-5.3f);}}
+    // Keep the emergency steering post inboard of the tapered stern shell and
+    // clear of the steam telegraph. The former port-side point intersected the
+    // hull collider in the runtime access audit.
+    private Vector3 TillerPost {get{return new Vector3(1.55f,hull.Definition.MaintenanceFloor(hull.Definition.MaintenanceDeckCount-1),-4.55f);}}
     private NavalRepairableMechanism helmMechanism;
     private NavalRepairableMechanism[] cannonMechanisms;
     public bool HelmNeedsRepair {get{return helmMechanism!=null&&helmMechanism.NeedsRepair;}}
@@ -27,6 +30,8 @@ public partial class NavalStations : MonoBehaviour
     private Material flash;
     private Material smoke;
     private Material wheelAccent;
+    private Material shellMaterial;
+    private Material impactSpark;
     private AudioClip sound;
     private readonly NavalStationState state = new NavalStationState();
     private int active { get { return state.Active; } } // 0 helm, 1 port, 2 starboard
@@ -41,6 +46,7 @@ public partial class NavalStations : MonoBehaviour
     public bool CrewGunAssignable(int station)
     {
         if(station<=0||station>GunCount||PlayerStation==station||!Functional(station))return false;
+        if(!NavalCasemateHeelMath.CanOperate(station-1,NavalHullStability.Roll(boat)))return false;
         if(hull.Cargo!=null&&hull.Cargo.AmmoAtGun(station-1)==0)return false;
         var repair=cannonMechanisms!=null?cannonMechanisms[station-1]:null;
         return repair==null||repair.RepairWorker==null&&Time.time>=repair.PlayerRepairUntil;
@@ -60,9 +66,13 @@ public partial class NavalStations : MonoBehaviour
         gunAvailabilityRevision=hull.Revision;
     }
     public float ShipScale {get{return hull.WorldScale;}}
+    public float ProjectileSpeed {get{return hull.Definition.ProjectileSpeed;}}
     public int PortWorking {get{UpdateGunAvailability();return portWorking;}}
     public int StarboardWorking {get{UpdateGunAvailability();return starboardWorking;}}
     public int WorkingGuns {get{UpdateGunAvailability();return portWorking+starboardWorking;}}
+    public int HeelInhibitedGuns {get{int count=0;float roll=NavalHullStability.Roll(boat);for(int gun=0;gun<GunCount;gun++)if(Functional(gun+1)&&!NavalCasemateHeelMath.CanOperate(gun,roll))count++;return count;}}
+    public int PortCombatWorking {get{int count=0;float roll=NavalHullStability.Roll(boat);for(int gun=0;gun<GunCount;gun+=2)if(Functional(gun+1)&&NavalCasemateHeelMath.CanOperate(gun,roll))count++;return count;}}
+    public int StarboardCombatWorking {get{int count=0;float roll=NavalHullStability.Roll(boat);for(int gun=1;gun<GunCount;gun+=2)if(Functional(gun+1)&&NavalCasemateHeelMath.CanOperate(gun,roll))count++;return count;}}
     public float CombatOrbitSign(float preferred)
     {UpdateGunAvailability();return NavalBroadsideMath.OrbitSign(portWorking,starboardWorking,preferred);}
     private struct BearingMemo {public int Frame,Revision,Station;public Vector3 Point,Muzzle;public Quaternion Rotation;public bool Result;}
@@ -70,7 +80,8 @@ public partial class NavalStations : MonoBehaviour
     public bool CanBearOn(int station,Vector3 point)
     {
         if(station<=0||station>GunCount||!Functional(station))return false;
-        Vector3 muzzle=barrels[station-1].TransformPoint(new Vector3(0,0,1.38f));Quaternion rotation=boat.rotation;
+        if(!NavalCasemateHeelMath.CanOperate(station-1,NavalHullStability.Roll(boat)))return false;
+        Vector3 muzzle=barrels[station-1].TransformPoint(new Vector3(0,0,hull.Definition.GunMuzzleZ));Quaternion rotation=boat.rotation;
         for(int i=0;i<bearingMemo.Length;i++){
             var m=bearingMemo[i];if(m.Frame==Time.frameCount&&m.Revision==hull.Revision&&m.Station==station&&m.Point.Equals(point)&&m.Muzzle.Equals(muzzle)&&m.Rotation.Equals(rotation))return m.Result;
         }
@@ -109,18 +120,27 @@ public partial class NavalStations : MonoBehaviour
         return firing!=0?firing:NavalBroadsideMath.CombatSide(TargetSide(point),portWorking,starboardWorking);
     }
     public void PauseInput(){ForwardInput=0f;TurnInput=0f;}
-    public bool AllGunsBroken {get{return WorkingGuns==0;}}
+    public bool AllGunsBroken {get{return WorkingGuns==0&&!MainBatteryCombatAvailable;}}
     public bool CanRestoreGun
     {
-        get{if(cannonMechanisms!=null)for(int i=0;i<cannonMechanisms.Length;i++)
+        get{if(MainBatteryCanRestore)return true;if(cannonMechanisms!=null)for(int i=0;i<cannonMechanisms.Length;i++)
             if(!Functional(i+1)&&cannonMechanisms[i].NeedsRepair&&cannonMechanisms[i].RecoverableWithParts)return true;return false;}
     }
     // One kit is usable per gun over its lifetime; no separate finite crate inventory exists.
     public int AvailableCannonKits
     {
-        get{int count=0;if(cannonMechanisms!=null)foreach(var mechanism in cannonMechanisms)
-            if(mechanism!=null&&!mechanism.RepairUsed&&mechanism.RecoverableWithParts)count++;
+        get{int count=MainBatteryCanRestore?1:0;if(cannonMechanisms!=null)foreach(var mechanism in cannonMechanisms)
+            if(mechanism!=null&&!mechanism.PermanentlyDestroyed&&!mechanism.RepairUsed&&mechanism.RecoverableWithParts)count++;
             return count;}
+    }
+    public void AmmunitionDetonated(int gun)
+    {
+        if(cannonMechanisms==null||gun<0||gun>=cannonMechanisms.Length||cannonMechanisms[gun]==null)return;
+        cannonMechanisms[gun].CatastrophicDestroy();gunAvailabilityRevision=-1;
+    }
+    public void MainMagazineDetonated()
+    {
+        if(mainBatteryMechanism!=null)mainBatteryMechanism.CatastrophicDestroy();
     }
     public bool MustBoard {get{return AllGunsBroken&&!CanRestoreGun;}}
     public Vector3 Post(int station)
@@ -131,6 +151,7 @@ public partial class NavalStations : MonoBehaviour
     {
         if(PlayerStation==gun+1)return false;
         if(!Functional(gun+1)||sailor==null||!sailor.IsAlive())return false;
+        if(!NavalCasemateHeelMath.CanOperate(gun,NavalHullStability.Roll(boat)))return false;
         float wantedYaw,angle;
         if(!TryAimSolution(gun,target,out wantedYaw,out angle))return false;
         yaw[gun]=Mathf.MoveTowards(yaw[gun],wantedYaw,28f*dt);
@@ -154,35 +175,84 @@ public partial class NavalStations : MonoBehaviour
         flash = MakeMaterial(new Color(1f, 0.65f, 0.08f));
         smoke = MakeMaterial(new Color(0.55f, 0.58f, 0.60f));
         wheelAccent = MakeMaterial(new Color(0.58f, 0.405f, 0.225f));
-        helm = Root("ShipWheel", new Vector3(0f, hull.Definition.AboveDeckY(1.4f)+hull.Definition.UpperDeckOffset, NavalShipDefinition.HelmZ(hull.Definition)+.8f*hull.Definition.FixtureScale));
+        shellMaterial = MakeMaterial(new Color(0.30f,0.24f,0.10f));
+        impactSpark = MakeMaterial(new Color(1f,.62f,.16f));
+        Vector3 helmPost=Post(0);
+        // Keep the spokes outside the raised helmsman's standing capsule.
+        helm = Root("ShipWheel",hull.Definition.SteamPowered?helmPost+new Vector3(0,.34f,NavalSteamLayout.HelmWheelForward):
+            new Vector3(0f,hull.Definition.AboveDeckY(1.4f)+hull.Definition.UpperDeckOffset,NavalShipDefinition.HelmZ(hull.Definition)+.8f*hull.Definition.FixtureScale));
         helm.localScale=Vector3.one*hull.Definition.FixtureScale;
-        hull.AddDecorationBox(helm, wood, new Vector3(0f, -0.3f, 0f), new Vector3(0.2f, 0.6f, 0.25f), true);
+        int helmFirst=hull.Voxels.Count;Material helmMetal=hull.Definition.SteamPowered?iron:wood;
+        hull.AddDecorationBox(helm,helmMetal,new Vector3(0f,-0.3f,0f),new Vector3(0.2f,0.6f,0.25f),true);
         for (int i = 0; i < 12; i++)
         {
             float angle = i * Mathf.PI / 6f;
-            hull.AddDecorationBox(helm, wheelAccent, new Vector3(Mathf.Sin(angle) * 0.4f, Mathf.Cos(angle) * 0.4f, 0f),
+            hull.AddDecorationBox(helm,hull.Definition.SteamPowered?iron:wheelAccent,new Vector3(Mathf.Sin(angle)*0.4f,Mathf.Cos(angle)*0.4f,0f),
                 new Vector3(0.17f, 0.17f, 0.14f), true);
         }
-        hull.AddDecorationBox(helm, wood, Vector3.zero, new Vector3(0.75f, 0.10f, 0.12f), true);
-        hull.AddDecorationBox(helm, wood, Vector3.zero, new Vector3(0.10f, 0.75f, 0.12f), true);
+        hull.AddDecorationBox(helm,helmMetal,Vector3.zero,new Vector3(0.75f,0.10f,0.12f),true);
+        hull.AddDecorationBox(helm,helmMetal,Vector3.zero,new Vector3(0.10f,0.75f,0.12f),true);
         hull.AddDecorationBox(helm, wheelAccent, new Vector3(0f, 0f, -0.09f), new Vector3(0.22f, 0.22f, 0.12f), true);
+        if(hull.Definition.SteamPowered)for(int cell=helmFirst;cell<hull.Voxels.Count;cell++)
+        {hull.Voxels[cell].Metallic=true;hull.Voxels[cell].Flammable=false;}
         for (int i = 0; i < GunCount; i++)
         {
             float side = NavalShipDefinition.GunSide(i);
-            guns[i] = Root((side<0f?"PortCannon":"StarboardCannon")+i, new Vector3(side * hull.Definition.GunMountX, hull.Definition.GunMountY, NavalShipDefinition.GunZ(hull.Definition,i)));
+            float gunZ=NavalShipDefinition.GunZ(hull.Definition,i);
+            guns[i] = Root((side<0f?"PortCannon":"StarboardCannon")+i, new Vector3(side * hull.Definition.GunMountX, hull.Definition.GunMountY, gunZ));
             guns[i].localScale=Vector3.one*hull.Definition.GunFixtureScale;
-            hull.AddDecorationBox(guns[i], wood, new Vector3(0f, -0.03f, 0f), new Vector3(0.75f, 0.3f, 0.9f), true);
-            for (int wheel = -1; wheel <= 1; wheel += 2)
-                hull.AddDecorationBox(guns[i], black, new Vector3(wheel * 0.4f, -0.05f, 0f), new Vector3(0.15f, 0.35f, 0.65f), true);
             barrels[i] = new GameObject("CannonBarrel").transform;
-            barrels[i].SetParent(guns[i], false); barrels[i].localPosition = new Vector3(0f, 0.35f, 0f);
-            hull.AddDecorationBox(barrels[i], black, new Vector3(0f, 0f, 0.55f), new Vector3(0.38f, 0.38f, 1.3f), true);
-            hull.AddDecorationBox(barrels[i], trim, new Vector3(0f, 0f, 0.9f), new Vector3(0.42f, 0.42f, 0.1f), true);
+            barrels[i].SetParent(guns[i], false); barrels[i].localPosition = new Vector3(0f, hull.Definition.RifledWeapons?.42f:.35f, 0f);
+            if(hull.Definition.RifledWeapons)
+            {
+                // The old pedestal ended above the deck and the shield was a
+                // child of the elevating barrel, so the whole casemate appeared
+                // to float.  A fixed armoured trunk now carries the mounting
+                // down to the weather deck.
+                float fixture=hull.Definition.GunFixtureScale;
+                float foundationTop=hull.Definition.GunMountY-.23f*fixture;
+                float foundationHeight=Mathf.Max(.05f,foundationTop-hull.Definition.WeatherDeck+.02f);
+                ArmoredDecoration(boat,black,new Vector3(side*hull.Definition.GunMountX,hull.Definition.WeatherDeck+foundationHeight*.5f-.01f,gunZ),
+                    new Vector3(.42f,foundationHeight,.46f),true);
+                // Iron pedestal, traversing ring, recoil slide and long jacketed
+                // tube: no wooden truck carriage or muzzle-loading wheels.
+                hull.AddDecorationBox(guns[i],black,new Vector3(0,-.08f,0),new Vector3(.72f,.30f,.82f),true);
+                hull.AddDecorationBox(guns[i],trim,new Vector3(0,.09f,0),new Vector3(.88f,.10f,.90f),true);
+                hull.AddDecorationBox(barrels[i],black,new Vector3(0,0,.18f),new Vector3(.62f,.52f,.72f),true);
+                hull.AddDecorationBox(barrels[i],black,new Vector3(0,0,.58f),new Vector3(.42f,.42f,.80f),true);
+                hull.AddDecorationBox(barrels[i],black,new Vector3(0,0,1.36f),new Vector3(.27f,.27f,1.65f),true);
+                hull.AddDecorationBox(barrels[i],trim,new Vector3(0,0,2.02f),new Vector3(.38f,.38f,.16f),true);
+                for(int recoil=-1;recoil<=1;recoil+=2)
+                    hull.AddDecorationBox(barrels[i],trim,new Vector3(recoil*.30f,-.20f,.55f),new Vector3(.12f,.12f,1.05f),true);
+                // Fixed open-backed casemate shield.  It is carried by the
+                // mounting trunk, does not pitch with the barrel and reaches
+                // the pedestal instead of reading as four window panes.
+                ArmoredDecoration(guns[i],black,new Vector3(side*.46f,.20f,0),new Vector3(.14f,1.02f,1.48f),true);
+                ArmoredDecoration(guns[i],black,new Vector3(side*.18f,.18f,-.66f),new Vector3(.58f,.86f,.14f),true);
+                ArmoredDecoration(guns[i],black,new Vector3(side*.18f,.18f,.66f),new Vector3(.58f,.86f,.14f),true);
+                ArmoredDecoration(guns[i],black,new Vector3(side*.20f,-.27f,0),new Vector3(.54f,.22f,1.48f),true);
+                ArmoredDecoration(guns[i],trim,new Vector3(side*.19f,.72f,0),new Vector3(.70f,.12f,1.58f),true);
+            }
+            else
+            {
+                hull.AddDecorationBox(guns[i], wood, new Vector3(0f, -0.03f, 0f), new Vector3(0.75f, 0.3f, 0.9f), true);
+                for (int wheel = -1; wheel <= 1; wheel += 2)
+                    hull.AddDecorationBox(guns[i], black, new Vector3(wheel * 0.4f, -0.05f, 0f), new Vector3(0.15f, 0.35f, 0.65f), true);
+                hull.AddDecorationBox(barrels[i], black, new Vector3(0f, 0f, 0.55f), new Vector3(0.38f, 0.38f, 1.3f), true);
+                hull.AddDecorationBox(barrels[i], trim, new Vector3(0f, 0f, 0.9f), new Vector3(0.42f, 0.42f, 0.1f), true);
+            }
             pitch[i] = 5f; Aim(i);
         }
-        Vector3 cleat=SailPost+new Vector3(NavalSailWorkLayout.CleatOffset/hull.WorldScale,.45f/hull.WorldScale,0);
-        hull.AddDecorationBox(boat,wood,cleat,new Vector3(.16f,.9f,.16f)/hull.WorldScale,true);
-        hull.AddDecorationBox(boat,trim,cleat+Vector3.up*(.3f/hull.WorldScale),new Vector3(.6f,.14f,.18f)/hull.WorldScale,true);
+        Vector3 cleat=SailPost+(SteamPowered?NavalSteamLayout.PedestalOffset(hull.WorldScale):new Vector3(NavalSailWorkLayout.CleatOffset,.45f,0)/hull.WorldScale);
+        hull.AddDecorationBox(boat,SteamPowered?black:wood,cleat,new Vector3(SteamPowered?.24f:.16f,.9f,SteamPowered?.24f:.16f)/hull.WorldScale,!SteamPowered);
+        hull.AddDecorationBox(boat,trim,cleat+Vector3.up*(.3f/hull.WorldScale),new Vector3(SteamPowered?.72f:.6f,SteamPowered?.26f:.14f,SteamPowered?.38f:.18f)/hull.WorldScale,!SteamPowered);
+        if(SteamPowered)
+        {
+            // Visual-only telegraph: its former solid pedestal overlapped the
+            // 0.8 m sailor capsule and made every valid route fail at the last step.
+            hull.AddDecorationBox(boat,black,cleat+new Vector3(0,.42f,-.08f)/hull.WorldScale,new Vector3(.10f,.48f,.10f)/hull.WorldScale,false);
+            hull.AddDecorationBox(boat,trim,cleat+new Vector3(0,.66f,-.08f)/hull.WorldScale,new Vector3(.22f,.16f,.16f)/hull.WorldScale,false);
+        }
         sound = AudioClip.Create("NavalCannonBoom", 11025, 1, 22050, false);
         float[] samples = new float[11025]; System.Random random = new System.Random(14);
         for (int i = 0; i < samples.Length; i++)
@@ -212,10 +282,12 @@ public partial class NavalStations : MonoBehaviour
         {
             var members=new System.Collections.Generic.List<NavalHullVoxel>();
             foreach(var cell in hull.Voxels)if(cell.transform.IsChildOf(guns[gun]))members.Add(cell);
+            if(hull.Definition.RifledWeapons)foreach(var cell in members)cell.Metallic=true;
             var repair=new NavalRepairableMechanism(hull,members,false,true);cannonMechanisms[gun]=repair;
             repair.RepairPoint=new Vector3(NavalShipDefinition.GunSide(gun)*hull.Definition.GunMountX,
-                hull.Definition.GunMountY+.35f*hull.Definition.GunFixtureScale,NavalShipDefinition.GunZ(hull.Definition,gun));
+                hull.Definition.GunMountY+(hull.Definition.RifledWeapons?.42f:.35f)*hull.Definition.GunFixtureScale,NavalShipDefinition.GunZ(hull.Definition,gun));
         }
+        InitializeMainBattery(black,trim);
     }
     private Transform Root(string name, Vector3 position)
     {
@@ -254,6 +326,12 @@ public partial class NavalStations : MonoBehaviour
         {
             TurnInput = (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow) ? 1f : 0f) -
                 (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow) ? 1f : 0f);
+            if(SteamPowered)
+            {
+                float telegraphInput=(Input.GetKey(KeyCode.W)?1f:0f)-(Input.GetKey(KeyCode.S)?1f:0f);
+                if(telegraphInput!=0)sailControl.Adjust(telegraphInput,dt);
+                if(Input.GetKeyDown(KeyCode.C))sailControl.Auto();
+            }
         }
         else if(active==SailStation)
         {
@@ -278,7 +356,7 @@ public partial class NavalStations : MonoBehaviour
         for (int i = 0; i < GunCount; i++)
         {
             float recoil = Mathf.Clamp01(1f-(Time.time-shotAt[i])/0.35f) * 0.14f;
-            barrels[i].localPosition = new Vector3(0f, 0.35f, 0f) - barrels[i].localRotation * Vector3.forward * recoil;
+            barrels[i].localPosition = new Vector3(0f, hull.Definition.RifledWeapons?.42f:.35f, 0f) - barrels[i].localRotation * Vector3.forward * recoil;
         }
     }
     private void Aim(int gun) { barrels[gun].localRotation = Quaternion.Euler(-pitch[gun], (gun % 2 == 0 ? -90f : 90f) + yaw[gun], 0f); }
@@ -294,20 +372,28 @@ public partial class NavalStations : MonoBehaviour
     private void Fire(int gun)
     {
         if (!Functional(gun + 1)) return;
+        float reloadFactor=NavalCasemateHeelMath.ReloadFactor(gun,NavalHullStability.Roll(boat));if(reloadFactor<=0f)return;
         if(hull.Cargo!=null&&!hull.Cargo.Fire(gun))return;
         shotAt[gun]=Time.time;
-        readyAt[gun] = Time.time + NavalGunneryMath.ReloadSeconds;
+        readyAt[gun] = Time.time + NavalGunneryMath.ReloadSeconds/reloadFactor;
         if(firingRobot!=null)LastCrewShotAt=Time.time;
-        Vector3 muzzle = barrels[gun].TransformPoint(new Vector3(0f, 0f, 1.38f));
+        Vector3 muzzle = barrels[gun].TransformPoint(new Vector3(0f, 0f, hull.Definition.GunMuzzleZ));
         Vector3 direction = ShotDirection(gun,barrels[gun].forward);
-        GameObject ball = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        ball.name = "NavalPrototype_Cannonball";
+        float heelSpread=NavalCasemateHeelMath.AimSpread(NavalHullStability.Roll(boat));
+        if(heelSpread>0f)
+        {
+            Vector2 error=Random.insideUnitCircle*heelSpread;Vector3 right=Vector3.Cross(Vector3.up,direction).normalized;
+            direction=Quaternion.AngleAxis(error.x,Vector3.up)*Quaternion.AngleAxis(error.y,right)*direction;
+        }
+        GameObject ball = hull.Definition.RifledWeapons?NavalProjectileVisual.CreateRifledShell():GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        ball.name = hull.Definition.RifledWeapons?"NavalPrototype_RifledShell":"NavalPrototype_Cannonball";
         // World-space ballistics must not inherit the firing vessel's later motion.
         ball.transform.SetParent(NavalTestWorld.Active!=null?NavalTestWorld.Active.transform:null, false);
-        ball.transform.position = muzzle; ball.transform.localScale = Vector3.one * 0.3f;
-        Collider collider = ball.GetComponent<Collider>(); collider.enabled = false; Destroy(collider);
-        ball.GetComponent<Renderer>().sharedMaterial = iron;
-        ball.AddComponent<NavalCannonball>().Initialize(direction * 32f, boat, hull, player, ocean, smoke, Time.time + 10f,EnemyControlled,firingRobot);
+        ball.transform.position = muzzle;ball.transform.rotation=Quaternion.LookRotation(direction);
+        ball.transform.localScale = hull.Definition.RifledWeapons?Vector3.one:Vector3.one*.3f;
+        Collider collider = ball.GetComponent<Collider>(); if(collider!=null){collider.enabled = false; Destroy(collider);}
+        ball.GetComponent<Renderer>().sharedMaterial = hull.Definition.RifledWeapons?shellMaterial:iron;
+        ball.AddComponent<NavalCannonball>().Initialize(direction * hull.Definition.ProjectileSpeed+FiringPlatformVelocity(), boat, hull, player, ocean, smoke,impactSpark, Time.time + 10f,EnemyControlled,firingRobot,hull.Definition.ProjectilePower,1f,hull.Definition.RifledWeapons);
         AudioSource.PlayClipAtPoint(sound, muzzle, 0.7f);
         NavalShotPuff.Create(transform, muzzle, direction * 2f, flash, 0.07f, 0.38f);
         GameObject muzzleGlow=new GameObject("Naval muzzle flash");muzzleGlow.transform.position=muzzle+direction*.25f;
@@ -328,19 +414,53 @@ public partial class NavalStations : MonoBehaviour
     {
         DrawReloadBars();
         if(EnemyControlled||NavalTestWorld.Active!=null&&NavalTestWorld.Active.Spectating)return;
-        string text = active == 0 ? (EmergencySteering?"АВАРИЙНЫЙ РУМПЕЛЬ (поворот ×⅓): A/D":"ШТУРВАЛ: A/D")+" — поворот; E — выйти. Ход задаётся парусами у мачты." :
-            (active==SailStation?"ПАРУСА: W — добавить ход; S — убрать / задний ход; C — авто; E — выйти\nПоложение: "+(SailSetting*100).ToString("F0")+"%":active > 0 ? "CANNON: A/D or arrows = aim +/-30; W/S = elevation -25..45; LMB/Space = fire; E = leave\nReload: " +
+        string text = active == 0 ? (EmergencySteering?"АВАРИЙНЫЙ РУМПЕЛЬ (поворот ×⅓): A/D":SteamPowered?"ШТУРВАЛ + ТЕЛЕГРАФ: A/D — курс; W/S — ход; C — авто":"ШТУРВАЛ: A/D — поворот")+"; E — выйти." :
+            (active==SailStation?(SteamPowered?"МАШИННЫЙ ТЕЛЕГРАФ":"ПАРУСА")+": W — добавить ход; S — убрать / задний ход; C — авто; E — выйти\nПоложение: "+(SailSetting*100).ToString("F0")+"%":active > 0 ? "CANNON: A/D or arrows = aim +/-30; W/S = elevation -25..45; LMB/Space = fire; E = leave\nReload: " +
                 Mathf.Max(0f, readyAt[active - 1] - Time.time).ToString("F1") + " s" :
-                (nearest >= 0 ? "Press E: " + (nearest==SailStation?"парусные снасти":nearest == 0 ? (EmergencySteering?"аварийный румпель в корме трюма":"ship wheel") : ((nearest-1)%2==0?"port cannon ":"starboard cannon ")+((nearest-1)/2+1)) :
+                (nearest >= 0 ? "Press E: " + (nearest==SailStation?PropulsionName:nearest == 0 ? (EmergencySteering?"аварийный румпель в корме трюма":"ship wheel") : ((nearest-1)%2==0?"port cannon ":"starboard cannon ")+((nearest-1)/2+1)) :
                     "Approach a cannon or the stern wheel and press E"));
         if(active < 0 && nearest >= 0 && !Functional(nearest))
-            text = (nearest == 0 ? "HELM DAMAGED — R: repair" : "ПУШКА ПОВРЕЖДЕНА — R: ремонт 60 с, один раз");
+            text = (nearest == 0 ? "HELM DAMAGED — R: repair" : cannonMechanisms!=null&&nearest-1<cannonMechanisms.Length&&cannonMechanisms[nearest-1].PermanentlyDestroyed?
+                "ОРУДИЕ УНИЧТОЖЕНО ВЗРЫВОМ БОЕЗАПАСА — ремонту не подлежит":"ПУШКА ПОВРЕЖДЕНА — R: ремонт 60 с, один раз");
         if(active<0&&nearest==0&&!Functional(0)&&helmMechanism!=null&&helmMechanism.Destroyed)
             text="Штурвал разрушен — восстановление невозможно";
         GUI.Box(new Rect(Screen.width * 0.5f - 350f, Screen.height - 90f, 700f, 70f), text);
     }
+    private void ArmoredDecoration(Transform parent,Material material,Vector3 centre,Vector3 size,bool solid)
+    {
+        int first=hull.Voxels.Count;hull.AddDecorationBox(parent,material,centre,size,solid);
+        for(int i=first;i<hull.Voxels.Count;i++){hull.Voxels[i].Armored=true;hull.Voxels[i].Metallic=true;hull.Voxels[i].Flammable=false;}
+    }
     private void OnDestroy()
-    { UnregisterShip(); Exit(); if (flash != null) Destroy(flash); if (smoke != null) Destroy(smoke); if (wheelAccent != null) Destroy(wheelAccent); if (sound != null) Destroy(sound); }
+    { UnregisterShip(); Exit(); if (flash != null) Destroy(flash); if (smoke != null) Destroy(smoke); if (wheelAccent != null) Destroy(wheelAccent); if(shellMaterial!=null)Destroy(shellMaterial);if(impactSpark!=null)Destroy(impactSpark); if (sound != null) Destroy(sound); }
+}
+
+public static class NavalProjectileVisual
+{
+    private static Mesh rifledShell;
+    public static GameObject CreateRifledShell()
+    {
+        if(rifledShell==null)BuildRifledShell();
+        GameObject shell=new GameObject("NavalPrototype_RifledShell");
+        shell.AddComponent<MeshFilter>().sharedMesh=rifledShell;shell.AddComponent<MeshRenderer>();
+        return shell;
+    }
+    private static void BuildRifledShell()
+    {
+        const int sides=8,rings=3;float[] z={-.30f,.16f,.29f};float[] radius={.115f,.115f,.075f};
+        Vector3[] vertices=new Vector3[2+rings*sides];int rear=0,nose=vertices.Length-1;vertices[rear]=new Vector3(0,0,z[0]);vertices[nose]=new Vector3(0,0,.43f);
+        for(int ring=0;ring<rings;ring++)for(int side=0;side<sides;side++){
+            float angle=side*Mathf.PI*2f/sides;vertices[1+ring*sides+side]=new Vector3(Mathf.Cos(angle)*radius[ring],Mathf.Sin(angle)*radius[ring],z[ring]);
+        }
+        int[] triangles=new int[sides*3*2+sides*(rings-1)*6];int t=0;
+        for(int side=0;side<sides;side++){int next=(side+1)%sides;triangles[t++]=rear;triangles[t++]=1+next;triangles[t++]=1+side;}
+        for(int ring=0;ring<rings-1;ring++)for(int side=0;side<sides;side++){
+            int next=(side+1)%sides,a=1+ring*sides+side,b=1+ring*sides+next,c=1+(ring+1)*sides+side,d=1+(ring+1)*sides+next;
+            triangles[t++]=a;triangles[t++]=b;triangles[t++]=d;triangles[t++]=a;triangles[t++]=d;triangles[t++]=c;
+        }
+        int last=1+(rings-1)*sides;for(int side=0;side<sides;side++){int next=(side+1)%sides;triangles[t++]=last+side;triangles[t++]=last+next;triangles[t++]=nose;}
+        rifledShell=new Mesh();rifledShell.name="Naval rifled shell ogive";rifledShell.vertices=vertices;rifledShell.triangles=triangles;rifledShell.RecalculateNormals();rifledShell.RecalculateBounds();
+    }
 }
 
 public class NavalCannonball : MonoBehaviour
@@ -348,21 +468,29 @@ public class NavalCannonball : MonoBehaviour
     private Vector3 velocity;
     private bool submerged;
     private float underwaterTravel;
-    private float RadiusScale {get{return submerged?NavalProjectileWaterMath.DamageRadiusScale:1f;}}
-    private int ImpactStrength {get{return submerged?Mathf.RoundToInt(4f*NavalProjectileWaterMath.DamagePower):4;}}
+    private float UnderwaterPowerScale {get{return NavalProjectileWaterMath.ImpactPowerScale(projectilePower);}}
+    private float RadiusScale {get{return projectileRadiusScale*(submerged?NavalProjectileWaterMath.ImpactRadiusScale(projectilePower):1f);}}
+    private int ImpactStrength {get{return Mathf.RoundToInt(4f*projectilePower*(submerged?UnderwaterPowerScale:1f));}}
     private Transform boat;
     private NavalHull hull;
     private FirstPersonMover owner;
     private NavalWater ocean;
     private Material splash;
+    private Material metalSpark;
     private static int nextAttackId = 1800000000;
     private int attackId;
     private float expires;
-    private float born;
     private bool hostile;
     private Character attacker;
-    public void Initialize(Vector3 speed, Transform ship, NavalHull shell, FirstPersonMover player, NavalWater sea, Material material, float end,bool enemy=false,Character robot=null)
-    { velocity = speed; boat = ship; hull = shell; owner = player; ocean = sea; splash = material; expires = end; born = Time.time; attackId = nextAttackId++; hostile=enemy;attacker=robot!=null?robot:player; }
+    private float projectilePower=1f;
+    private float projectileRadiusScale=1f;
+    private bool internalArmorPiercingBurst;
+    private float travelled;
+    private NavalHull armedHull;
+    private float armedFuseDistance,armedResidual,armedTravelled,armedStepOffset;
+    private readonly System.Collections.Generic.HashSet<NavalHullVoxel> penetratedCells=new System.Collections.Generic.HashSet<NavalHullVoxel>();
+    public void Initialize(Vector3 speed, Transform ship, NavalHull shell, FirstPersonMover player, NavalWater sea, Material material,Material sparks, float end,bool enemy=false,Character robot=null,float power=1f,float radiusScale=1f,bool armorPiercingBurst=false)
+    { velocity = speed; boat = ship; hull = shell; owner = player; ocean = sea; splash = material;metalSpark=sparks; expires = end; attackId = nextAttackId++; hostile=enemy;attacker=robot!=null?robot:player;projectilePower=Mathf.Max(.1f,power);projectileRadiusScale=Mathf.Clamp(radiusScale,1f,3f);internalArmorPiercingBurst=armorPiercingBurst; }
     private void Update()
     {
         if (boat == null || Time.time >= expires) { Destroy(gameObject); return; }
@@ -374,8 +502,12 @@ public class NavalCannonball : MonoBehaviour
         {
             float dt=Mathf.Min(remaining,0.008f);
             velocity+=Vector3.down*9.81f*dt;
-            if(submerged)velocity*=NavalProjectileWaterMath.Damping(dt);
+            if(submerged)velocity*=NavalProjectileWaterMath.Damping(dt,projectilePower);
+            if(velocity.sqrMagnitude>.01f)transform.rotation=Quaternion.LookRotation(velocity.normalized,Vector3.up);
             Vector3 step=velocity*dt;
+            bool armedAtStepStart=armedHull!=null,detonateAtStepEnd=false;
+            if(armedAtStepStart&&armedFuseDistance<=step.magnitude)
+            {step=step.normalized*Mathf.Max(.001f,armedFuseDistance);detonateAtStepEnd=true;}
             Vector3 start=transform.position,next=start+step;
             float nextClearance=submerged?0f:WaterClearance(next);
             if(!submerged&&NavalProjectileWaterMath.EntersWater(clearance,nextClearance))
@@ -389,21 +521,33 @@ public class NavalCannonball : MonoBehaviour
                     }
                 else high=0f;
                 if(HitSolid(step*high))return;
+                travelled+=step.magnitude*high;
                 transform.position=start+step*high;
                 Vector3 surface=transform.position;surface.y=WaterLevel(surface);
                 NavalWaterSplash.Create(transform.parent,surface,ocean);
                 submerged=true;velocity*=NavalProjectileWaterMath.EntrySpeedScale;
+                if(projectilePower>1.05f)Debug.Log("[NavalPrototype] Projectile entered water: power="+projectilePower.ToString("F2")+" speed="+velocity.magnitude.ToString("F1")+" limit="+NavalProjectileWaterMath.TravelLimit(projectilePower).ToString("F1"));
                 remaining-=dt*high;
                 continue;
             }
-            if(submerged)step=Vector3.ClampMagnitude(step,NavalProjectileWaterMath.MaxTravel-underwaterTravel);
+            float underwaterLimit=NavalProjectileWaterMath.TravelLimit(projectilePower);
+            if(submerged)step=Vector3.ClampMagnitude(step,underwaterLimit-underwaterTravel);
             if(HitSolid(step))return;
-            transform.position+=step;clearance=nextClearance;
+            transform.position+=step;travelled+=step.magnitude;clearance=nextClearance;
+            if(armedHull!=null)
+            {
+                float internalStep=armedAtStepStart?step.magnitude:Mathf.Max(0f,step.magnitude-armedStepOffset);
+                armedStepOffset=0f;armedTravelled+=internalStep;armedFuseDistance=Mathf.Max(0f,armedFuseDistance-internalStep);
+                if(detonateAtStepEnd||armedFuseDistance<=.001f){DetonateArmed(transform.position,"delay");return;}
+            }
             if(submerged)
             {
                 underwaterTravel+=step.magnitude;
-                if(underwaterTravel>=NavalProjectileWaterMath.MaxTravel-0.001f||velocity.magnitude<0.6f)
-                {Destroy(gameObject);return;}
+                if(underwaterTravel>=underwaterLimit-0.001f||velocity.magnitude<0.6f)
+                {
+                    if(projectilePower>1.05f)Debug.Log("[NavalPrototype] Underwater projectile spent: power="+projectilePower.ToString("F2")+" distance="+underwaterTravel.ToString("F2")+" reason="+(underwaterTravel>=underwaterLimit-0.001f?"range":"drag"));
+                    Destroy(gameObject);return;
+                }
             }
             remaining-=dt;
         }
@@ -428,7 +572,7 @@ public class NavalCannonball : MonoBehaviour
         int count;
         while(true)
         {
-            count=Physics.SphereCastNonAlloc(transform.position,.12f,step.normalized,impactHits,step.magnitude,~0,QueryTriggerInteraction.Collide);
+            count=Physics.SphereCastNonAlloc(transform.position,.12f*projectileRadiusScale,step.normalized,impactHits,step.magnitude,~0,QueryTriggerInteraction.Collide);
             if(count<impactHits.Length)break;
             System.Array.Resize(ref impactHits,impactHits.Length*2);
         }
@@ -442,13 +586,21 @@ public class NavalCannonball : MonoBehaviour
             // A destroyed attacker compares equal to null in Unity. A plain deck has
             // no Character either, but must still receive a projectile already in flight.
             if (hitRobot != null && (hitRobot == attacker || (!hostile && hitRobot == owner))) continue;
-            if (hit.collider.transform.IsChildOf(boat) && Time.time < born + 0.12f) continue;
+            // A projectile never damages its own firing platform. The old
+            // short grace period let a trained heavy gun clip the tapered bow.
+            if (hit.collider.transform.IsChildOf(boat)) continue;
             Vector3 sweepCentre=transform.position+step.normalized*Mathf.Max(0f,hit.distance);
             Vector3 surfacePoint=hit.collider.ClosestPoint(sweepCentre);
             NavalHullVoxel voxel = NavalVoxelHit.Resolve(hit.collider,hitPoint,surfacePoint);
             // A stale or unresolvable merged shape is not an impact on scenery.
             // Keep testing the ordered hits, and let the ball continue if nothing solid remains.
             if(voxel==null&&(hit.collider.GetComponent<NavalMergedCollider>()!=null||hit.collider.GetComponent<NavalCargoProxy>()!=null||hit.collider.GetComponent<NavalHullVoxel>()!=null))continue;
+            // Trigger-only trim, rails and visual fittings are not physical
+            // armour. Let the blast behind a real plate damage them, but never
+            // arm an AP fuze on an invisible/non-solid contact.
+            if(voxel!=null&&hit.collider.isTrigger)continue;
+            bool metalImpact=voxel!=null&&NavalImpactMaterial.IsMetal(voxel.Armored,voxel.Metallic,voxel.RepairableEquipment);
+            if(voxel!=null&&penetratedCells.Contains(voxel))continue;
             if (voxel != null && voxel.Owner != null)
             {
                 Vector3 local=voxel.transform.InverseTransformPoint(hitPoint);
@@ -458,7 +610,76 @@ public class NavalCannonball : MonoBehaviour
                 // actual surface, then place the compact damage sphere just inside the plank.
                 Vector3 toCentre=voxel.transform.position-hitPoint;
                 Vector3 damagePoint=hitPoint+toCentre*NavalCannonImpactMath.InsetFraction(toCentre.magnitude);
-                voxel.Owner.Damage(voxel.Owner.Root.InverseTransformPoint(damagePoint), NavalRigImpactMath.CannonRadiusForScale(voxel.Owner.WorldScale)*RadiusScale,true,voxel,submerged?NavalProjectileWaterMath.DamagePower:1f);
+                float impactTravel=travelled+Mathf.Max(0f,hit.distance);
+                Vector3 impactNormal=hit.normal.sqrMagnitude>.01f?hit.normal.normalized:-velocity.normalized;
+                float impactCosine=Mathf.Abs(Vector3.Dot(-velocity.normalized,impactNormal));
+                float straightPower=NavalArmorMath.PenetrationPower(projectilePower,impactTravel)*(submerged?UnderwaterPowerScale:1f);
+                float armorPower=NavalArmorMath.AngledPower(straightPower,impactCosine);
+                if(submerged&&projectilePower>1.05f)Debug.Log("[NavalPrototype] Underwater projectile impact: target="+voxel.Owner.Root.name+" distance="+underwaterTravel.ToString("F2")+" retained="+armorPower.ToString("F2")+" armored="+voxel.Armored);
+                if(projectilePower>2f||voxel.Owner==hull)Debug.Log("[NavalPrototype] Heavy projectile impact: source="+hull.Root.name+" target="+voxel.Owner.Root.name+" self="+(voxel.Owner==hull)+" travel="+impactTravel.ToString("F1")+" power="+projectilePower.ToString("F1")+" point="+voxel.Owner.Root.InverseTransformPoint(damagePoint));
+                float baseRadius=NavalRigImpactMath.CannonRadiusForScale(voxel.Owner.WorldScale);
+                NavalPenetrationMaterial penetrationMaterial=NavalArmorMath.Material(voxel.Armored,voxel.Metallic,voxel.RepairableEquipment);
+                bool mainBatteryHit=voxel.RepairMechanism!=null&&voxel.RepairMechanism.IsMainBattery;
+                armorPower=NavalArmorMath.MechanismArmorPower(armorPower,mainBatteryHit);
+                if(mainBatteryHit)Debug.Log("[NavalPrototype] Main battery direct hit: ship="+voxel.Owner.Root.name+" retained="+armorPower.ToString("F2")+" wear="+voxel.CannonWear.ToString("F2"));
+                bool ricochet=NavalArmorMath.Ricochets(voxel.Armored,impactCosine,armorPower);
+                float appliedArmorPower=ricochet?NavalArmorMath.RicochetWear(armorPower):armorPower;
+                float residual=NavalArmorMath.ResidualAfterWear(armorPower,voxel.CannonWear,penetrationMaterial);
+                bool perforates=voxel.Armored?NavalArmorMath.Penetrates(voxel.CannonWear,appliedArmorPower):residual>.05f;
+                if(armedHull!=null&&voxel.Owner==armedHull)
+                {
+                    float encounter=NavalArmorMath.InternalEncounterDistance(armedTravelled,hit.distance,armedStepOffset);
+                    float internalPower=Mathf.Max(.35f,armedResidual-NavalArmorMath.Resistance(penetrationMaterial)*.45f);
+                    if(encounter<.55f)
+                    {
+                        // A close bulkhead used to be silently ignored until
+                        // the fuze delay elapsed. It now absorbs energy and is
+                        // punched through (or stops the shell) like real inner
+                        // structure, while the armed fuze keeps running.
+                        bool passes=!voxel.Armored||NavalArmorMath.Penetrates(voxel.CannonWear,internalPower);
+                        voxel.Owner.Damage(voxel.Owner.Root.InverseTransformPoint(damagePoint),baseRadius*.58f,true,voxel,internalPower,internalPower);
+                        armedTravelled=encounter;
+                        if(passes)
+                        {
+                            penetratedCells.Add(voxel);
+                            armedResidual=Mathf.Max(.05f,armedResidual-NavalArmorMath.Resistance(penetrationMaterial)*.22f);
+                            velocity*=.84f;continue;
+                        }
+                        Debug.Log("[NavalPrototype] Heavy AP stopped by close internal armor: target="+voxel.Owner.Root.name+" internalTravel="+armedTravelled.ToString("F2")+" power="+internalPower.ToString("F2"));
+                        Burst(hitPoint,metalImpact,impactNormal);DetonateArmed(hitPoint+step.normalized*.12f,"inner armor");return true;
+                    }
+                    armedTravelled=encounter;
+                    voxel.Owner.Damage(voxel.Owner.Root.InverseTransformPoint(damagePoint),baseRadius*.72f,true,voxel,internalPower,internalPower);
+                    Vector3 burstPoint=hitPoint+step.normalized*.18f;
+                    Debug.Log("[NavalPrototype] Heavy AP armed obstruction burst: target="+voxel.Owner.Root.name+" material="+penetrationMaterial+" internalTravel="+armedTravelled.ToString("F2")+" point="+voxel.Owner.Root.InverseTransformPoint(burstPoint));
+                    Burst(hitPoint,metalImpact,impactNormal);DetonateArmed(burstPoint,"obstruction");return true;
+                }
+                if(internalArmorPiercingBurst&&perforates&&!ricochet&&NavalArmorMath.ArmsInternalFuse(penetrationMaterial,residual))
+                {
+                    voxel.Owner.Damage(voxel.Owner.Root.InverseTransformPoint(damagePoint),baseRadius*.65f,true,voxel,projectilePower*.45f,appliedArmorPower);
+                    armedHull=voxel.Owner;armedResidual=residual;armedTravelled=0f;armedStepOffset=Mathf.Max(0f,hit.distance);
+                    armedFuseDistance=NavalArmorMath.InternalFuseDepth(residual,penetrationMaterial);penetratedCells.Add(voxel);
+                    velocity*=NavalArmorMath.ExitVelocityFactor(armorPower,residual,penetrationMaterial);
+                    Debug.Log("[NavalPrototype] Heavy AP fuse armed: target="+voxel.Owner.Root.name+" caliberPower="+projectilePower.ToString("F2")+" travel="+impactTravel.ToString("F1")+" material="+penetrationMaterial+" retained="+armorPower.ToString("F2")+" resistance="+NavalArmorMath.Resistance(penetrationMaterial).ToString("F2")+" residual="+residual.ToString("F2")+" delayDistance="+armedFuseDistance.ToString("F2"));
+                    Vector3 entryNormal=hit.normal.sqrMagnitude>.01f?hit.normal:-velocity.normalized;
+                    Burst(hitPoint,metalImpact,entryNormal);
+                    // Continue through the already sorted hits from this same
+                    // sweep. Returning here could advance a fast shell past a
+                    // thin internal bulkhead before the next sub-step.
+                    continue;
+                }
+                voxel.Owner.Damage(voxel.Owner.Root.InverseTransformPoint(damagePoint),baseRadius*RadiusScale,true,voxel,projectilePower*(submerged?UnderwaterPowerScale:1f),appliedArmorPower);
+                if(voxel.Armored&&!perforates&&!submerged)
+                {
+                    float spallPower=NavalArmorMath.SpallPower(armorPower,impactCosine,ricochet);
+                    if(spallPower>0f)
+                    {
+                        Vector3 inside=hitPoint+velocity.normalized*Mathf.Max(.7f,NavalArmorMath.SpallRadius(spallPower)*.55f);
+                        voxel.Owner.InternalSpall(voxel.Owner.Root.InverseTransformPoint(inside),NavalArmorMath.SpallRadius(spallPower)/voxel.Owner.WorldScale,spallPower);
+                        SpallBurst(inside,spallPower);
+                    }
+                    Debug.Log("[NavalPrototype] Armor stopped shell: target="+voxel.Owner.Root.name+" caliberPower="+projectilePower.ToString("F2")+" travel="+impactTravel.ToString("F1")+" ricochet="+ricochet+" cosine="+impactCosine.ToString("F2")+" plateWear="+voxel.CannonWear.ToString("F2")+" spall="+spallPower.ToString("F2"));
+                }
             }
             else
             {
@@ -470,11 +691,13 @@ public class NavalCannonball : MonoBehaviour
                     part.TryStabVolume(transform.position, hitPoint + step.normalized * 0.3f*RadiusScale, attackId, ImpactStrength, attacker, FireType.None, false, DamageSourceType.None);
                 else if (hit.collider.isTrigger) continue;
             }
-            Burst(hitPoint); Destroy(gameObject); return true;
+            if(armedHull!=null){armedTravelled=NavalArmorMath.InternalEncounterDistance(armedTravelled,hit.distance,armedStepOffset);DetonateArmed(hitPoint,"obstruction");return true;}
+            Vector3 normal=hit.normal.sqrMagnitude>.01f?hit.normal:-velocity.normalized;
+            Burst(hitPoint,metalImpact,normal); Destroy(gameObject); return true;
         }
         return false;
     }
-    private void Burst(Vector3 point)
+    private void Burst(Vector3 point,bool metal,Vector3 normal)
     {
         // The projectile also damages native robot body voxels near its impact,
         // including sailors struck beside a deck or cannon. A stable attack ID
@@ -493,10 +716,57 @@ public class NavalCannonball : MonoBehaviour
             }
         }
         if(submerged)return;
-        for (int i = 0; i < 16; i++)
+        if(metal)
+        {
+            Vector3 reflected=Vector3.Reflect(velocity.normalized,normal.normalized);
+            for(int i=0;i<18;i++)NavalShotPuff.Create(transform.parent,point+Random.insideUnitSphere*.06f,
+                reflected*Random.Range(2.5f,6.5f)+Random.insideUnitSphere*3.2f+Vector3.up*Random.Range(.4f,2.2f),metalSpark,
+                Random.Range(.16f,.38f),Random.Range(.025f,.065f));
+        }
+        else for (int i = 0; i < 16; i++)
             NavalShotPuff.Create(transform.parent, point + Random.insideUnitSphere * 0.15f,
                 Random.insideUnitSphere * 1.7f + Vector3.up * 1.5f, splash,
                 Random.Range(0.7f, 1.4f), Random.Range(0.14f, 0.3f));
+    }
+    private void SpallBurst(Vector3 point,float power)
+    {
+        float radius=NavalArmorMath.SpallRadius(power);
+        System.Collections.Generic.HashSet<BaseBodyPart> damaged=new System.Collections.Generic.HashSet<BaseBodyPart>();
+        foreach(Collider collider in Physics.OverlapSphere(point,radius,~0,QueryTriggerInteraction.Collide))
+        {
+            BaseBodyPart part=collider.GetComponentInParent<BaseBodyPart>();Character target=part!=null?part.GetOwner():null;
+            if(attacker!=null&&part!=null&&damaged.Add(part)&&target!=null&&target!=attacker&&target.IsAlive()&&
+                NavalBattleMath.CanDamageCrew(hostile,target.IsPlayerTeam,target.IsNeutral)&&!target.IsImmuneToDamage()&&part.CanBeDamaged)
+                part.TryStabVolume(point-velocity.normalized*.2f,collider.ClosestPoint(point)+velocity.normalized*.12f,attackId,
+                    Mathf.Max(1,Mathf.RoundToInt(power*1.5f)),attacker,FireType.None,false,DamageSourceType.None);
+        }
+        for(int i=0;i<14;i++)NavalShotPuff.Create(transform.parent,point+Random.insideUnitSphere*.06f,
+            velocity.normalized*Random.Range(.4f,2.0f)+Random.insideUnitSphere*3.0f,metalSpark,Random.Range(.16f,.34f),Random.Range(.025f,.065f));
+    }
+    private void InternalDetonation(Vector3 point)
+    {
+        Burst(point,false,-velocity.normalized);
+        for(int i=0;i<28;i++)NavalShotPuff.Create(transform.parent,point+Random.insideUnitSphere*.12f,
+            Random.insideUnitSphere*2.8f+Vector3.up*Random.Range(.4f,2.4f),splash,Random.Range(1.0f,2.1f),Random.Range(.16f,.34f));
+        for(int i=0;i<12;i++)NavalShotPuff.Create(transform.parent,point+Random.insideUnitSphere*.08f,
+            Random.insideUnitSphere*4.2f,metalSpark,Random.Range(.18f,.42f),Random.Range(.04f,.09f));
+    }
+    private void DetonateArmed(Vector3 point,string cause)
+    {
+        if(armedHull!=null)
+        {
+            float burstPower=NavalArmorMath.InternalBlastPower(projectilePower,armedResidual);
+            float radius=NavalRigImpactMath.CannonRadiusForScale(armedHull.WorldScale)*RadiusScale*NavalArmorMath.InternalBlastRadiusMultiplier(projectilePower,armedResidual);
+            Vector3 local=armedHull.Root.InverseTransformPoint(point);
+            // A delayed AP burst loads the surrounding armour from the inside,
+            // just like a magazine explosion.  Distance falloff in Hull.Damage
+            // keeps the wear local and prevents the whole belt failing at once.
+            int removed=armedHull.Damage(local,radius,true,null,burstPower,armedResidual,true);
+            int fragments=armedHull.InternalSpall(local,radius*.90f,burstPower);
+            int fires=armedHull.Fire!=null?armedHull.Fire.InternalBurst(local,radius,projectilePower,armedResidual):0;
+            Debug.Log("[NavalPrototype] Heavy AP internal burst: target="+armedHull.Root.name+" cause="+cause+" internalTravel="+armedTravelled.ToString("F2")+" residual="+armedResidual.ToString("F2")+" blast="+burstPower.ToString("F2")+" radius="+radius.ToString("F2")+" removed="+removed+" fragments="+fragments+" fires="+fires+" point="+local);
+        }
+        InternalDetonation(point);Destroy(gameObject);
     }
 }
 

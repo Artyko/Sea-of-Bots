@@ -32,6 +32,7 @@ class RigMathChecks
         Check(NavalRigMath.StepRudder(1f,0f,0.5f)<0.4f,"Released rudder returns toward centre");
         Check(Math.Abs(NavalRigMath.StepRudder(0f,1f,1f)-NavalRigMath.StepRudder(NavalRigMath.StepRudder(0f,1f,0.5f),1f,0.5f))<0.00001f,"Rudder response independent of frame subdivision");
         Check(NavalRigMath.RudderRate(4f,0f)==0f,"Neutral rudder does not turn");
+        Check(Math.Abs(NavalRigMath.RudderRate(5.2f,1f,NavalShipDefinition.Ironclad.SteeringRateScale)-7.02f)<.001f,"Ironclad full-speed turn is limited to about seven degrees per second");
         // Actual mast dimensions: a cut in the sail region severs all four
         // cells across the spar, while the embedded lower section stays put.
         float[,] mast=new float[148,6]; bool[] cut=new bool[148];

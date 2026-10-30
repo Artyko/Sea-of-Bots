@@ -93,7 +93,7 @@ public partial class NavalTestWorld : MonoBehaviour
     public NavalHull PlayerHull {get{return hull;}}
     public bool Retreating {get{return retreat.Active||stations!=null&&stations.CrewRepairRetreat;}}
     public float SpeedThroughWater {get;private set;}
-    public Vector3 ShipVelocity { get { return boat!=null?boat.forward*speed+(ram!=null?ram.Drift:Vector3.zero):Vector3.zero; } }
+    public Vector3 ShipVelocity { get { return boat!=null?motionVelocity:Vector3.zero; } }
     public Transform EnemyBoat { get { return enemy!=null&&!enemy.Hull.Sunk?enemy.Boat:null; } }
     public Vector3 EnemyVelocity { get { return enemy!=null?enemy.ShipVelocity:Vector3.zero; } }
     private NavalAlliedCrew allies;
@@ -106,6 +106,7 @@ public partial class NavalTestWorld : MonoBehaviour
     private int scene;
     private float footOffset;
     private float speed;
+    private Vector3 motionVelocity;
     private NavalWater ocean;
     private NavalHull hull;
     private NavalShipVisuals rig;
@@ -162,8 +163,10 @@ public partial class NavalTestWorld : MonoBehaviour
             ? model.MouthSpawnPoint.position.y - startPosition.y - 0.18f
             : (head != null ? head.position.y - startPosition.y : 1.4f);
         // Raised above the existing arena: no original level objects are removed.
-        if(!NavalWorldMap.TryGetSeaOrigin(out waterCenter))
-            throw new InvalidOperationException("Load the separate Naval Ocean editor map first. F6 no longer replaces ordinary arenas.");
+        NavalEra era;string mapError;
+        if(!NavalWorldMap.TryGetSeaContext(out waterCenter,out era,out mapError))
+            throw new InvalidOperationException(mapError);
+        NavalSessionSettings.Configure(era);
         GameObject mapRoot=new GameObject("NavalPrototype_SeaMap");mapRoot.transform.SetParent(transform,false);
         seaMap=mapRoot.AddComponent<NavalWorldMap>();seaMap.Initialize(player,waterCenter);
         Material wood = MakeMaterial(new Color(0.30f, 0.19f, 0.115f));
@@ -171,26 +174,34 @@ public partial class NavalTestWorld : MonoBehaviour
         Material deckWood = MakeMaterial(new Color(0.47f, 0.375f, 0.255f));
         Material alternatePlank = MakeMaterial(new Color(0.515f, 0.415f, 0.285f));
         Material blackMast = MakeMaterial(new Color(0.025f, 0.025f, 0.03f));
+        // A readable slate-grey upper belt and oxide-red underwater body.
+        // The old near-black mast material made the whole ironclad look like
+        // an untextured silhouette against the steam map lighting.
+        Material armorIron=MakeMaterial(new Color(.36f,.42f,.43f));
+        Material darkIron=MakeMaterial(new Color(.10f,.13f,.14f));
+        Material armorAccent=MakeMaterial(new Color(.52f,.39f,.16f));
+        Material redOxide=MakeMaterial(new Color(.29f,.075f,.055f));
         water = new GameObject("NavalPrototype_WaveOcean").transform;
         water.SetParent(transform, false); water.position = waterCenter;
         ocean = water.gameObject.AddComponent<NavalWater>();
         ocean.Initialize();
         seaMap.SetOcean(ocean);
         ocean.Amplitude = 0.65f;
-        boat = new GameObject("WoodenBoat").transform;
+        boat = new GameObject(NavalSessionSettings.PlayerShip.SteamPowered?"PlayerIroncladCorvette":"WoodenBoat").transform;
         boat.SetParent(transform, false);
         boat.localScale = Vector3.one * NavalSessionSettings.PlayerShip.Scale;
         boat.position = waterCenter;
         boat.rotation = Quaternion.Euler(0f, player.transform.eulerAngles.y, 0f);
         heading = boat.eulerAngles.y;
-        hull = new NavalHull(NavalSessionSettings.PlayerShip); hull.Build(boat, wood, MakeMaterial(new Color(0.15f, 0.65f, 0.85f)), deckWood);
+        hull = new NavalHull(NavalSessionSettings.PlayerShip); hull.Build(boat, hull.Definition.Armored?armorIron:wood, MakeMaterial(new Color(0.15f, 0.65f, 0.85f)), deckWood,wood);
         boat.gameObject.AddComponent<NavalFloodAppearance>().Initialize(ocean,hull);
         rig = boat.gameObject.AddComponent<NavalShipVisuals>();
-        rig.Initialize(hull, wood, lightWood, blackMast, MakeMaterial(new Color(0.91f, 0.90f, 0.84f)),
-            MakeMaterial(new Color(0.12f, 0.085f, 0.05f)), deckWood, alternatePlank);
+        rig.Initialize(hull,wood,lightWood,hull.Definition.SteamPowered?armorIron:blackMast,MakeMaterial(new Color(.91f,.90f,.84f)),
+            hull.Definition.SteamPowered?darkIron:MakeMaterial(new Color(.12f,.085f,.05f)),deckWood,alternatePlank,
+            hull.Definition.SteamPowered?redOxide:null,hull.Definition.SteamPowered?armorAccent:null);
         stations = gameObject.AddComponent<NavalStations>();
-        stations.Initialize(boat, hull, player, ocean, wood, lightWood, blackMast);
-        boat.gameObject.AddComponent<NavalSeaLadder>().Initialize(hull,lightWood);
+        stations.Initialize(boat,hull,player,ocean,wood,hull.Definition.SteamPowered?armorAccent:lightWood,hull.Definition.SteamPowered?armorIron:blackMast);
+        boat.gameObject.AddComponent<NavalSeaLadder>().Initialize(hull,hull.Definition.SteamPowered?darkIron:lightWood);
         boarding=new NavalBoarding(player,footOffset);
         if(hull.Definition.Compartments)boat.gameObject.AddComponent<NavalBilgeSystem>().Initialize(hull,player,wood,lightWood,blackMast);
         boat.gameObject.AddComponent<NavalCargo>().Initialize(hull,player,stations,false,wood,lightWood,blackMast);
@@ -212,7 +223,8 @@ public partial class NavalTestWorld : MonoBehaviour
         Active = this;
         if(GetComponent<NavalBattleTelemetry>()==null)gameObject.AddComponent<NavalBattleTelemetry>();
         ToggleEnemy();
-        Debug.Log("[NavalPrototype] v230 ships and waves started on native Naval Ocean editor map.");
+        rough=era==NavalEra.Sail;
+        Debug.Log("[NavalPrototype] v254 "+era+" ships and waves started on native editor map.");
     }
 
     private Material MakeMaterial(Color color)
@@ -281,7 +293,7 @@ public partial class NavalTestWorld : MonoBehaviour
         if(!Spectating)SetStationLock(stations.Operating||boarding.Climbing||ShipMenuOpen);
         if(ShipMenuOpen)stations.PauseInput();
         if (Input.GetKeyDown(KeyCode.F7)) rough = !rough;
-        ocean.Amplitude = rough ? 0.65f : 0.20f;
+        ocean.Amplitude = rough ? 0.65f : NavalSessionSettings.Era==NavalEra.Steam?0.35f:0.20f;
         if (Input.GetKeyDown(KeyCode.F9)) hull.Damage(new Vector3(-BoatDimensions.HalfWidth, -0.225f, 0f), 0.75f);
         if (Input.GetKeyDown(KeyCode.F11)) hull.Damage(new Vector3(BoatDimensions.HalfWidth, -0.225f, 0f), 0.75f);
         if(Input.GetKeyDown(KeyCode.F12))ToggleEnemy();
@@ -299,22 +311,22 @@ public partial class NavalTestWorld : MonoBehaviour
             Vector3 desired;
             if(helmNavigator.Reversing){helmDecision.Reset();desired=boat.forward;throttle=1;}
             else desired=helmDecision.Course(boat,hull,stations,EnemyBoat,EnemyVelocity,speed,dt,retreat.Active,enemy.Retreating,ram,ref throttle);
-            helmNavigator.Steer(seaMap,boat,desired,speed,rig.SailPowerFactor,dt,ref throttle,out turn,!stations.MustBoard);
+            helmNavigator.Steer(seaMap,boat,desired,speed,rig.PowerFactor,dt,ref throttle,out turn,!stations.MustBoard);
         }
         else {helmNavigator.Reset(boat.position);helmDecision.Reset();}
         if(stations.RescueStop){throttle=0f;turn=0f;helmNavigator.Reset(boat.position);helmDecision.Reset();}
         stations.ReverseManeuver=helmNavigator.Recovering&&!stations.RescueStop;
-        throttle=stations.StepSails(dt,throttle,!stations.AtHelm&&allies!=null&&allies.HasHelmsman&&stations.IsFunctional(0)&&EnemyBoat!=null&&!hull.Sunk);
+        throttle=stations.StepPropulsion(dt,throttle,!stations.AtHelm&&allies!=null&&allies.HasHelmsman&&stations.IsFunctional(0)&&EnemyBoat!=null&&!hull.Sunk);
         rig.RefreshRig();
         ram.StepMomentum(dt,ref speed);
-        speed = NavalRigMath.StepSpeed(speed, throttle, rig.SailPowerFactor, dt,hull.Definition.MaxSailingSpeed);
+        speed = NavalRigMath.StepSpeed(speed, throttle, rig.PowerFactor, dt,hull.Definition.MaxSailingSpeed);
         // Carry only a rider supported by this deck. No parenting and no airborne snapping.
         bool aboard = !Spectating&&PlayerSupportedBy(boat);
         Vector3 riderFoot=!Spectating?PlayerFootPoint:Vector3.zero;
         Vector3 riderOffset=!Spectating?player.transform.position-riderFoot:Vector3.zero;
         Vector3 localRider=boat.InverseTransformPoint(riderFoot);
         rudder=stations.IsFunctional(0)?NavalRigMath.StepRudder(rudder,turn,dt):0f;
-        heading += NavalRigMath.RudderRate(speed, rudder)*stations.SteeringFactor * dt / (1f + depth);
+        heading += NavalRigMath.RudderRate(speed,rudder,hull.Definition.SteeringRateScale)*stations.SteeringFactor*dt/(1f+depth);
         Vector3 flatForward = Quaternion.Euler(0f, heading, 0f) * Vector3.forward;
         Vector3 flatRight = Quaternion.Euler(0f, heading, 0f) * Vector3.right;
         float bowHeight = ocean.Height(boat.position.x + flatForward.x * 9f, boat.position.z + flatForward.z * 9f);
@@ -340,6 +352,7 @@ public partial class NavalTestWorld : MonoBehaviour
         if(seaMap!=null&&seaMap.ConstrainShore(boat,ref next,ref nextRotation))
         {if(new Vector2(next.x-boat.position.x,next.z-boat.position.z).sqrMagnitude<.00000001f){speed=0f;ram.StopMomentum();}heading=nextRotation.eulerAngles.y;rudder=0f;helmNavigator.LandBlocked();}
         SpeedThroughWater=NavalShipSpeedMath.Measure(next.x-oldPosition.x,next.z-oldPosition.z,dt);
+        motionVelocity=(next-oldPosition)/Mathf.Max(dt,.001f);
         hull.PhysicsBody.SetPose(next,nextRotation);
         ocean.Focus = ViewCamera!=null?ViewCamera.transform.position:boat.position;
         ocean.RenderWaves(boat, speed);
@@ -500,20 +513,54 @@ public partial class NavalTestWorld : MonoBehaviour
         return player.transform.position-Vector3.up*footOffset;
     }}
     public int PlayerSupportFallbacks {get;private set;}
+    private Transform playerSupportShipA,playerSupportShipB;
+    private int playerSupportFrameA=-1,playerSupportFrameB=-1;
+    private int playerSupportProbeA,playerSupportProbeB;
+    private bool playerSupportResultA,playerSupportResultB;
+    public int PlayerSupportCacheHits {get;private set;}
     public bool PlayerSupportedBy(Transform ship){
         if(Spectating||player==null||ship==null)return false;
+        int frame=Time.frameCount;
+        if(playerSupportShipA==ship&&playerSupportFrameA==frame){PlayerSupportCacheHits++;return playerSupportResultA;}
+        if(playerSupportShipB==ship&&playerSupportFrameB==frame){PlayerSupportCacheHits++;return playerSupportResultB;}
         float radius=PlayerSupportRadius;
         // Cast from just above the actual capsule sole, independent of model/root height.
         Vector3 sole=PlayerFootPoint;
-        if(NavalPhysicsQueries.HasSupport(sole+Vector3.up*(radius+.25f),Vector3.down,.5f,ship,radius))return true;
-        // A sphere starting against an edge may miss its top. Probe actual footprint points.
-        float spread=radius*.7f;Vector3 origin=sole+Vector3.up*.35f;
-        for(int i=0;i<5;i++){
-            Vector3 offset=i==0?Vector3.zero:i==1?Vector3.right*spread:i==2?Vector3.left*spread:i==3?Vector3.forward*spread:Vector3.back*spread;
-            if(NavalPhysicsQueries.HasSupport(origin+offset,Vector3.down,.6f,ship,0f)){PlayerSupportFallbacks++;return true;}
+        Vector3 localSole=ship.InverseTransformPoint(sole);
+        bool slotA=playerSupportShipA==ship||playerSupportFrameA!=frame;
+        int preferred=playerSupportShipA==ship?playerSupportProbeA:playerSupportShipB==ship?playerSupportProbeB:0;
+        // At battle ranges nearly half of all support casts were aimed at the
+        // remote enemy ship. A conservative local-space broad phase makes
+        // those calls free and cannot reject a foot point over the hull.
+        if(!NavalRiderSupportMath.NearShip(localSole.x,localSole.z,radius,ship.lossyScale.x))
+        {
+            if(slotA){playerSupportShipA=ship;playerSupportFrameA=frame;playerSupportResultA=false;playerSupportProbeA=0;}
+            else {playerSupportShipB=ship;playerSupportFrameB=frame;playerSupportResultB=false;playerSupportProbeB=0;}
+            return false;
         }
-        return false;
+        // A full 0.8 m sphere frequently touches a bulwark or gun before the
+        // deck and forces an expensive all-hit query.  The sole centre ray is
+        // the common case; footprint rays retain stable edge support.
+        // A narrow sphere bridges seams between merged deck boxes without the
+        // false wall/gun contacts caused by a full character-radius cast. Its
+        // shortened travel keeps the old lower reach exactly unchanged.
+        float probeRadius=Mathf.Min(.18f,radius*.25f),probeDistance=NavalRiderSupportMath.Distance(.6f,0f,probeRadius);
+        float spread=radius*.7f;Vector3 origin=sole+Vector3.up*.35f;
+        bool supported=false;int successful=0;
+        // Remember which footprint point worked on the previous frame. At a
+        // deck seam this turns five repeated casts into one while walking.
+        for(int pass=0;!supported&&pass<5;pass++){
+            int probe=pass==0?preferred:pass<=preferred?pass-1:pass;
+            Vector3 offset=probe==0?Vector3.zero:probe==1?Vector3.right*spread:probe==2?Vector3.left*spread:probe==3?Vector3.forward*spread:Vector3.back*spread;
+            if(NavalPhysicsQueries.HasSupport(origin+offset,Vector3.down,probeDistance,ship,probeRadius))
+            {supported=true;successful=probe;if(probe>0)PlayerSupportFallbacks++;}
+        }
+        if(slotA){playerSupportShipA=ship;playerSupportFrameA=frame;playerSupportResultA=supported;playerSupportProbeA=successful;}
+        else {playerSupportShipB=ship;playerSupportFrameB=frame;playerSupportResultB=supported;playerSupportProbeB=successful;}
+        return supported;
     }
+    public int ConsumePlayerSupportFallbacks(){int count=PlayerSupportFallbacks;PlayerSupportFallbacks=0;return count;}
+    public int ConsumePlayerSupportCacheHits(){int count=PlayerSupportCacheHits;PlayerSupportCacheHits=0;return count;}
     public float PlayerSupportRadius {get{
         CharacterController body=GetController();
         return body!=null?Mathf.Max(.12f,body.radius*Mathf.Max(Mathf.Abs(body.transform.lossyScale.x),Mathf.Abs(body.transform.lossyScale.z))):.35f;

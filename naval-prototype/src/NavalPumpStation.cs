@@ -45,11 +45,26 @@ public partial class NavalBilgeSystem
   var station=new NavalPumpStation{Post=new Vector3(0,floor,-4.9f)};int first=hull.Voxels.Count;
   hull.AddDecorationBox(transform,metal,station.Post+new Vector3(0,.3f,NavalMaintenanceMath.PumpOffsetZ),new Vector3(.5f,.6f,.5f),true);
   hull.AddDecorationBox(transform,trim,station.Post+new Vector3(0,.65f,NavalMaintenanceMath.PumpOffsetZ),new Vector3(.8f,.12f,.15f),true);
+  if(hull.Definition.SteamPowered)
+  {
+   // Compact gauge chest and exposed delivery pipes; visual details do not
+   // obstruct the aft pump approach.
+   hull.AddDecorationBox(transform,metal,station.Post+new Vector3(0,.48f,NavalMaintenanceMath.PumpOffsetZ+.13f),new Vector3(.44f,.34f,.10f),false);
+   hull.AddDecorationBox(transform,trim,station.Post+new Vector3(0,.49f,NavalMaintenanceMath.PumpOffsetZ+.20f),new Vector3(.22f,.22f,.04f),false);
+  }
   station.Crank=new GameObject("Bilge pump handle").transform;station.Crank.SetParent(transform,false);station.Crank.localPosition=station.Post+new Vector3(0,.65f,NavalMaintenanceMath.PumpOffsetZ);
-  for(int side=-1;side<=1;side+=2)hull.AddDecorationBox(transform,metal,new Vector3(side*1.4f,floor+.13f,-5.45f),new Vector3(2.8f,.12f,.12f),false);
+  // Keep the transverse delivery pipes behind the strongly tapered stern
+  // shell.  The old fixed 5.6 m span crossed both sides of the ironclad here.
+  float pipeHalf=NavalPumpLayout.PipeHalfSpan(hull.Definition,-5.45f);
+  for(int side=-1;side<=1;side+=2)hull.AddDecorationBox(transform,metal,new Vector3(side*pipeHalf*.5f,floor+.13f,-5.45f),new Vector3(pipeHalf,.12f,.12f),false);
   var members=new System.Collections.Generic.List<NavalHullVoxel>();
-  for(int i=first;i<hull.Voxels.Count;i++)members.Add(hull.Voxels[i]);
+  for(int i=first;i<hull.Voxels.Count;i++){NavalHullVoxel cell=hull.Voxels[i];if(hull.Definition.SteamPowered){cell.Metallic=true;cell.Flammable=false;}members.Add(cell);}
   foreach(var cell in members)if(cell.LocalCenter.y>floor+.6f)cell.transform.SetParent(station.Crank,true);
   station.Mechanism=new NavalRepairableMechanism(hull,members,true);pumps.Add(station);
  }
+}
+public static class NavalPumpLayout
+{
+ public static float PipeHalfSpan(NavalShipDefinition ship,float z)
+ {return Mathf.Max(.12f,ship.HullHalfWidth(z)-.14f);}
 }

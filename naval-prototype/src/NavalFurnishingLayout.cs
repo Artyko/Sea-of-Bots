@@ -15,6 +15,9 @@ public static class NavalFurnishingLayout
  public static List<NavalFurnishingBox> Build(NavalShipDefinition ship)
  {
   var boxes=new List<NavalFurnishingBox>();float s=ship.Scale;
+  // The large robot capsule and the steam stores need an uncluttered interior.
+  // Deck machinery and the conning tower already provide the steam-era detail.
+  if(ship.SteamPowered)return boxes;
   for(int level=0;level<ship.MaintenanceDeckCount;level++){
    float floor=ship.MaintenanceFloor(level);
    for(int side=-1;side<=1;side+=2){

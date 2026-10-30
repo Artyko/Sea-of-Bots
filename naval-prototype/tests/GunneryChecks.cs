@@ -42,6 +42,10 @@ class GunneryChecks
         Check(NavalBattleMath.FiringAngle(NavalGunneryMath.LevelRange-.1f,0f,32f,out farAngle),"Shot at physical range limit exists");
         Check(!NavalBattleMath.FiringAngle(NavalGunneryMath.LevelRange+10f,0f,32f,out farAngle),"No artificial range increase");
         Check(NavalGunneryMath.ReloadSeconds==5f,"Shared reload interval");
+        int submerged=0;for(int i=0;i<100;i++)if(NavalGunneryMath.AimBelowWaterline(i/100f,true))submerged++;
+        Check(submerged>=35&&submerged<=40,"Rifled batteries deliberately allocate over one third of hull shots below the waterline");
+        Check(!NavalGunneryMath.AimBelowWaterline(0f,false),"Sail-era round shot targeting remains unchanged");
+        Check(NavalGunneryMath.DesiredHullDepth(true)<-.4f&&NavalGunneryMath.DesiredHullDepth(false)>0f,"Above- and below-waterline aim bands are distinct");
         Console.WriteLine("PASS: target variety and weights, destroyed feature exclusion, bounded spread, ballistic flight time and shared reload.");
     }
 }

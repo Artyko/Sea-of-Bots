@@ -34,6 +34,7 @@ public partial class NavalBilgeSystem : MonoBehaviour
         crewDemand.Step(dt,RawOperatorDemand,hull.Flood.Total<.15f&&!UrgentTrim&&Mathf.Abs(LongitudinalList)<3f);
     }
     public bool WantsOperator {get{return Functional&&!hull.Sunk&&(crewDemand.Active||RawOperatorDemand);}}
+    public bool CrewOperating {get{foreach(var station in pumps)if(station.Operator!=null)return true;return false;}}
     private bool RawOperatorDemand {get{return Functional&&!hull.Sunk&&(UrgentTrim||hull.Flood.Total>1f||BallastVolume>1f&&(trimPlan.WantsTransfer||Mathf.Abs(NavalHullStability.Roll(transform))>6f||Mathf.Abs(LongitudinalList)>3f));}}
     public void Initialize(NavalHull owner,FirstPersonMover observer,Material wood,Material trim,Material metal)
     {
@@ -41,6 +42,7 @@ public partial class NavalBilgeSystem : MonoBehaviour
         if(!owner.Definition.Compartments)return;
         if(owner.Definition.Partitions)
         {
+        Material barrier=owner.Definition.SteamPowered?metal:wood,barrierTrim=owner.Definition.SteamPowered?metal:trim;
         float partition=NavalCompartmentMath.PartitionHeight(hull.WorldScale);
         int rows=Mathf.CeilToInt(partition/.25f);float rowHeight=partition/rows;
         for(int side=-1;side<=1;side+=2)
@@ -49,10 +51,10 @@ public partial class NavalBilgeSystem : MonoBehaviour
             {
                 float pz=-5.875f+z*.25f,py=hull.Floor+(y+.5f)*rowHeight;
                 bool opening=Mathf.Abs(Mathf.Abs(pz)-NavalCompartmentMath.DoorZ)<.625f;
-                if(!opening)Wall(new Vector3(side*NavalCompartmentMath.WallX,py,pz),new Vector3(.14f,rowHeight,.25f),wood);
+                if(!opening)Wall(new Vector3(side*NavalCompartmentMath.WallX,py,pz),new Vector3(.14f,rowHeight,.25f),barrier);
             }
             for(int x=0;x<6;x++)for(int y=0;y<rows;y++)
-                Wall(new Vector3(side*(NavalCompartmentMath.WallX+(x+.5f)*(BoatDimensions.HoldWidth*.5f-NavalCompartmentMath.WallX)/6f),hull.Floor+(y+.5f)*rowHeight,0f),new Vector3(.25f,rowHeight,.14f),wood);
+                Wall(new Vector3(side*(NavalCompartmentMath.WallX+(x+.5f)*(BoatDimensions.HoldWidth*.5f-NavalCompartmentMath.WallX)/6f),hull.Floor+(y+.5f)*rowHeight,0f),new Vector3(.25f,rowHeight,.14f),barrier);
             // Low wooden coamings retain shallow water; stepped approaches allow ordinary walking.
             for(int end=-1;end<=1;end+=2)
             {
@@ -60,18 +62,19 @@ public partial class NavalBilgeSystem : MonoBehaviour
                 for(int z=0;z<5;z++)
                 {
                     float pz=end*NavalCompartmentMath.DoorZ-.625f+(z+.5f)*.25f;
-                    Wall(new Vector3(side*NavalCompartmentMath.WallX,hull.Floor+height*.5f,pz),new Vector3(.14f,height,.25f),trim);
+                    Wall(new Vector3(side*NavalCompartmentMath.WallX,hull.Floor+height*.5f,pz),new Vector3(.14f,height,.25f),barrierTrim);
                     for(int face=-1;face<=1;face+=2)for(int step=1;step<=3;step++)
                     {
                         float rise=height*(4-step)/4f;
-                        hull.AddDecorationBox(transform,trim,new Vector3(side*NavalCompartmentMath.WallX+face*(.07f+(step-.5f)*.06f),hull.Floor+rise*.5f,pz),new Vector3(.06f,rise,.25f),true);
+                        hull.AddDecorationBox(transform,barrierTrim,new Vector3(side*NavalCompartmentMath.WallX+face*(.07f+(step-.5f)*.06f),hull.Floor+rise*.5f,pz),new Vector3(.06f,rise,.25f),true);
                     }
                 }
             }
         }
-        BuildShields(trim);
+        if(owner.Definition.SteamPowered)foreach(var cell in walls){cell.Metallic=true;cell.Flammable=false;}
+        BuildShields(barrierTrim);
         }
-        BuildBallast(wood,trim);
+        BuildBallast(wood,trim,metal);
         for(int deck=0;deck<hull.Definition.MaintenanceDeckCount;deck++)BuildPumpStation(hull.Definition.MaintenanceFloor(deck),trim,metal);
     }
     private NavalHullVoxel Wall(Vector3 point,Vector3 size,Material material)
@@ -148,6 +151,8 @@ public partial class NavalBilgeSystem : MonoBehaviour
         if(station==null||!station.Functional){if(station!=null)StopStation(station);return;}
         if(automatic?!WantsOperator:hull.Flood.Total+BallastVolume<=.00001f)return;
         float processed=0f;
+        NavalSteamPlant steam=hull.Definition.SteamPowered?hull.Root.GetComponent<NavalSteamPlant>():null;
+        float pumpMultiplier=steam!=null?steam.RequestPumpAssist(dt):1f;
         int selectedMode=automatic?0:mode;
         float heel=NavalHullStability.Roll(transform);
         if(selectedMode==0&&pumpPlanFrame!=Time.frameCount)
@@ -165,17 +170,19 @@ public partial class NavalBilgeSystem : MonoBehaviour
         bool attempted=transfer;
         if(transfer)
         {
-            processed=longitudinal?NavalBallastTransfer.MoveLongitudinal(hull.Flood,transferTanks,fromStern,NavalMaintenanceMath.PumpTransferRate*dt):NavalBallastTransfer.Move(hull.Flood,transferTanks,fromPort,NavalMaintenanceMath.PumpTransferRate*dt);
+            float transferRate=NavalMaintenanceMath.PumpTransferRate*pumpMultiplier;
+            processed=longitudinal?NavalBallastTransfer.MoveLongitudinal(hull.Flood,transferTanks,fromStern,transferRate*dt):NavalBallastTransfer.Move(hull.Flood,transferTanks,fromPort,transferRate*dt);
             transfer=processed>.00001f;
 
         }
         if(selectedMode==0&&pumpObserveFrame!=Time.frameCount){pumpObserveFrame=Time.frameCount;trimPlan.Observe(dt,longitudinal?0:processed,attempted&&!longitudinal);pitchPlan.Observe(dt,longitudinal?processed:0,attempted&&longitudinal);}
         if(!transfer)
         {
-            float budget=NavalMaintenanceMath.PumpOutRate*dt;
+            float pumpRate=NavalMaintenanceMath.PumpOutRate*pumpMultiplier;
+            float budget=pumpRate*dt;
             if(selectedMode!=4)for(int n=0;n<8&&budget>0f;n++){int i=Wettest(-1);if(i<0)break;budget+=hull.Flood.Add(i,-budget);}
             if(budget>0f)budget-=DrainBallast(budget);
-            processed=NavalMaintenanceMath.PumpOutRate*dt-budget;
+            processed=pumpRate*dt-budget;
 
         }
         if(processed>.00001f){station.LastWork=Time.time;station.Phase=Mathf.Repeat(station.Phase+dt/1.2f,1f);station.LastTransfer=transfer;}
@@ -185,6 +192,7 @@ public partial class NavalBilgeSystem : MonoBehaviour
             statusKind=kind;nextStatusAt=Time.unscaledTime+.2f;
             Status=transfer?"Transfer "+(longitudinal?(fromStern?"stern -> bow":"bow -> stern"):(fromPort?"port -> starboard":"starboard -> port"))+" | "+(processed/Mathf.Max(.001f,dt)).ToString("F1")+" m3/s":
                 kind==4?"Ballast -> sea":kind==5?"Trim ineffective: pumping overboard":"Pumping overboard";
+            if(steam!=null)Status+=(pumpMultiplier>1.05f?" | steam assist ":" | hand pump ")+pumpMultiplier.ToString("F1")+"x";
             Status+=" | Sealed ballast: "+BallastVolume.ToString("F1")+" m3";
         }
         if(station.Crank!=null)station.Crank.localRotation=Quaternion.Euler(Mathf.Sin(Time.time*8f)*25f,0f,0f);
@@ -229,6 +237,6 @@ public partial class NavalBilgeSystem : MonoBehaviour
             GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,620f),Screen.height-245f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,620f),30f),contextPump.Mechanism.NeedsRepair?"Помпа повреждена — восстановите её детали (удерживать R)":"Помпа разрушена — восстановление невозможно");
             return;
         }
-        GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,620f),Screen.height-265f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,620f),48f),playerPump?"Помпа: держать T | Q: "+pumpModes[mode]+" | E: выйти\n"+Status:"E: помпа | Закрытый балласт: "+BallastVolume.ToString("F1")+" / "+(NavalBallastLayout.Capacity(hull.WorldScale)*BallastCount).ToString("F1")+" м³");
+        GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,620f),Screen.height-265f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,620f),48f),playerPump?"Помпа: держать T | Q: "+pumpModes[mode]+" | E: выйти\n"+Status:"E: помпа | Закрытый балласт: "+BallastVolume.ToString("F1")+" / "+(NavalBallastLayout.Capacity(hull.Definition)*BallastCount).ToString("F1")+" м³");
     }
 }

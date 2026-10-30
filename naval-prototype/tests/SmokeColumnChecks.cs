@@ -3,11 +3,14 @@ class SmokeColumnChecks
 {
  static void Check(bool value,string text){if(!value)throw new Exception(text);}
  static void Main(){
- Check(NavalCubeSmokeMath.Capacity==576,"Particle cap increases by exactly fifty percent");
- Check(Math.Abs(.25f/NavalSmokePlumeMath.ColumnInterval-1.5f)<.001f,"Emission rate increases by fifty percent");
+ Check(NavalCubeSmokeMath.Capacity==192,"Long-battle solid fire mesh stays within the v251 GPU budget");
+ Check(NavalSmokeBatch.Capacity==256&&NavalSmokeBatch.PaletteLimit==24,"Transparent smoke and material palettes remain bounded");
  float gap=NavalSmokePlumeMath.ColumnInterval*NavalCubeSmokeMath.RiseSpeed;
  Check(gap<NavalSmokePlumeMath.ColumnSize,"Successive puffs overlap vertically instead of isolated cubes");
  Check(NavalSmokePlumeMath.MaxColumnPuffsPerTick*NavalSmokePlumeMath.Lifetime/NavalSmokePlumeMath.ColumnInterval<=NavalCubeSmokeMath.Capacity+.001f,"All fire columns fit within bounded particle budget");
+ Check(NavalSmokePlumeMath.NextVentDeck(-.8f,.825f,2.025f)==.825f,"Hold smoke first vents to the middle deck");
+ Check(NavalSmokePlumeMath.NextVentDeck(1f,.825f,2.025f)==2.025f,"Middle-deck smoke next vents to the weather deck");
+ Check(float.IsPositiveInfinity(NavalSmokePlumeMath.NextVentDeck(2.1f,.825f,2.025f)),"Weather-deck smoke is already in open air");
  foreach(float fps in new float[]{30,60,120}){
  float emittedAt=0,clock=0;int count=0;float maxGap=0;
  for(int i=0;i<fps*12;i++){
@@ -32,6 +35,6 @@ class SmokeColumnChecks
  Check(NavalSmokePlumeMath.BirthScale(0)<NavalSmokePlumeMath.BirthScale(.15f)&&NavalSmokePlumeMath.BirthScale(.3f)==1,"Smoke grows gradually at the source");
  float previousAlpha=0;
  for(int i=0;i<=25;i++){float alpha=NavalSmokePlumeMath.Alpha(i*.01f,12);Check(alpha>=previousAlpha-.001&&alpha<=.65f,"Birth alpha changes continuously within safe limits");previousAlpha=alpha;}
- Console.WriteLine("PASS: connected plume spacing at 30/60/120 FPS, bounded 576-puff budget (CPU model, no Unity render).");
+ Console.WriteLine("PASS: connected plume spacing, inter-deck vent selection and bounded v252 long-battle smoke budgets (CPU model, no Unity render).");
  }
 }

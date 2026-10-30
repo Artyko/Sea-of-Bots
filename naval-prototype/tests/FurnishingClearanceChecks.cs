@@ -12,7 +12,7 @@ class FurnishingClearanceChecks {
  Axis(a.Z,b.Z-a.Z,box.Z-box.Depth*.5f-r,box.Z+box.Depth*.5f+r,ref lo,ref hi);
  }
  static void Main(){try{Run();}catch(Exception e){Console.WriteLine(e.Message);Environment.ExitCode=1;}}
- static void Run(){int routes=0;foreach(var ship in NavalShipDefinition.Choices){
+ static void Run(){int routes=0;var profiles=new List<NavalShipDefinition>(NavalShipDefinition.Choices);profiles.AddRange(NavalShipDefinition.SteamChoices);foreach(var ship in profiles){
  var boxes=NavalFurnishingLayout.Build(ship);int cells=0;
  foreach(var box in boxes){
  Check(box.Width>0&&box.Height>0&&box.Depth>0&&box.Palette>=0&&box.Palette<6,"Valid destructible box");
@@ -27,16 +27,17 @@ class FurnishingClearanceChecks {
  for(int level=0;level<ship.MaintenanceDeckCount;level++){
  float floor=ship.MaintenanceFloor(level);
  posts.Add(new NavalWalkPoint(0,floor,-4.8f));posts.Add(new NavalWalkPoint(0,floor,NavalPlankSupplyLayout.PickupZ(ship.Scale)));posts.Add(new NavalWalkPoint(0,floor,NavalCannonSupplyLayout.PickupZ(ship.Scale)));
- for(int sailor=0;sailor<ship.CrewCount;sailor++)posts.Add(new NavalWalkPoint(NavalShipDefinition.StandbyX(sailor),floor,NavalShipDefinition.StandbyZ(sailor)));
- foreach(float x in new float[]{-2.35f,2.35f})foreach(float z in new float[]{-4.8f,-1.4f,1.4f,4.8f})posts.Add(new NavalWalkPoint(x,NavalBallastLayout.Surface(x,z,floor,ship.Scale),z));
+ for(int sailor=0;sailor<ship.CrewCount;sailor++)posts.Add(new NavalWalkPoint(NavalShipDefinition.StandbyX(ship,sailor),floor,NavalShipDefinition.StandbyZ(ship,sailor)));
+ float[] workX=ship.SteamPowered?new float[]{-.68f,.68f}:new float[]{-2.35f,2.35f};
+ foreach(float x in workX)foreach(float z in new float[]{-4.8f,-1.4f,1.4f,4.8f})posts.Add(new NavalWalkPoint(x,NavalBallastLayout.Surface(x,z,floor,ship),z));
  }
- posts.Add(new NavalWalkPoint(NavalSailWorkLayout.PostX,ship.WeatherDeck,NavalSailWorkLayout.PostZ));
- for(int side=-1;side<=1;side+=2){posts.Add(new NavalWalkPoint(side*1.35f,ship.WeatherDeck,4.8f));posts.Add(new NavalWalkPoint(side*2.2f,ship.WeatherDeck,ship.LadderZ));}
+ posts.Add(ship.SteamPowered?new NavalWalkPoint(ship.PropulsionPost.x,ship.PropulsionPost.y,ship.PropulsionPost.z):new NavalWalkPoint(NavalSailWorkLayout.PostX,ship.WeatherDeck,NavalSailWorkLayout.PostZ));
+ for(int side=-1;side<=1;side+=2){float bow=ship.SteamPowered?ship.HullHalfWidth(4.8f)-.3f:1.35f,ladder=ship.HullHalfWidth(ship.LadderZ)-.35f;posts.Add(new NavalWalkPoint(side*bow,ship.WeatherDeck,4.8f));posts.Add(new NavalWalkPoint(side*ladder,ship.WeatherDeck,ship.LadderZ));}
  foreach(var start in posts)foreach(var goal in posts){var previous=start;
  foreach(var point in NavalSupplyRoutes.Plan(start,goal,ship)){
  foreach(var box in boxes)Check(!Hits(previous,point,box,ship.Scale),ship.Name+": "+box.Item+" obstructs full-size crew path");previous=point;
  }routes++;}
  }
- Console.WriteLine("PASS: "+routes+" full-body swept routes clear destructible furnishings, both galleon holds, supplies, stairs, pump, guns, sails and repair stations; bounded cell budgets.");
+ Console.WriteLine("PASS: "+routes+" full-body swept routes clear destructible furnishings, steam stores, holds, supplies, stairs, pump, guns, propulsion and repair stations; bounded cell budgets.");
  }
 }

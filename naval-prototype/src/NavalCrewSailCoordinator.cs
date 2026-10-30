@@ -4,6 +4,10 @@ public partial class NavalCrewController
     private float sailAssignmentAt,sailWarningAt;
     private void CoordinateSails(int protectedHelm=-1,bool final=false)
     {
+        // The ironclad carries its engine-order telegraph at the wheel. Its
+        // helmsman operates course and power together, leaving the former
+        // dedicated engineer available for gunnery and damage control.
+        if(!NavalPropulsionCrewPolicy.NeedsSeparateOperator(hull.Definition.SteamPowered))return;
         if(stations.SailOperator!=null||!stations.NeedsSailOperator)return;
         if(Time.time<sailAssignmentAt)return;sailAssignmentAt=Time.time+.25f;
         if(!final&&!stations.RescueStop&&!stations.ReverseManeuver&&(hull.HasRepairDemand||hull.CombatCritical||hull.UrgentTrim||hull.Fire!=null&&hull.Fire.HasFire))return;

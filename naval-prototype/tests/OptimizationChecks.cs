@@ -18,6 +18,11 @@ class OptimizationChecks
     }
     static void Main()
     {
+        Check(NavalSpatialBatching.ChunkSize(NavalShipDefinition.Sloop)==2f,"Sail rendering keeps established chunk size");
+        foreach(var steam in NavalShipDefinition.SteamChoices)Check(NavalSpatialBatching.ChunkSize(steam)==4f,"Dense steam hull uses low-draw-call chunks");
+        Check(NavalSpatialBatching.ColliderChunkSize(NavalShipDefinition.Sloop)==2f,"Sail collider batching stays unchanged");
+        foreach(var steam in NavalShipDefinition.SteamChoices)Check(NavalSpatialBatching.ColliderChunkSize(steam)==8f,"Steam physics uses larger exact chunks");
+        Check(NavalSpatialBatching.ColliderChunk(-3f,8f,true)==0&&NavalSpatialBatching.ColliderChunk(3f,8f,true)==0,"Centered steam chunk does not split the beam at zero");
         Random random=new Random(8621);
         for(int test=0;test<40;test++)
         {
@@ -37,6 +42,20 @@ class OptimizationChecks
                 }
             }
         }
+        // Structural support is evaluated only after a damage-state change.
+        // When it does run, the connectivity workspace and component lists are
+        // reused: a ship-sized graph can be checked repeatedly without Gen0 GC.
+        const int structureCells=2400;List<int>[] structure=new List<int>[structureCells];bool[] structureAbsent=new bool[structureCells],foundation=new bool[structureCells];
+        for(int i=0;i<structureCells;i++){structure[i]=new List<int>(2);if(i>0)structure[i].Add(i-1);if(i+1<structureCells)structure[i].Add(i+1);}
+        foundation[0]=true;var structureWorkspace=new NavalConnectivityWorkspace(structureCells);
+        for(int warm=0;warm<4;warm++)structureWorkspace.Evaluate(structure,structureAbsent);
+        GC.Collect();int collections=GC.CollectionCount(0);
+        for(int pass=0;pass<500;pass++)
+        {
+            structureAbsent[1200]=pass%2==0;var groups=structureWorkspace.Evaluate(structure,structureAbsent);
+            Check(NavalStructuralSupport.HasFoundation(groups[0],foundation),"Foundation component stays supported in stress test");
+        }
+        Check(GC.CollectionCount(0)==collections,"Reused structural support checks cause no Gen0 collections");
         NavalPointIndex index=new NavalPointIndex();const int points=8000;
         float[,] positions=new float[points,3];
         for(int i=0;i<points;i++)
@@ -57,6 +76,6 @@ class OptimizationChecks
         }
         index.Clear();index.Query(-1f,0f,0f,.1f,candidates);Check(candidates.Count==0,"rebuild clears stale cells");
         index.Add(42,-1f,0f,0f);index.Query(-1f,0f,0f,0f,candidates);Check(candidates.Count==1&&candidates[0]==42,"negative bin boundary");
-        Console.WriteLine("PASS: 4800 reused connectivity snapshots match reference; 500 spatial queries preserve all candidates.");
+        Console.WriteLine("PASS: 4800 reused connectivity snapshots, 500 ship-sized support checks without Gen0 GC, and 500 spatial queries preserve all candidates.");
     }
 }

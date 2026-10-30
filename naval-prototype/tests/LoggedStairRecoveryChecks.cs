@@ -7,7 +7,7 @@ class LoggedStairRecoveryChecks {
  for(int i=0;i<cases.GetLength(0);i++)Check(NavalWalkRoutes.Reached(cases[i,0]-cases[i,3],cases[i,1]-cases[i,4],cases[i,2]-cases[i,5],ship.Scale),"Logged capsule height lag must advance horizontally reached tread");
  Check(!NavalWalkRoutes.Reached(0,-1f/ship.Scale,0,ship.Scale),"A metre below the tread cannot skip upwards");
  Check(!NavalWalkRoutes.Reached(0,.8f/ship.Scale,0,ship.Scale),"A high ledge cannot count as the next tread");
- Check(!NavalWalkRoutes.Reached(.5f/ship.Scale,.1f/ship.Scale,0,ship.Scale),"Cannot skip horizontally distant tread");
+ Check(!NavalWalkRoutes.Reached(.9f/ship.Scale,.1f/ship.Scale,0,ship.Scale),"Cannot skip beyond the full tread-width tolerance");
  }
  Console.WriteLine("PASS: exact four staircase stalls from v193 log on every profile; asymmetric capsule-height tolerance, no below-stair or horizontal shortcuts.");
  }

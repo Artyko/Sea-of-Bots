@@ -9,6 +9,7 @@ public class NavalVoxelStyle : MonoBehaviour
     private readonly Dictionary<Material, Material> shades = new Dictionary<Material, Material>();
     private readonly List<Texture2D> textures = new List<Texture2D>();
     private Material[] scorch;
+    private Material[] metalImpact;
     public void Scorch(GameObject cell,float strength)
     {
         if(scorch==null)
@@ -19,6 +20,21 @@ public class NavalVoxelStyle : MonoBehaviour
             for(int i=0;i<3;i++){scorch[i]=new Material(shader);scorch[i].color=colors[i];}
         }
         Material material=scorch[strength>0.65f?2:(strength>0.3f?1:0)];
+        cell.GetComponent<Renderer>().sharedMaterial=material;Apply(cell,material);
+    }
+    public void Impact(GameObject cell,float strength,bool metal)
+    {
+        if(!metal){Scorch(cell,strength);return;}
+        if(metalImpact==null)
+        {
+            Shader shader=Shader.Find("Unlit/Color");if(shader==null)shader=Shader.Find("Standard");
+            // Fresh iron strikes expose a cold bright scrape first, then darken
+            // toward blue-grey.  They must never reuse the brown/black timber char.
+            Color[] colors={new Color(.56f,.60f,.62f),new Color(.35f,.39f,.42f),new Color(.20f,.24f,.27f)};
+            metalImpact=new Material[3];
+            for(int i=0;i<3;i++){metalImpact[i]=new Material(shader);metalImpact[i].color=colors[i];}
+        }
+        Material material=metalImpact[strength>.65f?2:(strength>.3f?1:0)];
         cell.GetComponent<Renderer>().sharedMaterial=material;Apply(cell,material);
     }
     public void Apply(GameObject cell, Material original)
@@ -69,6 +85,7 @@ public class NavalVoxelStyle : MonoBehaviour
     private void OnDestroy()
     {
         if(scorch!=null)foreach(Material material in scorch)Destroy(material);
+        if(metalImpact!=null)foreach(Material material in metalImpact)Destroy(material);
         foreach(Material material in shades.Values) Destroy(material);
         foreach(Texture2D texture in textures) Destroy(texture);
         if(cube!=null) Destroy(cube);

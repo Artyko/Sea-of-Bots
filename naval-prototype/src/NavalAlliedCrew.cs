@@ -16,7 +16,15 @@ public class NavalAlliedCrew : MonoBehaviour
     public bool RecoveringOverboard {get{return roles.RecoveringOverboard;}}
     public bool NeedsRetreat {get{return roles.NeedsRetreat;}}
     public bool HasHelmsman { get { return roles.HasHelmsman; } }
-    private Vector3 SpawnPost(int i){return i<=hull.Definition.GunCount?stations.Post(i):new Vector3(NavalShipDefinition.StandbyX(hull.Definition,i),hull.Definition.WeatherDeck,NavalShipDefinition.StandbyZ(i));}
+    private Vector3 SpawnPost(int i)
+    {
+        if(hull.Definition.SteamPowered)
+        {
+            if(i>=hull.Definition.CrewCount-2)return stations.MainBatteryCrewPost(i-(hull.Definition.CrewCount-2));
+            return i==0?stations.Post(0):NavalShipDefinition.StandbyPost(hull.Definition,i);
+        }
+        return i<=hull.Definition.GunCount?stations.Post(i):NavalShipDefinition.StandbyPost(hull.Definition,i);
+    }
     public void Initialize(FirstPersonMover owner,NavalHull ship,NavalStructure frame,NavalStations controls,float feet)
     {player=owner;hull=ship;structure=frame;stations=controls;footOffset=feet;crew=new Character[ship.Definition.CrewCount];workers=new NavalRepairSailor[crew.Length];spawned=new bool[crew.Length];roles.Initialize(hull,stations,crew,workers);}
     private void LateUpdate()
@@ -40,7 +48,7 @@ public class NavalAlliedCrew : MonoBehaviour
         }
         NavalTestWorld world=NavalTestWorld.Active;
         NavalShipVisuals rig=hull.Root.GetComponent<NavalShipVisuals>();
-        bool useful=NavalCrewRoles.HelmUseful(rig!=null?rig.SailPowerFactor:0f,world!=null?world.ShipVelocity.magnitude:0f);
+        bool useful=NavalCrewRoles.HelmUseful(rig!=null?rig.PowerFactor:0f,world!=null?world.ShipVelocity.magnitude:0f);
         roles.Tick(Mathf.Min(Time.deltaTime,0.05f),world!=null?world.EnemyBoat:null,world!=null?world.EnemyVelocity:Vector3.zero,useful,footOffset);
     }
     private void OnGUI()
@@ -49,7 +57,8 @@ public class NavalAlliedCrew : MonoBehaviour
         for(int i=0;i<hull.Definition.CrewCount;i++)if(crew[i]!=null&&crew[i].IsAlive())
         {
             Vector3 screen=camera.WorldToScreenPoint(crew[i].transform.position+Vector3.up*2.2f);
-            if(screen.z>0f)GUI.Label(new Rect(screen.x-90f,Screen.height-screen.y-20f,200f,25f),"Ally: "+roles.Role(i));
+            if(screen.z>0f&&screen.x>-200f&&screen.x<Screen.width+200f&&screen.y>-30f&&screen.y<Screen.height+30f)
+                GUI.Label(new Rect(screen.x-90f,Screen.height-screen.y-20f,200f,25f),"Ally: "+roles.Role(i));
         }
     }
     private void OnDestroy(){foreach(Character sailor in crew)if(sailor!=null)Destroy(sailor.gameObject);}

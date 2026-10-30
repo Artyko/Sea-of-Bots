@@ -7,9 +7,9 @@ public static class NavalRepairRoutes
         if(route.Count>0){NavalWalkPoint last=route[route.Count-1];if(Math.Abs(last.X-x)+Math.Abs(last.Y-y)+Math.Abs(last.Z-z)<0.01f)return;}
         route.Add(new NavalWalkPoint(x,y,z));
     }
-    public static List<NavalWalkPoint> Plan(NavalWalkPoint start,NavalWalkPoint goal,bool compartments=false,float stairWidth=1.85f,float holdFloor=BoatDimensions.HoldFloor)
+    public static List<NavalWalkPoint> Plan(NavalWalkPoint start,NavalWalkPoint goal,bool compartments=false,float stairWidth=1.85f,float holdFloor=BoatDimensions.HoldFloor,float lowerCorridor=1.65f,float upperCorridor=1.4f)
     {
-        if(!compartments)return OpenPlan(start,goal,stairWidth,holdFloor);
+        if(!compartments)return OpenPlan(start,goal,stairWidth,holdFloor,lowerCorridor,upperCorridor);
         List<NavalWalkPoint> result=new List<NavalWalkPoint>();
         if(start.Y<.3f&&goal.Y<.3f&&NavalCompartmentMath.Region(start.X,start.Z)!=0&&NavalCompartmentMath.Region(start.X,start.Z)==NavalCompartmentMath.Region(goal.X,goal.Z))
         {
@@ -24,16 +24,20 @@ public static class NavalRepairRoutes
         NavalWalkPoint destination=goal;
         bool room=goal.Y<0.3f&&NavalCompartmentMath.Region(goal.X,goal.Z)!=0;
         if(room)destination=new NavalWalkPoint(goal.X<0f?-.95f:.95f,holdFloor,goal.Z<0f?-NavalCompartmentMath.DoorZ:NavalCompartmentMath.DoorZ);
-        foreach(NavalWalkPoint p in OpenPlan(start,destination,stairWidth,holdFloor))
+        foreach(NavalWalkPoint p in OpenPlan(start,destination,stairWidth,holdFloor,lowerCorridor,upperCorridor))
         {float x=p.Y<0.3f?Math.Max(-.95f,Math.Min(.95f,p.X)):p.X;Add(result,x,p.Y,p.Z);}
         if(room)
         {
             float side=goal.X<0f?-1f:1f;Add(result,side*2f,holdFloor,destination.Z);
             Add(result,side*2f,holdFloor,goal.Z);Add(result,goal.X,goal.Y,goal.Z);
         }
+        // Corridor points are clamped away from longitudinal bulkheads, but a
+        // legitimate work post in the open centre lane must remain the exact
+        // endpoint requested by the duty controller.
+        else Add(result,goal.X,goal.Y,goal.Z);
         return result;
     }
-    private static List<NavalWalkPoint> OpenPlan(NavalWalkPoint start,NavalWalkPoint goal,float stairWidth,float holdFloor)
+    private static List<NavalWalkPoint> OpenPlan(NavalWalkPoint start,NavalWalkPoint goal,float stairWidth,float holdFloor,float lowerCorridor,float upperCorridor)
     {
         List<NavalWalkPoint> route=new List<NavalWalkPoint>();
         bool upper=goal.Y>0.3f;
@@ -53,29 +57,29 @@ public static class NavalRepairRoutes
         {
             if(fromUpper)
             {
-                if(Math.Abs(start.X)<1.1f&&start.Z>=-3f&&start.Z<0.8f)Add(route,0f,0.825f,0.8f);
+                if(Math.Abs(start.X)<1.1f&&start.Z>=-3f&&start.Z<NavalWalkRoutes.TopLandingZ)Add(route,0f,0.825f,NavalWalkRoutes.TopLandingZ);
                 else Add(route,side*1.4f,0.825f,start.Z);
-                Add(route,side*1.4f,0.825f,0.8f);
+                Add(route,side*1.4f,0.825f,NavalWalkRoutes.TopLandingZ);
                 foreach(NavalWalkPoint p in NavalWalkRoutes.Down(holdFloor))Add(route,p.X,p.Y,p.Z);
             }
             else
             {
-                Add(route,side*1.65f,holdFloor,start.Z);
-                Add(route,side*1.65f,holdFloor,-3.65f);
+                Add(route,side*lowerCorridor,holdFloor,start.Z);
+                Add(route,side*lowerCorridor,holdFloor,-3.65f);
                 Add(route,0f,holdFloor,-3.65f);
                 foreach(NavalWalkPoint p in NavalWalkRoutes.UpFrom(holdFloor,-3.65f,holdFloor))Add(route,p.X,p.Y,p.Z);
             }
             start=route[route.Count-1];
         }
-        float floor=upper?0.825f:holdFloor,corridor=upper?1.4f:1.65f;
+        float floor=upper?0.825f:holdFloor,corridor=upper?upperCorridor:lowerCorridor;
         float nextSide=goal.X<0f?-1f:1f;
         side=start.X< -0.1f?-1f:start.X>0.1f?1f:nextSide;
-        if(upper&&Math.Abs(start.X)<1.1f&&start.Z>=-3f&&start.Z<0.8f)
-        {Add(route,0f,floor,0.8f);start=new NavalWalkPoint(0f,floor,0.8f);}
+        if(upper&&Math.Abs(start.X)<1.1f&&start.Z>=-3f&&start.Z<NavalWalkRoutes.TopLandingZ)
+        {Add(route,0f,floor,NavalWalkRoutes.TopLandingZ);start=new NavalWalkPoint(0f,floor,NavalWalkRoutes.TopLandingZ);}
         Add(route,side*corridor,floor,start.Z);
         if(side!=nextSide)
         {
-            float cross=0.8f;
+            float cross=upper?NavalWalkRoutes.TopLandingZ:.8f;
             if(!upper&&Math.Abs(start.Z+3.65f)+Math.Abs(goal.Z+3.65f)<Math.Abs(start.Z-0.8f)+Math.Abs(goal.Z-0.8f))cross=-3.65f;
             Add(route,side*corridor,floor,cross);Add(route,nextSide*corridor,floor,cross);
         }

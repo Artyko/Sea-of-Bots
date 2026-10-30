@@ -8,8 +8,8 @@ public sealed class NavalHelmDecision
  private int mode=-1,loggedPass;
  private float observedShot;
  private float heading;
- private bool initialized;
- public void Reset(){mode=-1;loggedPass=0;observedShot=0;initialized=false;combat.Reset();stern.Reset();firePass.Reset();}
+ private bool initialized,mainAssistKnown,mainAssistLogged;
+ public void Reset(){mode=-1;loggedPass=0;observedShot=0;initialized=mainAssistKnown=mainAssistLogged=false;combat.Reset();stern.Reset();firePass.Reset();}
  public Vector3 Course(Transform own,NavalHull hull,NavalStations guns,Transform enemy,Vector3 enemyVelocity,float speed,float dt,bool retreat,bool targetRetreat,NavalRamDamage ram,ref float throttle)
  {
   int next=NavalHelmIntentMath.Mode(guns.RescueStop,guns.MustBoard,retreat||guns.CrewRepairRetreat||guns.AllGunsBroken&&guns.CanRestoreGun);
@@ -27,11 +27,23 @@ public sealed class NavalHelmDecision
    float clearance=NavalPursuitMath.StandOff(hull.WorldScale,other!=null?other.ShipScale:hull.WorldScale);
    float bearing=Mathf.Atan2(toward.x,toward.z)*Mathf.Rad2Deg;
    bool shot=guns.LastCrewShotAt>observedShot;observedShot=guns.LastCrewShotAt;
-   if((firePass.Phase>0||toward.magnitude<=clearance+32)&&firePass.Step(dt,own.eulerAngles.y,bearing,toward.magnitude,clearance,guns.PortWorking,guns.StarboardWorking,guns.FiringSideAtShip(enemy),shot,guns.CanReachShipRange(enemy)))
+   int port=guns.PortCombatWorking,starboard=guns.StarboardCombatWorking;
+   int preferred=hull.Definition.SteamPowered?NavalSteamDamageControlTactics.HealthierSide(0,port,starboard,hull.LeftWater,hull.RightWater):0;
+   float passMargin=hull.Definition.SteamPowered?72f:32f;
+   float passDuration=hull.Definition.SteamPowered?18f:45f,quiet=hull.Definition.SteamPowered?8f:12f,separation=hull.Definition.SteamPowered?14f:20f;
+   // Sailing ships retain the deliberate close pass. Steam ships use their
+   // closed-loop ballistic stand-off instead; the old pass was the reason two
+   // ironclads kept closing from 85 m until physical contact.
+   if(!hull.Definition.SteamPowered&&(firePass.Phase>0||toward.magnitude<=clearance+passMargin)&&firePass.Step(dt,own.eulerAngles.y,bearing,toward.magnitude,clearance,port,starboard,guns.FiringSideAtShip(enemy),shot,guns.CanReachShipRange(enemy),preferred,passDuration,quiet,separation))
    {
     if(loggedPass==0){stern.Reset();combat.Reset();}
-    desired=Quaternion.Euler(0,firePass.Heading,0)*Vector3.forward;throttle=firePass.Throttle;
-    if(loggedPass!=firePass.Phase){loggedPass=firePass.Phase;Debug.Log("[NavalPrototype] Fire pass: "+own.name+" phase="+loggedPass+" side="+firePass.Side+" distance="+toward.magnitude.ToString("F1")+" last crew shot="+guns.LastCrewShotAt.ToString("F1"));}
+   float passHeading=firePass.Heading;
+   if(firePass.Phase<3&&guns.MainBatteryHelmPriority)
+   {
+     passHeading=guns.MainBatteryHelmCourse(own.eulerAngles.y,bearing,firePass.Side);
+   }
+    desired=Quaternion.Euler(0,passHeading,0)*Vector3.forward;throttle=firePass.Throttle;
+    if(loggedPass!=firePass.Phase){loggedPass=firePass.Phase;Debug.Log("[NavalPrototype] Fire pass: "+own.name+" phase="+loggedPass+"/"+firePass.PhaseName+" side="+firePass.Side+" distance="+toward.magnitude.ToString("F1")+" last crew shot="+guns.LastCrewShotAt.ToString("F1"));}
    }
    else
    {
@@ -42,6 +54,12 @@ public sealed class NavalHelmDecision
   }
   if(!initialized){initialized=true;heading=own.eulerAngles.y;}
   float wanted=Mathf.Atan2(desired.x,desired.z)*Mathf.Rad2Deg;
+  bool mainAssist=mode==0&&guns.MainBatteryHelmPriority;
+  if(!mainAssistKnown||mainAssist!=mainAssistLogged)
+  {
+   mainAssistKnown=true;mainAssistLogged=mainAssist;
+   Debug.Log("[NavalPrototype] Main battery helm assist: ship="+own.name+" active="+mainAssist+" targetYaw="+NavalBroadsideMath.Delta(own.eulerAngles.y,Mathf.Atan2(toward.x,toward.z)*Mathf.Rad2Deg).ToString("F1")+" desiredHeading="+wanted.ToString("F1"));
+  }
   heading=NavalHelmIntentMath.Heading(heading,wanted,dt,mode==1?8:16);
   return Quaternion.Euler(0,heading,0)*Vector3.forward;
  }
