@@ -34,7 +34,7 @@ public partial class NavalRepairSailor
     private bool InsideWalkingDeck(Vector3 point)
     {
         var body=Controller();float radius=body!=null?body.radius*Mathf.Abs(body.transform.lossyScale.x):.38f;
-        return NavalCrewDeckSafety.Inside(point.x,point.z,hull.Definition.HullHalfWidth(point.z),hull.WorldScale,radius);
+        return NavalCrewDeckSafety.Inside(point.x,point.z,hull.Definition,radius);
     }
     private void DeckStepHeight(CharacterController controller)
     {

@@ -566,7 +566,7 @@ public partial class NavalRepairSailor : MonoBehaviour
             bool currentGap=hull.DeckGapAt(feet,NavigationRadius);
             bool proposedGap=hull.DeckGapAt(proposed,NavigationRadius);
             if(!currentGap)deckGapEscape=false;
-            else if(!deckGapEscape&&RecoverDeckGap())
+            else if(!deckGapEscape&&RecoverDeckGap(destination))
             {
                 // Execute the newly inserted safe endpoint on the next frame.
                 HoldPosition();return;

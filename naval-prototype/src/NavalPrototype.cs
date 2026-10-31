@@ -224,7 +224,7 @@ public partial class NavalTestWorld : MonoBehaviour
         if(GetComponent<NavalBattleTelemetry>()==null)gameObject.AddComponent<NavalBattleTelemetry>();
         ToggleEnemy();
         rough=era==NavalEra.Sail;
-        Debug.Log("[NavalPrototype] v254 "+era+" ships and waves started on native editor map.");
+        Debug.Log("[NavalPrototype] v257 "+era+" ships and waves started on native editor map.");
     }
 
     private Material MakeMaterial(Color color)

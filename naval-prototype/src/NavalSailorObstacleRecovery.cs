@@ -44,12 +44,24 @@ public partial class NavalRepairSailor
         for(int i=1;i<=steps;i++)if(!Supported(Vector3.Lerp(a,b,(float)i/steps)))return false;
         return NavigationClear(a,b);
     }
-    private bool RecoverDeckGap()
+    private bool RecoverDeckGap(Vector3 target)
     {
-        // This is only entered when damage removed the supporting cell under a
-        // sailor. Search concentrically so the escape is short and bounded;
-        // the path itself may begin over the hole, but its endpoint must have
-        // full-footprint support and unobstructed body clearance.
+        // A single nearest safe point often remained on the same damaged
+        // patch. The sailor then stepped back towards the original waypoint,
+        // detected the hole again and oscillated until the watchdog expired.
+        // First build one bounded path which leaves the hole and rejoins the
+        // requested route segment from the far side.
+        System.Array.Clear(escapeSupport,0,escapeSupport.Length);
+        System.Array.Clear(escapeLinks,0,escapeLinks.Length);
+        if(Mathf.Abs(target.y-feet.y)*hull.WorldScale<.3f&&GridEscape(target))
+        {
+            deckGapEscape=true;
+            Debug.Log("[NavalPrototype] Crew damage detour: ship="+boat.name+" feet="+feet+" rejoin="+target+" nodes="+escapeWaypoints.Count+" duty="+Status);
+            return true;
+        }
+        // If the damaged patch exceeds the local grid, at least move the
+        // capsule completely onto verified support. A later obstruction pass
+        // can continue from a valid start node.
         for(int ring=1;ring<=6;ring++)for(int n=0;n<16;n++)
         {
             float angle=n*Mathf.PI/8f;

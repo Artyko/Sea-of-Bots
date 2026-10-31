@@ -18,6 +18,7 @@ public sealed class NavalHullColliders : MonoBehaviour
     }
     private static readonly List<NavalHullColliders> all=new List<NavalHullColliders>();
     private readonly List<Chunk> chunks=new List<Chunk>(),dirty=new List<Chunk>();
+    private int lastBudgetFrame=-1;
     private NavalHull hull;
     public int SourceCount {get;private set;}
     public int ActiveCount {get;private set;}
@@ -68,19 +69,32 @@ public sealed class NavalHullColliders : MonoBehaviour
             foreach(Source source in chunk.Sources)
             {
                 source.Cell.ColliderBatched=false;source.Collider.enabled=!source.Cell.Missing;
-                if(hull.PhysicsBody!=null)hull.PhysicsBody.MarkDirty(source.Cell);
             }
         }
         Queue(chunk);
     }
-    public static void FlushAll(){for(int i=0;i<all.Count;i++)if(all[i]!=null)all[i].Flush();}
+    public static void FlushAll(){for(int i=0;i<all.Count;i++)if(all[i]!=null)all[i].Flush(int.MaxValue);}
+    // Damage already disables a stale merged proxy and restores the exact
+    // source boxes synchronously. Re-merging is therefore an optimization, not
+    // a correctness requirement, and may be spread across frames to avoid a
+    // 100+ ms armour-impact hitch.
+    public static void FlushFrame(){for(int i=0;i<all.Count;i++)if(all[i]!=null)all[i].FlushFrameBudget();}
+    private void FlushFrameBudget()
+    {
+        if(lastBudgetFrame==Time.frameCount)return;
+        lastBudgetFrame=Time.frameCount;Flush(1);
+    }
     private void LateUpdate(){if(dirty.Count>0)NavalPerformance.SyncTransforms();}
-    private void Flush()
+    private void Flush(int budget)
     {
         if(dirty.Count==0)return;
         using(NavalPerformance.Measure(NavalPerfArea.ColliderChunks))
         {
-            foreach(Chunk chunk in dirty)Rebuild(chunk);dirty.Clear();
+            int count=Mathf.Min(Mathf.Max(1,budget),dirty.Count);
+            for(int i=0;i<count;i++)
+            {
+                int index=dirty.Count-1;Chunk chunk=dirty[index];dirty.RemoveAt(index);Rebuild(chunk);
+            }
         }
     }
     private void Rebuild(Chunk chunk)
@@ -117,7 +131,6 @@ public sealed class NavalHullColliders : MonoBehaviour
         {
             Source source=chunk.Sources[i];bool included=source.Included;
             source.Cell.ColliderBatched=included;source.Collider.enabled=!source.Cell.Missing&&!included;
-            if(hull.PhysicsBody!=null)hull.PhysicsBody.MarkDirty(source.Cell);
         }
         chunk.Active=proxyIndex;chunk.Batched=membersCount;ActiveCount+=chunk.Active;BatchedCount+=membersCount;chunk.Merged=proxyIndex>0;chunk.Dirty=false;
     }

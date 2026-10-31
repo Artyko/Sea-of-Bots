@@ -8,6 +8,7 @@ class CargoChecks {
  for(int n=0;n<total;n++){
  var p=NavalCargoLayout.Position(ship,n);Check(Math.Abs(p.X)+.675f/ship.Scale<ship.HullHalfWidth(p.Z)&&Math.Abs(p.Z)+.675f/ship.Scale<6,"Crates stay inside hull");
  var pickup=NavalCargoLayout.Pickup(ship,p);
+ if(ship.SteamPowered)Check(NavalCrewDeckSafety.Inside(pickup.X,pickup.Z,ship,.8f),"Steam pickup retains full capsule clearance inside tapered hull");
  double pickupDistance=Math.Sqrt((pickup.X-p.X)*(pickup.X-p.X)+(pickup.Z-p.Z)*(pickup.Z-p.Z))*ship.Scale;
  Check(pickupDistance>.675f+.8f+.1f,"Actual 0.8m sailor radius clears crate at pickup");
  if(Math.Abs(p.Z)>NavalBallastLayout.InnerZ&&Math.Abs(p.Z)<5.2f)Check(Math.Abs(pickup.X)*ship.Scale+.8f<(NavalBallastLayout.X-NavalBallastLayout.Width*.5f)*ship.Scale,"Full-size pickup capsule fits before ballast wall");
@@ -16,6 +17,7 @@ class CargoChecks {
  var start=direction==0?gunPost:pickup;var destination=direction==0?pickup:gunPost;
  var route=NavalSupplyRoutes.Plan(start,destination,ship);Check(route.Count>0,"Supply accessible by shared routes");
  var prev=start;foreach(var q in route){Check(Math.Abs(q.Y-prev.Y)*ship.Scale<.65f,"No deck teleport "+ship.Name+" crate="+n+" p="+p.X+","+p.Y+","+p.Z+" prev="+prev.X+","+prev.Y+","+prev.Z+" next="+q.X+","+q.Y+","+q.Z);
+ if(ship.SteamPowered&&(q.X!=destination.X||q.Y!=destination.Y||q.Z!=destination.Z))Check(NavalCrewDeckSafety.Inside(q.X,q.Z,ship,.85f),"Steam supply detour clears tapered bow with full capsule");
  for(int j=0;j<total;j++){var c=NavalCargoLayout.Position(ship,j);if(q.Y<c.Y-.1f||q.Y>c.Y+1.8f/ship.Scale||prev.Y<c.Y-.1f||prev.Y>c.Y+1.8f/ship.Scale)continue;
  float half=NavalCargoLayout.RouteHalfExtent(ship);Check(!NavalSupplyRoutes.Hits(prev,q,c.X-half,c.X+half,c.Z-half,c.Z+half),"Cargo hit "+ship.Name+" n="+n+" obstacle="+j+" from="+prev.X+","+prev.Z+" to="+q.X+","+q.Z);}
  prev=q;}routes++;

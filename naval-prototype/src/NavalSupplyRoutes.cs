@@ -40,6 +40,7 @@ public static class NavalSupplyRoutes
   return NavalShipRoutes.ClearSteamWeatherDeck(start,repaired,ship);
  }
  private static bool CargoClear(NavalWalkPoint a,NavalWalkPoint b,NavalShipDefinition ship){
+  if(ship.SteamPowered&&!HullClear(a,b,ship))return false;
   for(int level=0;level<ship.MaintenanceDeckCount;level++){float floor=ship.MaintenanceFloor(level);
    if(System.Math.Abs(a.Y-floor)<.08f&&System.Math.Abs(b.Y-floor)<.08f&&Hits(a,b,-ship.StairWidth*.5f-.5f/ship.Scale,ship.StairWidth*.5f+.5f/ship.Scale,-3f-.5f/ship.Scale,.5f+.5f/ship.Scale))return false;
   }
@@ -50,6 +51,17 @@ public static class NavalSupplyRoutes
   if(ship.SteamPowered&&ship.MaintenanceFloorAt(a.Y)&&ship.MaintenanceFloorAt(b.Y)&&System.Math.Abs(a.Y-b.Y)<.08f){
    float mx=NavalMainMagazineLayout.RouteHalfWidth(ship);
    if(Hits(a,b,-mx,mx,NavalMainMagazineLayout.RouteAft(ship),NavalMainMagazineLayout.RouteForward(ship)))return false;
+  }
+  return true;
+ }
+ private static bool HullClear(NavalWalkPoint a,NavalWalkPoint b,NavalShipDefinition ship){
+  float dx=b.X-a.X,dz=b.Z-a.Z,distance=(float)Math.Sqrt(dx*dx+dz*dz)*ship.Scale;
+  int steps=Math.Max(1,(int)Math.Ceiling(distance/.55f));
+  // Include both endpoints and sample more finely than a sailor radius. This
+  // rejects straight chords which cut through the convex bow even when both
+  // centres individually appear to be inside the outline.
+  for(int i=0;i<=steps;i++){float t=(float)i/steps,x=a.X+dx*t,z=a.Z+dz*t;
+   if(!NavalCrewDeckSafety.Inside(x,z,ship,.85f))return false;
   }
   return true;
  }

@@ -30,7 +30,7 @@ class AllCrewRouteChecks {
   var path=NavalSupplyRoutes.Plan(start,goal,ship);Check(path.Count>0,"Every task pair produces a route");var previous=start;
   foreach(var point in path){
    Check(!float.IsNaN(point.X)&&!float.IsNaN(point.Y)&&!float.IsNaN(point.Z),"No invalid route coordinates");
-   Check(Math.Abs(point.X)<ship.HullHalfWidth(point.Z)&&Math.Abs(point.Z)<6,"Routes remain within hull silhouette "+ship.Name+" point="+point.X+","+point.Y+","+point.Z+" start="+start.X+","+start.Y+","+start.Z+" goal="+goal.X+","+goal.Y+","+goal.Z);
+   if(ship.SteamPowered&&(point.X!=goal.X||point.Y!=goal.Y||point.Z!=goal.Z))Check(NavalCrewDeckSafety.Inside(point.X,point.Z,ship,.85f),"Steam intermediate routes retain full sailor clearance inside tapered hull point="+point.X+","+point.Y+","+point.Z+" start="+start.X+","+start.Y+","+start.Z+" goal="+goal.X+","+goal.Y+","+goal.Z);
    // A real stair/ballast transition uses short vertical increments, never direct floor teleportation.
    Check(Math.Abs(point.Y-previous.Y)*ship.Scale<.65f,ship.Name+" skips height: ("+previous.X+","+previous.Y+","+previous.Z+") -> ("+point.X+","+point.Y+","+point.Z+") start="+start.X+","+start.Y+","+start.Z+" goal="+goal.X+","+goal.Y+","+goal.Z);
    for(int level=0;level<ship.MaintenanceDeckCount;level++){

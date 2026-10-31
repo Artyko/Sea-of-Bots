@@ -48,6 +48,9 @@ public sealed class NavalShipPhysics : MonoBehaviour
     {
         NavalPhysicsQueries.Register(hull);
         colliderChunks=gameObject.AddComponent<NavalHullColliders>();colliderChunks.Initialize(hull);
+        // Construction has no impact-frame latency to protect and diagnostics
+        // expect the initial compound to be complete immediately.
+        NavalHullColliders.FlushAll();
         NavalPerformance.SyncTransforms();Audit();
         Debug.Log("[NavalPrototype] Exact collider merging: "+colliderChunks.BatchedCount+" source boxes -> "+colliderChunks.ActiveCount+" merged boxes");
         Debug.Log("[NavalPrototype] Kinematic voxel compound: "+hull.Definition.Name+" | "+audit);

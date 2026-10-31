@@ -5,6 +5,10 @@ public enum NavalPenetrationMaterial {Wood,Iron,Machinery,Armor}
 public static class NavalArmorMath
 {
     public const float BreakWear=1.9f;
+    // A SphereCast can touch two neighbouring cells of the same one-cell
+    // exterior belt at a seam.  That is one plate contact, not a second layer
+    // of internal armour.  Real bulkheads are farther behind the skin.
+    public const float EntryPlateSeamDistance=.60f;
     public const float RicochetCosine=.34f,SpallThreshold=.70f;
     public const float PointBlankRange=15f,CloseRange=55f,NormalRange=110f,LongRange=180f,ExtremeRange=260f;
     public static float BlastRadius(float radius,float multiplier)
@@ -109,6 +113,8 @@ public static class NavalArmorMath
     // surface counts as internal travel.
     public static float InternalEncounterDistance(float travelledInside,float hitDistance,float entryOffset)
     {return Math.Max(0f,travelledInside)+Math.Max(0f,hitDistance-Math.Max(0f,entryOffset));}
+    public static bool IsEntryPlateSeam(float internalDistance,bool hydraulicShell,bool internalBarrier)
+    {return hydraulicShell&&!internalBarrier&&internalDistance<=EntryPlateSeamDistance;}
     private static float Lerp(float a,float b,float t){return a+(b-a)*Math.Max(0f,Math.Min(1f,t));}
 }
 public static class NavalImpactMaterial

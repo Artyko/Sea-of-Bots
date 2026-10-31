@@ -1,6 +1,15 @@
 ﻿using System;
 public static class NavalCrewDeckSafety
 {
+    public static bool Inside(float x,float z,NavalShipDefinition ship,float radius)
+    {
+        float scale=Math.Max(.1f,ship.Scale),margin=Math.Max(.05f,radius)/scale;
+        // At a tapered bow the capsule also occupies points ahead and astern
+        // of its centre. Checking only HalfWidth(z) accepted a route corner at
+        // z=4.31 whose forward shoulder intersected the narrower z=4.5 belt.
+        float half=Math.Min(ship.HullHalfWidth(z),Math.Min(ship.HullHalfWidth(z-margin),ship.HullHalfWidth(z+margin)));
+        return Math.Abs(z)<=BoatDimensions.HalfLength-margin&&Math.Abs(x)<=half-margin;
+    }
     public static bool Inside(float x,float z,float halfWidth,float scale,float radius)
     {
         float margin=Math.Max(.05f,radius)/Math.Max(.1f,scale);

@@ -63,7 +63,7 @@ public static class NavalPerformance
         System.Array.Clear(totals,0,totals.Length);System.Array.Clear(maxima,0,maxima.Length);System.Array.Clear(calls,0,calls.Length);
         System.Array.Clear(average,0,average.Length);System.Array.Clear(peak,0,peak.Length);
     }
-    public static void SyncTransforms(){NavalPhysicsQueries.Invalidate();NavalHullColliders.FlushAll();using(Measure(NavalPerfArea.PhysicsSync))Physics.SyncTransforms();}
+    public static void SyncTransforms(){NavalPhysicsQueries.Invalidate();NavalHullColliders.FlushFrame();using(Measure(NavalPerfArea.PhysicsSync))Physics.SyncTransforms();}
     public static void Draw()
     {
         if(!Enabled||Event.current.type!=EventType.Repaint)return;

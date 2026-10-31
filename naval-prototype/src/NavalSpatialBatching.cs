@@ -10,7 +10,7 @@ public static class NavalSpatialBatching
     // the hull removes artificial seams at x/y/z=0, allowing whole deck and
     // bulkhead rows to become one exact compound shape.
     public static float ColliderChunkSize(NavalShipDefinition definition)
-    {return definition!=null&&definition.SteamPowered?8f:2f;}
+    {return definition!=null&&definition.SteamPowered?4f:2f;}
     public static int ColliderChunk(float coordinate,float size,bool centered)
     {return (int)Math.Floor((coordinate+(centered?size*.5f:0f))/size);}
 }

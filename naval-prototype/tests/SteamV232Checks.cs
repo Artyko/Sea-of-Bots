@@ -180,6 +180,10 @@ class SteamV232Checks
         Check(NavalMainBatteryMath.ProjectileSpeed>ship.ProjectileSpeed&&NavalMainBatteryMath.ProjectilePower>ship.ProjectilePower*3.3f,"Main caliber uses a faster heavy armour-piercing shell");
         Check(NavalArmorMath.PenetrationPower(NavalMainBatteryMath.ProjectilePower,NavalMainBatteryMath.MaximumRange)>=NavalArmorMath.BreakWear,"Main caliber retains armour penetration at its maximum range");
         Check(NavalArmorMath.Resistance(NavalPenetrationMaterial.Armor)>NavalArmorMath.Resistance(NavalPenetrationMaterial.Iron)&&NavalArmorMath.Resistance(NavalPenetrationMaterial.Iron)>NavalArmorMath.Resistance(NavalPenetrationMaterial.Wood),"Penetration consumes energy according to struck material");
+        float ordinaryArmor=NavalArmorMath.ResidualPower(ship.ProjectilePower,150f,NavalPenetrationMaterial.Armor);
+        float woodenDeck=NavalArmorMath.ResidualPower(ship.ProjectilePower,150f,NavalPenetrationMaterial.Wood);
+        Check(ordinaryArmor>0f&&woodenDeck>ordinaryArmor,"A square casemate AP hit perforates ordinary armour at combat range and retains more energy through a wooden deck");
+        Check(NavalArmorMath.Perforates(ship.ProjectilePower,150f,NavalPenetrationMaterial.Armor)&&NavalArmorMath.Perforates(ship.ProjectilePower,150f,NavalPenetrationMaterial.Wood),"Both ordinary armour and wooden deck use the same post-perforation fuze path");
         float closeResidual=NavalArmorMath.ResidualPower(NavalMainBatteryMath.ProjectilePower,25f,NavalPenetrationMaterial.Armor);
         float longResidual=NavalArmorMath.ResidualPower(NavalMainBatteryMath.ProjectilePower,250f,NavalPenetrationMaterial.Armor);
         Check(closeResidual>longResidual&&longResidual>0f,"Heavy AP residual penetration falls with distance but still perforates at battle range");
@@ -194,6 +198,8 @@ class SteamV232Checks
         Check(NavalArmorMath.InternalBlastRadiusMultiplier(NavalMainBatteryMath.ProjectilePower,closeResidual)>NavalArmorMath.InternalBlastRadiusMultiplier(ship.ProjectilePower,.1f),"Main-caliber internal burst wrecks a larger compartment than a low-residual casemate shell");
         Check(Math.Abs(NavalArmorMath.InternalEncounterDistance(0f,.72f,.22f)-.50f)<.001f,"Entry sweep counts only travel behind the perforated surface");
         Check(Math.Abs(NavalArmorMath.InternalEncounterDistance(.8f,.35f,0f)-1.15f)<.001f,"Later obstruction sweeps accumulate internal travel");
+        Check(NavalArmorMath.IsEntryPlateSeam(.02f,true,false)&&NavalArmorMath.IsEntryPlateSeam(.60f,true,false),"Neighbouring exterior belt cells through the full entry tolerance are not false internal armour");
+        Check(!NavalArmorMath.IsEntryPlateSeam(.02f,true,true)&&!NavalArmorMath.IsEntryPlateSeam(.61f,true,false),"Internal barriers and genuinely separated armour remain real obstructions");
         Check(NavalMainMagazineBlastMath.HullRadius>NavalPowderBlastMath.HullRadius*2f&&NavalMainMagazineBlastMath.Power>NavalPowderBlastMath.Power*2f,"Main magazine detonation is catastrophic");
         Check(ship.Compartments&&ship.Partitions,"Ironclad retains compartment and partition systems");
         Near(ship.ArmorDamageScale,.65f,.0001f,"Ironclad collateral damage scale");
@@ -258,6 +264,11 @@ class SteamV232Checks
             if(cargo.Z< -4f)Check(Math.Abs(cargo.X)>.675f/ship.Scale+bodyRadius,"Aft stores leave the centreline pump approach open");
             Check(Math.Abs(cargo.X)<ballast.X-ballast.Width*.5f-.10f,"Shell racks do not intersect ballast tanks");
             if(cargo.Z< -4f)Check(Math.Abs(cargo.Z+3.65f)*ship.Scale>2.4f,"Aft stores leave a full straight approach to the upper stair landing");
+            if(Math.Abs(cargo.Z-NavalMainMagazineLayout.Z)<=NavalMainMagazineLayout.RouteHalfDepth(ship)+.2f)
+            {
+                Check(Math.Abs(pickup.X)>=NavalMainMagazineLayout.RouteHalfWidth(ship)+.10f,"Magazine-side stores keep the pickup capsule clear of the armoured trunk");
+                Check(NavalCrewDeckSafety.Inside(pickup.X,pickup.Z,ship,.8f),"Magazine pickup remains inside the tapered bow with a full sailor capsule");
+            }
         }
         Check(NavalAmmoDispatch.BetterCandidate(2,2,8,0,true,false),"Ammo dispatch selects the emptiest working gun instead of the first gun");
         Check(!NavalAmmoDispatch.BetterCandidate(0,2,8,0,true,true),"A second runner cannot reserve the same gun");

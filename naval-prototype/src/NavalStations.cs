@@ -567,6 +567,10 @@ public class NavalCannonball : MonoBehaviour
     private bool HitSolid(Vector3 step)
     {
         if(step.sqrMagnitude<0.00000001f)return false;
+        // Keep a fixed base for every hit returned by this sweep. Otherwise
+        // several sorted contacts in one SphereCast add the entry distance
+        // repeatedly and make the fuze appear to travel farther than it did.
+        float sweepArmedTravelled=armedTravelled;
         // Shared scratch storage: projectile updates run sequentially on the Unity thread.
         // A full buffer must be grown and queried again: NonAlloc hits are unsorted.
         int count;
@@ -628,7 +632,17 @@ public class NavalCannonball : MonoBehaviour
                 bool perforates=voxel.Armored?NavalArmorMath.Penetrates(voxel.CannonWear,appliedArmorPower):residual>.05f;
                 if(armedHull!=null&&voxel.Owner==armedHull)
                 {
-                    float encounter=NavalArmorMath.InternalEncounterDistance(armedTravelled,hit.distance,armedStepOffset);
+                    float encounter=NavalArmorMath.InternalEncounterDistance(sweepArmedTravelled,hit.distance,armedStepOffset);
+                    if(NavalArmorMath.IsEntryPlateSeam(encounter,voxel.HydraulicShell,voxel.InternalBarrier))
+                    {
+                        // The projectile sphere overlaps a neighbouring voxel
+                        // of the already perforated outer plate. Do not turn
+                        // that lateral seam into an instant internal burst or
+                        // run a second hull-damage pass in the impact frame.
+                        penetratedCells.Add(voxel);
+                        if(projectilePower>2f)Debug.Log("[NavalPrototype] Heavy AP cleared entry-plate seam: target="+voxel.Owner.Root.name+" internalTravel="+encounter.ToString("F2"));
+                        continue;
+                    }
                     float internalPower=Mathf.Max(.35f,armedResidual-NavalArmorMath.Resistance(penetrationMaterial)*.45f);
                     if(encounter<.55f)
                     {
@@ -658,6 +672,7 @@ public class NavalCannonball : MonoBehaviour
                 {
                     voxel.Owner.Damage(voxel.Owner.Root.InverseTransformPoint(damagePoint),baseRadius*.65f,true,voxel,projectilePower*.45f,appliedArmorPower);
                     armedHull=voxel.Owner;armedResidual=residual;armedTravelled=0f;armedStepOffset=Mathf.Max(0f,hit.distance);
+                    sweepArmedTravelled=0f;
                     armedFuseDistance=NavalArmorMath.InternalFuseDepth(residual,penetrationMaterial);penetratedCells.Add(voxel);
                     velocity*=NavalArmorMath.ExitVelocityFactor(armorPower,residual,penetrationMaterial);
                     Debug.Log("[NavalPrototype] Heavy AP fuse armed: target="+voxel.Owner.Root.name+" caliberPower="+projectilePower.ToString("F2")+" travel="+impactTravel.ToString("F1")+" material="+penetrationMaterial+" retained="+armorPower.ToString("F2")+" resistance="+NavalArmorMath.Resistance(penetrationMaterial).ToString("F2")+" residual="+residual.ToString("F2")+" delayDistance="+armedFuseDistance.ToString("F2"));

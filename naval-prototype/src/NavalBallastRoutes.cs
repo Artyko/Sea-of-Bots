@@ -14,7 +14,7 @@ public static class NavalBallastRoutes
     public static List<NavalWalkPoint> Plan(NavalWalkPoint start,NavalWalkPoint goal,bool partitions,float stairs,float floor,float scale)
     {return Plan(start,goal,partitions,stairs,floor,scale,new NavalBallastLayout.Dimensions(NavalBallastLayout.X,NavalBallastLayout.Z,NavalBallastLayout.Width,NavalBallastLayout.Length,NavalBallastLayout.Height,NavalBallastLayout.RampRun,NavalBallastLayout.Steps),1.65f,1.4f);}
     public static List<NavalWalkPoint> Plan(NavalWalkPoint start,NavalWalkPoint goal,bool partitions,float stairs,float floor,NavalShipDefinition ship)
-    {return Plan(start,goal,partitions,stairs,floor,ship.Scale,NavalBallastLayout.For(ship),ship.SteamPowered?1.20f:1.65f,ship.SteamPowered?1.20f:1.4f);}
+    {return Plan(start,goal,partitions,stairs,floor,ship.Scale,NavalBallastLayout.For(ship),ship.SteamPowered?1.10f:1.65f,ship.SteamPowered?1.10f:1.4f);}
     private static List<NavalWalkPoint> Plan(NavalWalkPoint start,NavalWalkPoint goal,bool partitions,float stairs,float floor,float scale,NavalBallastLayout.Dimensions d,float lowerCorridor,float upperCorridor)
     {
         List<NavalWalkPoint> route=new List<NavalWalkPoint>();

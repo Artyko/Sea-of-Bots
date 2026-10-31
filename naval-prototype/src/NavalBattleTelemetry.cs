@@ -11,7 +11,7 @@ public sealed class NavalBattleTelemetry : MonoBehaviour
   if(active){elapsed+=Time.unscaledDeltaTime;frames++;
    if(elapsed>=15f){
     var own=world.PlayerHull;var other=world.EnemyBoat!=null?world.EnemyBoat.GetComponent<NavalRamDamage>():null;
-  Debug.Log("[NavalPrototype] Performance v254: era="+NavalSessionSettings.Era+" ships="+(own!=null?own.Definition.Name:"none")+"/"+(other!=null?other.Hull.Definition.Name:"none")+
+  Debug.Log("[NavalPrototype] Performance v257: era="+NavalSessionSettings.Era+" ships="+(own!=null?own.Definition.Name:"none")+"/"+(other!=null?other.Hull.Definition.Name:"none")+
      " fps="+(frames/elapsed).ToString("F1")+" frame_ms="+(elapsed*1000f/Mathf.Max(1,frames)).ToString("F2")+" cpu_ms avg/frame / max single call (inclusive): "+NavalPerformance.AutoReport());
     if(!world.Spectating)Debug.Log("[NavalPrototype] Player support: foot="+world.PlayerFootPoint+" radius="+world.PlayerSupportRadius.ToString("F2")+" fallback_hits_interval="+world.ConsumePlayerSupportFallbacks()+" frame_cache_hits_interval="+world.ConsumePlayerSupportCacheHits());
     Debug.Log("[NavalPrototype] Support cache: "+NavalPhysicsQueries.ConsumeDiagnostics());

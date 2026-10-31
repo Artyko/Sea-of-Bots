@@ -161,7 +161,15 @@ public class NavalHull
         damageCandidates.Clear();
         damageIndex.Query(point.x,point.y,point.z,Mathf.Max(0f,radius)+.571f,damageQuery);
         foreach(int index in damageQuery)if(Voxels[index].DamageIndexed)damageCandidates.Add(Voxels[index]);
-        damageCandidates.AddRange(dynamicDamageCells);
+        // Detached wreckage and remote moving fittings used to be appended to
+        // every impact query. Late in a battle that made one armour hit scan a
+        // large part of both broken ships. Cull them in world space before the
+        // more expensive local-space damage loop.
+        Vector3 worldPoint=root.TransformPoint(point);
+        float worldRadius=(Mathf.Max(0f,radius)+.571f)*WorldScale,worldRadiusSq=worldRadius*worldRadius;
+        foreach(NavalHullVoxel cell in dynamicDamageCells)
+            if(cell!=null&&!cell.Missing&&!cell.Detached&&(cell.transform.position-worldPoint).sqrMagnitude<=worldRadiusSq)
+                damageCandidates.Add(cell);
         if(direct!=null&&direct.Owner==this&&!damageCandidates.Contains(direct))damageCandidates.Add(direct);
         return damageCandidates;
     }
