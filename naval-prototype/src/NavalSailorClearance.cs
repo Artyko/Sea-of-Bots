@@ -3,6 +3,11 @@ public partial class NavalRepairSailor
 {
     private static Collider[] clearanceHits=new Collider[32];
     private static RaycastHit[] repairSightHits=new RaycastHit[32];
+    private bool FriendlyCrewShape(Collider shape){
+        if(shape==null)return false;var character=shape.GetComponentInParent<Character>();if(character==null)return false;
+        foreach(var worker in hull.RepairWorkers)if(worker!=null&&worker.robot==character&&character.IsPlayerTeam==robot.IsPlayerTeam)return true;
+        return false;
+    }
     private bool ClearBody(Vector3 local)
     {
         CharacterController body=Controller();float height=body!=null?Mathf.Max(1.8f,body.bounds.size.y):2.6f;
@@ -15,7 +20,7 @@ public partial class NavalRepairSailor
             if(count<clearanceHits.Length)break;System.Array.Resize(ref clearanceHits,clearanceHits.Length*2);
         }
         bool clear=true;
-        for(int i=0;i<count;i++)if(clearanceHits[i]!=null&&!clearanceHits[i].transform.IsChildOf(robot.transform))clear=false;
+        for(int i=0;i<count;i++)if(clearanceHits[i]!=null&&!clearanceHits[i].transform.IsChildOf(robot.transform)&&!FriendlyCrewShape(clearanceHits[i]))clear=false;
         System.Array.Clear(clearanceHits,0,count);return clear;
     }
     private bool RepairSightClear(Vector3 hand,Vector3 offset,NavalRepairableMechanism equipment=null)

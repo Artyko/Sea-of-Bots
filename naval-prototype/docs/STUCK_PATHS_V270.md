@@ -1,0 +1,7 @@
+# v270 recovery follow-up
+
+Logged v268 ironclad stalls repeat on upper aft passage and lower repair approaches; Waiting for leak access can reserve a worker indefinitely. Source revealed execution/planning mismatch: movement checks DeckGapAt with full controller radius, while NavigationWalkClear only sampled centre-ray support. A grid path could therefore re-enter the same unsupported capsule footprint and be rejected by Move repeatedly. Intermediate arrivals also used a local 0.28 radius (1.12 world m on scale 4), letting a route cut a corner before passing the obstacle.
+
+Shared changes: walk-clear segments and grid nodes now obey full-capsule deck-gap exclusions, with a monotone leaving-gap allowance (never reenter after reaching intact support). Fallback gap escape endpoints and supported repair work points exclude deck gaps. Ordinary route arrivals use 0.18 world m horizontal / 0.4 world m vertical bounds; specialised stair/ledge/station arrival policies remain. Leak-access waiting releases after six seconds with a four-second re-reservation cooldown, allowing other work and another worker rather than permanent ownership.
+
+Full build and pump/lower-repair/stair regression checks; added world-corner arrival regression. No native gameplay validation; static fixture issues or additional blockage may remain. Next battle must confirm the execution loop and wait status actually resolve.

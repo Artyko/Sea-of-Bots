@@ -9,10 +9,10 @@ public sealed class NavalCrewPassage : MonoBehaviour
  private Character[] crew;
  private NavalRepairSailor[] workers;
  private CharacterController[] bodies;
- private bool[,] ignored;
+ private bool[,] ignored;private Collider[][] shapes;
  private float reviewAt;
  public void Initialize(NavalHull ship,Character[] sailors,NavalRepairSailor[] repair)
- {hull=ship;crew=sailors;workers=repair;bodies=new CharacterController[crew.Length];ignored=new bool[crew.Length,crew.Length];}
+ {hull=ship;crew=sailors;workers=repair;bodies=new CharacterController[crew.Length];ignored=new bool[crew.Length,crew.Length];shapes=new Collider[crew.Length][];}
  public static void Prepare(CharacterController body)
  {NavalCrewPassage owner;if(body!=null&&owners.TryGetValue(body,out owner)&&owner!=null)owner.PrepareBody(body);}
  private bool InPassage(int index)
@@ -42,8 +42,14 @@ public sealed class NavalCrewPassage : MonoBehaviour
    if(distance<2.8f&&sameTeam&&(navigating||workers[a]!=null&&workers[a].Busy||workers[b]!=null&&workers[b].Busy))pass=true;
    if(distance<2.5f)pass=pass||NavalStairTraffic.FriendlyPass(crew[a].IsPlayerTeam==crew[b].IsPlayerTeam,InPassage(a),InPassage(b),distance);}
   // HoldPosition toggles controllers; reapply a live pass before each Move as well as on review.
-  if(pass||ignored[a,b])Physics.IgnoreCollision(first,second,pass);
+  if(pass||ignored[a,b])ApplyPass(a,b,pass);
   ignored[a,b]=pass;ignored[b,a]=pass;
+ }
+ private void ApplyPass(int a,int b,bool pass){
+  if(shapes[a]==null&&crew[a]!=null)shapes[a]=crew[a].GetComponentsInChildren<Collider>(true);
+  if(shapes[b]==null&&crew[b]!=null)shapes[b]=crew[b].GetComponentsInChildren<Collider>(true);
+  if(bodies[a]!=null&&shapes[b]!=null)foreach(var c in shapes[b])if(c!=null&&c!=bodies[a])Physics.IgnoreCollision(bodies[a],c,pass);
+  if(bodies[b]!=null&&shapes[a]!=null)foreach(var c in shapes[a])if(c!=null&&c!=bodies[b])Physics.IgnoreCollision(bodies[b],c,pass);
  }
  private void PrepareBody(CharacterController body)
  {for(int i=0;i<bodies.Length;i++)if(bodies[i]==body){for(int j=0;j<bodies.Length;j++)if(i!=j)Pair(i,j);return;}}
@@ -57,6 +63,6 @@ public sealed class NavalCrewPassage : MonoBehaviour
  private void OnDestroy()
  {
   if(bodies==null)return;
-  for(int i=0;i<bodies.Length;i++)if(!object.ReferenceEquals(bodies[i],null)){owners.Remove(bodies[i]);if(bodies[i]!=null)for(int j=i+1;j<bodies.Length;j++)if(ignored[i,j]&&bodies[j]!=null)Physics.IgnoreCollision(bodies[i],bodies[j],false);}
+  for(int i=0;i<bodies.Length;i++)if(!object.ReferenceEquals(bodies[i],null)){owners.Remove(bodies[i]);if(bodies[i]!=null)for(int j=i+1;j<bodies.Length;j++)if(ignored[i,j]&&bodies[j]!=null)ApplyPass(i,j,false);}
  }
 }

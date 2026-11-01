@@ -1,10 +1,10 @@
 ﻿{
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v267.dll",
+  "MainDLLFileName": "NavalPrototype-v270.dll",
   "Author": "Kirill",
-  "Version": 267,
-  "Description": "Steam ironclads with rack-lid recovery, wider aft passage, resilient bow repairs and corrected close-range helm release.",
+  "Version": 270,
+  "Description": "Match route avoidance to full-capsule deck-gap checks, prevent early corner skipping and bound leak-access waiting.",
   "ModDependencies": [],
   "Tags": []
 }

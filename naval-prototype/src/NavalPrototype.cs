@@ -224,7 +224,7 @@ public partial class NavalTestWorld : MonoBehaviour
         if(GetComponent<NavalBattleTelemetry>()==null)gameObject.AddComponent<NavalBattleTelemetry>();
         ToggleEnemy();
         rough=era==NavalEra.Sail;
-        Debug.Log("[NavalPrototype] v267 "+era+" ships and waves started on native editor map.");
+        Debug.Log("[NavalPrototype] v270 "+era+" ships and waves started on native editor map.");
     }
 
     private Material MakeMaterial(Color color)
@@ -514,15 +514,16 @@ public partial class NavalTestWorld : MonoBehaviour
     }}
     public int PlayerSupportFallbacks {get;private set;}
     private Transform playerSupportShipA,playerSupportShipB;
+    private Vector3 supportSoleA,supportSoleB,supportPositionA,supportPositionB;private Quaternion supportRotationA,supportRotationB;
     private int playerSupportFrameA=-1,playerSupportFrameB=-1;
     private int playerSupportProbeA,playerSupportProbeB;
     private bool playerSupportResultA,playerSupportResultB;
     public int PlayerSupportCacheHits {get;private set;}
     public bool PlayerSupportedBy(Transform ship){
         if(Spectating||player==null||ship==null)return false;
-        int frame=Time.frameCount;
-        if(playerSupportShipA==ship&&playerSupportFrameA==frame){PlayerSupportCacheHits++;return playerSupportResultA;}
-        if(playerSupportShipB==ship&&playerSupportFrameB==frame){PlayerSupportCacheHits++;return playerSupportResultB;}
+        int frame=Time.frameCount;Vector3 actualSole=PlayerFootPoint;
+        if(playerSupportShipA==ship&&playerSupportFrameA==frame&&supportSoleA.Equals(actualSole)&&supportPositionA.Equals(ship.position)&&supportRotationA.Equals(ship.rotation)){PlayerSupportCacheHits++;return playerSupportResultA;}
+        if(playerSupportShipB==ship&&playerSupportFrameB==frame&&supportSoleB.Equals(actualSole)&&supportPositionB.Equals(ship.position)&&supportRotationB.Equals(ship.rotation)){PlayerSupportCacheHits++;return playerSupportResultB;}
         float radius=PlayerSupportRadius;
         // Cast from just above the actual capsule sole, independent of model/root height.
         Vector3 sole=PlayerFootPoint;
@@ -534,8 +535,8 @@ public partial class NavalTestWorld : MonoBehaviour
         // those calls free and cannot reject a foot point over the hull.
         if(!NavalRiderSupportMath.NearShip(localSole.x,localSole.z,radius,ship.lossyScale.x))
         {
-            if(slotA){playerSupportShipA=ship;playerSupportFrameA=frame;playerSupportResultA=false;playerSupportProbeA=0;}
-            else {playerSupportShipB=ship;playerSupportFrameB=frame;playerSupportResultB=false;playerSupportProbeB=0;}
+            if(slotA){supportSoleA=actualSole;supportPositionA=ship.position;supportRotationA=ship.rotation;playerSupportShipA=ship;playerSupportFrameA=frame;playerSupportResultA=false;playerSupportProbeA=0;}
+            else {supportSoleB=actualSole;supportPositionB=ship.position;supportRotationB=ship.rotation;playerSupportShipB=ship;playerSupportFrameB=frame;playerSupportResultB=false;playerSupportProbeB=0;}
             return false;
         }
         // A full 0.8 m sphere frequently touches a bulwark or gun before the
@@ -555,8 +556,8 @@ public partial class NavalTestWorld : MonoBehaviour
             if(NavalPhysicsQueries.HasSupport(origin+offset,Vector3.down,probeDistance,ship,probeRadius))
             {supported=true;successful=probe;if(probe>0)PlayerSupportFallbacks++;}
         }
-        if(slotA){playerSupportShipA=ship;playerSupportFrameA=frame;playerSupportResultA=supported;playerSupportProbeA=successful;}
-        else {playerSupportShipB=ship;playerSupportFrameB=frame;playerSupportResultB=supported;playerSupportProbeB=successful;}
+        if(slotA){supportSoleA=actualSole;supportPositionA=ship.position;supportRotationA=ship.rotation;playerSupportShipA=ship;playerSupportFrameA=frame;playerSupportResultA=supported;playerSupportProbeA=successful;}
+        else {supportSoleB=actualSole;supportPositionB=ship.position;supportRotationB=ship.rotation;playerSupportShipB=ship;playerSupportFrameB=frame;playerSupportResultB=supported;playerSupportProbeB=successful;}
         return supported;
     }
     public int ConsumePlayerSupportFallbacks(){int count=PlayerSupportFallbacks;PlayerSupportFallbacks=0;return count;}

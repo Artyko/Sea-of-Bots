@@ -35,13 +35,18 @@ public partial class NavalRepairSailor
                 navigationHits,delta.magnitude,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore);
             if(count<navigationHits.Length)break;System.Array.Resize(ref navigationHits,navigationHits.Length*2);
         }
-        bool clear=true;for(int i=0;i<count;i++)if(!navigationHits[i].collider.transform.IsChildOf(robot.transform))clear=false;
+        bool clear=true;for(int i=0;i<count;i++)if(!navigationHits[i].collider.transform.IsChildOf(robot.transform)&&!FriendlyCrewShape(navigationHits[i].collider))clear=false;
         System.Array.Clear(navigationHits,0,count);return clear;
     }
     private bool NavigationWalkClear(Vector3 a,Vector3 b)
     {
         int steps=Mathf.Max(1,Mathf.CeilToInt(boat.TransformVector(b-a).magnitude/.6f));
-        for(int i=1;i<=steps;i++)if(!Supported(Vector3.Lerp(a,b,(float)i/steps)))return false;
+        bool leavingGap=hull.DeckGapAt(a,NavigationRadius);
+        for(int i=1;i<=steps;i++){
+            Vector3 point=Vector3.Lerp(a,b,(float)i/steps);bool gap=hull.DeckGapAt(point,NavigationRadius);
+            if(!Supported(point)||!leavingGap&&gap)return false;
+            if(!gap)leavingGap=false;
+        }
         return NavigationClear(a,b);
     }
     private bool RecoverDeckGap(Vector3 target)
@@ -66,7 +71,7 @@ public partial class NavalRepairSailor
         {
             float angle=n*Mathf.PI/8f;
             Vector3 point=feet+new Vector3(Mathf.Sin(angle),0,Mathf.Cos(angle))*(ring*.2f);
-            if(!Supported(point)||!ClearBody(point)||!NavigationClear(feet,point))continue;
+            if(hull.DeckGapAt(point,NavigationRadius)||!Supported(point)||!ClearBody(point)||!NavigationClear(feet,point))continue;
             route.Insert(0,point);deckGapEscape=true;stuck=0;moveSpeed=0;
             Debug.Log("[NavalPrototype] Crew deck-gap escape: ship="+boat.name+" feet="+feet+" safe="+point+" duty="+Status);
             return true;
@@ -97,7 +102,7 @@ public partial class NavalRepairSailor
                 int x=current%9+dx,z=current/9+dz;if(x<0||x>8||z<0||z>8)continue;
                 int next=z*9+x;if(escapeState[next]==2||escapeState[next]==3)continue;
                 Vector3 candidate=escapeNodes[next];
-                if(escapeSupport[next]==0)escapeSupport[next]=(byte)(Supported(candidate)&&ClearBody(candidate)?1:3);
+                if(escapeSupport[next]==0)escapeSupport[next]=(byte)(!hull.DeckGapAt(candidate,NavigationRadius)&&Supported(candidate)&&ClearBody(candidate)?1:3);
                 escapeState[next]=escapeSupport[next];
                 if(escapeState[next]!=1)continue;
                 int link=current*81+next;

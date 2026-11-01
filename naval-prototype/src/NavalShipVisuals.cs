@@ -123,6 +123,11 @@ public class NavalShipVisuals : MonoBehaviour,INavalPropulsion
     {hull.AddDecorationBox(transform,material,position,size,solid,false);}
     private void VisualBox(Vector3 position,Vector3 size,Material material)
     {
+        if(hull.Definition.SteamPowered){
+            float half=Mathf.Min(hull.Definition.HullHalfWidth(position.z-size.z*.5f),hull.Definition.HullHalfWidth(position.z+size.z*.5f));
+            float left=Mathf.Max(-half,position.x-size.x*.5f),right=Mathf.Min(half,position.x+size.x*.5f);
+            if(right-left<=.001f)return;position.x=(left+right)*.5f;size.x=right-left;
+        }
         int first=hull.Voxels.Count;RawBox(position,size,material,false);
         // These are fixed iron fittings, not free cargo. Keep them in the
         // attachment graph but omit attached trigger shapes; structure code

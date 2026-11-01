@@ -170,7 +170,7 @@ public partial class NavalTestWorld
         string distance=enemy!=null?Vector3.Distance(boat.position,enemy.Boat.position).ToString("F0")+" м":"—";
         string wave=rough?"сильные":NavalSessionSettings.Era==NavalEra.Steam?"умеренные":"слабые";
         GUI.Label(new Rect(16f,infoY,650f,20f),"До противника: "+distance+"  |  "+(Spectating?"Наблюдатель":swimming?"Плавание":"На ногах")+"  |  Волны: "+wave,hudText);
-        GUI.Label(new Rect(16f,infoY+20f,650f,20f),"v267 "+NavalSessionSettings.Era+(NavalPerformance.LaptopMode?" ECO":"")+"  |  FPS: "+(1000f/Mathf.Max(1f,frameMilliseconds)).ToString("F0")+"  |  Вода CPU: "+ocean.BuildMilliseconds.ToString("F1")+" мс",hudText);
+        GUI.Label(new Rect(16f,infoY+20f,650f,20f),"v270 "+NavalSessionSettings.Era+(NavalPerformance.LaptopMode?" ECO":"")+"  |  FPS: "+(1000f/Mathf.Max(1f,frameMilliseconds)).ToString("F0")+"  |  Вода CPU: "+ocean.BuildMilliseconds.ToString("F1")+" мс",hudText);
         GUI.matrix=previous;
         NavalPerformance.Draw();
     }

@@ -195,12 +195,14 @@ public class NavalWater : MonoBehaviour
         }
         // Remaining polygon lies inside the boat below the rim and is intentionally discarded.
     }
+    private bool ironcladClip;
     private int clipPlanes=5;
     private float clipRim=BoatDimensions.Rim;
     private bool PrepareClip(Transform boat)
     {
         NavalSeaLadder equipment=boat.GetComponent<NavalSeaLadder>();
-        clipPlanes=equipment!=null&&equipment.Hull.Definition.DeckCount>2?9:5;
+        ironcladClip=equipment!=null&&equipment.Hull.Definition.SteamPowered;
+        clipPlanes=!ironcladClip&&equipment!=null&&equipment.Hull.Definition.DeckCount>2?9:5;
         clipRim=equipment!=null?equipment.Hull.Definition.RimY:BoatDimensions.Rim;
         waterToClip=boat.worldToLocalMatrix*transform.localToWorldMatrix;
         clipToWater=transform.worldToLocalMatrix*boat.localToWorldMatrix;
@@ -232,8 +234,8 @@ public class NavalWater : MonoBehaviour
     {
         switch (plane)
         {
-            case 0: return p.x - BoatDimensions.HalfWidth;
-            case 1: return -p.x - BoatDimensions.HalfWidth;
+            case 0: return p.x - (ironcladClip?NavalHullOutline.HalfWidth(p.z,true,true):BoatDimensions.HalfWidth);
+            case 1: return -p.x - (ironcladClip?NavalHullOutline.HalfWidth(p.z,true,true):BoatDimensions.HalfWidth);
             case 2: return p.z - BoatDimensions.HalfLength;
             case 3: return -p.z - BoatDimensions.HalfLength;
             case 4: return p.y - clipRim;
@@ -251,6 +253,7 @@ public class NavalWater : MonoBehaviour
             if ((previousDistance < 0f) != (currentDistance < 0f))
             {
                 float t = previousDistance / (previousDistance - currentDistance);
+                if(ironcladClip&&plane<2){float lo=0,hi=1;for(int n=0;n<18;n++){float mid=(lo+hi)*.5f;if((Distance(Vector3.Lerp(previous,current,mid),plane)<0)==(previousDistance<0))lo=mid;else hi=mid;}t=(lo+hi)*.5f;}
                 Vector3 intersection = Vector3.Lerp(previous, current, t);
                 inside.Add(intersection); outside.Add(intersection);
             }
