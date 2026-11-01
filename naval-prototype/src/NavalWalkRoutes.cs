@@ -9,7 +9,7 @@ public static class NavalWalkRoutes
     public const int StepCount=48;
     // The former .8 landing sat on the lip of the weather-deck opening.  A
     // full-size capsule could skip the last tread and then replan forever.
-    public const float TopLandingZ=1.05f;
+    public const float TopLandingZ=1.05f,UpperTreadEntryZ=.72f,BottomLandingZ=-3.65f,BottomApproachZ=-3.25f;
     public static bool InStairwell(float x,float y,float z,float halfWidth=1.1f,float holdFloor=BoatDimensions.HoldFloor)
     {
         if(System.Math.Abs(x)>=halfWidth||z<=-3.7f||z>=.85f||y<=holdFloor+.15f||y>=.825f)return false;
@@ -39,15 +39,18 @@ public static class NavalWalkRoutes
     public static List<NavalWalkPoint> Down(float holdFloor=BoatDimensions.HoldFloor)
     {
         List<NavalWalkPoint> points=new List<NavalWalkPoint>();
-        points.Add(new NavalWalkPoint(0f,0.825f,TopLandingZ));points.Add(new NavalWalkPoint(0f,0.825f,0.43f));
+        // Stop just inside the open coaming before descending. The former
+        // direct 1.05 -> .43 command drove a full capsule into the deck lip;
+        // the v265 log left several sailors fixed at z=.89.
+        points.Add(new NavalWalkPoint(0f,0.825f,TopLandingZ));points.Add(new NavalWalkPoint(0f,0.825f,UpperTreadEntryZ));
         for(int i=StepCount-2;i>=0;i-=2)points.Add(Step(i,holdFloor));
-        points.Add(new NavalWalkPoint(0f,holdFloor,-3.65f));return points;
+        points.Add(new NavalWalkPoint(0f,holdFloor,BottomLandingZ));return points;
     }
     public static List<NavalWalkPoint> UpFrom(float y,float z,float holdFloor=BoatDimensions.HoldFloor)
     {
         List<NavalWalkPoint> points=new List<NavalWalkPoint>();
         for(int i=0;i<StepCount;i+=2)
         {NavalWalkPoint p=Step(i,holdFloor);if(p.Y>=y+0.03f&&p.Z>=z-0.1f)points.Add(p);}
-        points.Add(new NavalWalkPoint(0f,0.825f,0.43f));points.Add(new NavalWalkPoint(0f,0.825f,TopLandingZ));return points;
+        points.Add(new NavalWalkPoint(0f,0.825f,UpperTreadEntryZ));points.Add(new NavalWalkPoint(0f,0.825f,TopLandingZ));return points;
     }
 }

@@ -16,6 +16,7 @@ public static class NavalSupplyRoutes
    float before=i==0?start.Z:route[i-1].Z,after=i+2<route.Count?route[i+2].Z:goal.Z;
    float z=NavalCargoLayout.Crossing(before,after,ship);a.Z=b.Z=z;route[i]=a;route[i+1]=b;
   }
+  if(ship.SteamPowered)route=AroundMagazine(route,start,ship);
   int crates=NavalCargoLayout.Boxes(ship,0)+NavalCargoLayout.Boxes(ship,1)+NavalCargoLayout.Boxes(ship,2);
   for(int i=0;i<crates;i++){var crate=NavalCargoLayout.Position(ship,i);
    route=AroundCargo(route,start,ship,crate);
@@ -33,11 +34,61 @@ public static class NavalSupplyRoutes
   // stair lanes so a detour beside the aft stores cannot approach the upper
   // flight diagonally and push a full-size sailor onto the landing coaming.
   var repaired=RepairSegments(start,route,ship);
-  if(ship.SteamPowered){repaired=NavalStairTraffic.Apply(start,repaired,ship);repaired=RepairSegments(start,repaired,ship);}
+  if(ship.SteamPowered){repaired=NavalStairTraffic.Apply(start,repaired,ship);repaired=RepairSegments(start,repaired,ship);repaired=AroundMagazine(repaired,start,ship);}
   // Stair traffic can legitimately move the top landing towards the centre.
   // Reapply the weather-deck exclusion last so a same-deck trip is never
   // pulled back through the open flight or the funnel corridor.
-  return NavalShipRoutes.ClearSteamWeatherDeck(start,repaired,ship);
+  repaired=NavalShipRoutes.ClearSteamWeatherDeck(start,repaired,ship);
+  return EscapeCargoStart(start,repaired,ship);
+ }
+ private static List<NavalWalkPoint> EscapeCargoStart(NavalWalkPoint start,List<NavalWalkPoint> route,NavalShipDefinition ship)
+ {
+  if(route.Count==0||!ship.SteamPowered)return route;
+  int count=NavalCargoLayout.Boxes(ship,0)+NavalCargoLayout.Boxes(ship,1)+NavalCargoLayout.Boxes(ship,2);
+  float clear=NavalCargoLayout.RouteHalfExtent(ship),outside=NavalCargoLayout.EscapeWaypointHalfExtent(ship);
+  for(int i=0;i<count;i++){
+   NavalWalkPoint crate=NavalCargoLayout.Position(ship,i);
+   // A collision or blast can leave the controller on the lid of a compact
+   // rack, not only inside its floor-level clearance rectangle.  Treat the
+   // complete rack height (plus one skin width) as a recoverable start.  v266
+   // missed starts at y=1.12 above the y=.825 rack and kept rebuilding the
+   // same impossible plank route.
+   float top=crate.Y+1.35f/ship.Scale+.10f;
+   if(start.Y<crate.Y-.15f||start.Y>top||Math.Abs(start.X-crate.X)>=clear||Math.Abs(start.Z-crate.Z)>=clear)continue;
+   NavalWalkPoint[] exits={new NavalWalkPoint(crate.X-outside,crate.Y,start.Z),new NavalWalkPoint(crate.X+outside,crate.Y,start.Z),new NavalWalkPoint(start.X,crate.Y,crate.Z-outside),new NavalWalkPoint(start.X,crate.Y,crate.Z+outside)};
+   int best=-1;float bestDistance=float.PositiveInfinity;
+   for(int e=0;e<exits.Length;e++){
+    if(!CargoClear(exits[e],exits[e],ship))continue;
+    float dx=exits[e].X-start.X,dz=exits[e].Z-start.Z,d=dx*dx+dz*dz;
+    if(d<bestDistance){bestDistance=d;best=e;}
+   }
+   if(best>=0){var escaped=new List<NavalWalkPoint>(route.Count+1);escaped.Add(exits[best]);escaped.AddRange(route);return escaped;}
+  }
+  return route;
+ }
+ private static List<NavalWalkPoint> AroundMagazine(List<NavalWalkPoint> route,NavalWalkPoint start,NavalShipDefinition ship)
+ {
+  List<NavalWalkPoint> result=null;NavalWalkPoint previous=start;
+  float margin=.04f/ship.Scale,mx=NavalMainMagazineLayout.RouteHalfWidth(ship),aft=NavalMainMagazineLayout.RouteAft(ship),forward=NavalMainMagazineLayout.RouteForward(ship);
+  for(int i=0;i<route.Count;i++)
+  {
+   NavalWalkPoint point=route[i];
+   bool level=ship.MaintenanceFloorAt(previous.Y)&&ship.MaintenanceFloorAt(point.Y)&&Math.Abs(previous.Y-point.Y)<.08f;
+   if(level&&Hits(previous,point,-mx,mx,aft,forward))
+   {
+    if(result==null){result=new List<NavalWalkPoint>(route.Count+4);for(int j=0;j<i;j++)result.Add(route[j]);}
+    float side=(previous.X+point.X)<0?-(mx+margin):mx+margin;
+    bool previousInside=previous.X>-mx&&previous.X<mx&&previous.Z>aft&&previous.Z<forward;
+    bool pointInside=point.X>-mx&&point.X<mx&&point.Z>aft&&point.Z<forward;
+    float entry=previous.Z<NavalMainMagazineLayout.Z?aft-margin:forward+margin;
+    float exit=point.Z<NavalMainMagazineLayout.Z?aft-margin:forward+margin;
+    if(previousInside)result.Add(new NavalWalkPoint(side,previous.Y,previous.Z));
+    else result.Add(new NavalWalkPoint(side,previous.Y,entry));
+    if(!pointInside&&Math.Abs(entry-exit)>.001f)result.Add(new NavalWalkPoint(side,point.Y,exit));
+   }
+   if(result!=null)result.Add(point);previous=point;
+  }
+  return result??route;
  }
  private static bool CargoClear(NavalWalkPoint a,NavalWalkPoint b,NavalShipDefinition ship){
   if(ship.SteamPowered&&!HullClear(a,b,ship))return false;
@@ -89,7 +140,12 @@ public static class NavalSupplyRoutes
      }
     }
     if(ship.SteamPowered&&ship.MaintenanceFloorAt(floor)){
-     float x=NavalMainMagazineLayout.RouteHalfWidth(ship),aft=NavalMainMagazineLayout.RouteAft(ship),forward=NavalMainMagazineLayout.RouteForward(ship);
+     // Keep graph corners strictly outside the inclusive magazine rectangle.
+     // Previously they sat exactly on its boundary and CargoClear rejected
+     // all four; a nearby cargo crate accidentally supplied the only detour
+     // nodes until that crate was moved out of the repair pocket.
+     float margin=.04f/ship.Scale;
+     float x=NavalMainMagazineLayout.RouteHalfWidth(ship)+margin,aft=NavalMainMagazineLayout.RouteAft(ship)-margin,forward=NavalMainMagazineLayout.RouteForward(ship)+margin;
      foreach(float side in new float[]{-x,x})foreach(float z in new float[]{aft,forward}){
       var node=new NavalWalkPoint(side,floor,z);if(CargoClear(node,node,ship))graph.Nodes.Add(node);
      }
@@ -140,7 +196,19 @@ public static class NavalSupplyRoutes
       Hits(new NavalWalkPoint(previous.X-crate.X,previous.Y,previous.Z),new NavalWalkPoint(point.X-crate.X,point.Y,point.Z),-clear,clear,clearFront,clearBack)){
     bool aInside=Math.Abs(previous.X-crate.X)<clear&&previous.Z>clearFront&&previous.Z<clearBack;
     bool bInside=Math.Abs(point.X-crate.X)<clear&&point.Z>clearFront&&point.Z<clearBack;
-    if(!aInside&&!bInside){
+    if(aInside&&!bInside){
+     // A blast or collision can leave a sailor inside the conservative
+     // body-clearance envelope while still outside the small physical rack.
+     // The graph cannot connect such a start node, so first step through the
+     // nearest face of the envelope. This fixes the permanent v265 stop at
+     // (1.43,-.69,2.22) beside the z=2.10 store.
+     if(result==null){result=new List<NavalWalkPoint>(route.Count+2);for(int j=0;j<i;j++)result.Add(route[j]);}
+     float dx=previous.X-crate.X,dz=previous.Z-crate.Z;
+     float xGap=clear-Math.Abs(dx),zGap=clear-Math.Abs(dz);
+     if(xGap<=zGap){float sign=Math.Abs(dx)>.001f?Math.Sign(dx):point.X<crate.X?-1f:1f;result.Add(new NavalWalkPoint(crate.X+sign*half,crate.Y,previous.Z));}
+     else {float sign=Math.Abs(dz)>.001f?Math.Sign(dz):point.Z<crate.Z?-1f:1f;result.Add(new NavalWalkPoint(previous.X,crate.Y,crate.Z+sign*half));}
+    }
+    else if(!aInside&&!bInside){
      if(result==null){result=new List<NavalWalkPoint>(route.Count+2);for(int j=0;j<i;j++)result.Add(route[j]);}
      float side=crate.X+((previous.X+point.X-2*crate.X)<0?-half:half);
      float entry=previous.Z<crate.Z?front:back,exit=point.Z<crate.Z?front:back;

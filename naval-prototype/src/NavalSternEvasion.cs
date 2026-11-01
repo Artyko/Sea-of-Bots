@@ -18,6 +18,11 @@ public sealed class NavalSternEvasion
   float close=NavalPursuitMath.StandOff(hull.WorldScale,otherScale);
   bool stern=ahead< -Mathf.Max(2,toward.magnitude*.25f)&&toward.magnitude<close+55;
   bool contact=ram!=null&&ram.Opponent!=null&&ram.Opponent.transform==enemy&&Time.time-ram.LastContact<.5f;
+  // The six-second hysteresis belongs behind the stern, where it prevents an
+  // immediate re-entry into danger.  Once the opponent is clearly forward
+  // and contact has ended, retaining that state commands a 140..160 degree
+  // turn away from a target the main gun can already see (v266 log).
+  if(NavalSternEvasionMath.ReleaseWhenForward(active,retreat,contact,ahead,toward.magnitude)){Reset();return original;}
   bool canFire=!retreat&&plan.CounterSide>0&&guns.FiringSideAtShip(enemy)==plan.CounterSide;
   bool progressing=false;
   if(!retreat&&counterSide>0)

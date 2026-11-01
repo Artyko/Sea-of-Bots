@@ -290,6 +290,14 @@ public class NavalShipVisuals : MonoBehaviour,INavalPropulsion
         float lowerHeight=lowerTop-platform,lowerY=deck+(lowerTop+platform)*.5f;
         float upperHeight=roofBottom-slitTop,upperY=deck+(roofBottom+slitTop)*.5f;
         float front=NavalConningTowerLayout.FrontZ,rear=NavalConningTowerLayout.RearZ;
+        // The armoured platform covers the original timber weather deck.
+        // Keep those support cells destructible, but turn the hidden surface
+        // into a steel-covered, non-flammable deck so it cannot create a fire
+        // that firefighters can neither see nor reach beneath the tower.
+        foreach(var cell in hull.Voxels)
+            if(NavalConningTowerLayout.FireproofDeckCell(cell.LocalCenter.x,cell.LocalCenter.y,cell.LocalCenter.z,
+                cell.transform.localScale.y,deck))
+            {cell.Flammable=false;cell.Metallic=true;cell.Armored=true;}
         // A large raised armoured command position. Two forward doors flank
         // the wheel and a side door is cut into each wall, giving four real
         // passages instead of a single centre line obstructed by the wheel.

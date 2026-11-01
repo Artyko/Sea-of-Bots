@@ -6,7 +6,7 @@ public static class NavalMainBatteryMath
     public const float ReloadSeconds=20f,ProjectileSpeed=105f,ProjectilePower=5.2f,MaximumRange=650f,TraverseArc=70f;
     // At 65 degrees the target is simultaneously inside the main mount's
     // +/-70 degree sector and the casemate battery's +/-30 degree traverse.
-    public const float JointBatteryBearing=65f,MainBatteryApproachBearing=58f,MainBatteryReadyBearing=45f,SteeringLeadSeconds=10f;
+    public const float JointBatteryBearing=65f,MainBatteryApproachBearing=65f,MainBatteryReadyBearing=45f,SteeringLeadSeconds=10f;
     public const int MuzzleSmokeCount=44;
     // Lowest axis that still clears the ironclad's bow rim at level fire.
     public const float MountHeight=.65f,TrunnionOffset=.18f,MuzzleZ=1.52f;
@@ -21,7 +21,14 @@ public static class NavalMainBatteryMath
     public static bool CanReload(int crew){return crew>=1;}
     public static bool CanTraverse(int crew,float reloadRemaining){return crew>=2||crew==1&&reloadRemaining<=0f;}
     public static bool SteeringPriority(bool functional,int ammunition,float reloadRemaining,int crew)
-    {return functional&&ammunition>0&&crew>0&&reloadRemaining<=SteeringLeadSeconds;}
+    {
+        // Do not drop back to a 90-degree broadside immediately after every
+        // heavy-gun shot. That binary 90 -> 45..58 -> 90 course change made
+        // the ship weave once per 20-second reload. While loading, hold the
+        // 65-degree overlap where both the casemates and main gun can bear;
+        // then ease toward the main gun's reliable 45-degree ready bearing.
+        return functional&&ammunition>0&&crew>0;
+    }
     public static float JointBatteryCourse(float targetBearing,int side)
     {return targetBearing+(side==1?JointBatteryBearing:-JointBatteryBearing);}
     // When the heavy gun is nearly ready, favour a reliable shot over the
@@ -41,11 +48,14 @@ public static class NavalMainBatteryMath
     }
     public static int RecoverySide(float targetYaw,int preferredSide)
     {
-        if(Mathf.Abs(targetYaw)<=TraverseArc)return preferredSide;
         // Very close to the stern line the signed angle can alternate between
         // +180 and -180 every frame. Preserve the committed side there; away
-        // from that seam, use the genuinely shorter turn into the forward arc.
+        // from that seam, select the side on which the target actually lies.
+        // A +/-20 degree dead band keeps this from alternating near the bow.
         if(Mathf.Abs(targetYaw)>=170f&&(preferredSide==1||preferredSide==2))return preferredSide;
+        if(targetYaw>20f)return 2;
+        if(targetYaw< -20f)return 1;
+        if(preferredSide==1||preferredSide==2)return preferredSide;
         return targetYaw>0f?2:1;
     }
     public static float MainBatteryHelmCourse(float shipHeading,float predictedBearing,int preferredSide,float reloadRemaining)

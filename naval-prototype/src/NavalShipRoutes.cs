@@ -3,7 +3,16 @@ using System.Collections.Generic;
 // Deck transitions share the same stair geometry. Two-deck profiles retain the original route exactly.
 public static class NavalShipRoutes
 {
-    public const float SteamBatteryLane=1.40f;
+    // v262's x=1.40 lane still left only a few centimetres between the
+    // occupied gun post and the casemate. A 1.50 centre line gives two
+    // full-size friendly capsules room while retaining 2.2 m to the mount.
+    public const float SteamBatteryLane=1.50f;
+    // At the aft end of the upper stair the x=1.50/z=-3.90 point was exactly
+    // tangent to both the open-flight coaming and the aft casemate clearance.
+    // Native controller skin stopped several returning sailors at x=1.16.
+    // Move the gateway aft and slightly outboard into the real gap before the
+    // conning tower; ordinary battery traffic keeps the established lane.
+    public const float SteamAftGatewayLane=1.58f,SteamAftGatewayZ=-4.05f;
     public static bool InStairwell(NavalWalkPoint p,NavalShipDefinition ship)
     {
         if(NavalWalkRoutes.InStairwell(p.X,p.Y,p.Z,ship.StairWidth*.5f+.175f,ship.HoldFloor))return true;
@@ -19,7 +28,7 @@ public static class NavalShipRoutes
     public static List<NavalWalkPoint> Plan(NavalWalkPoint start,NavalWalkPoint goal,NavalShipDefinition ship)
     {
         var route=NavalStairTraffic.Apply(start,PlanCore(start,goal,ship),ship);
-        if(ship.SteamPowered){route=AvoidSteamUnderFlight(start,route,ship);route=AvoidSteamUpperStair(start,route,ship);route=AvoidSteamDeckEquipment(start,route,ship);route=AvoidSteamCasemates(start,route,ship);route=NavalConningTowerLayout.Route(start,route,ship);bool sameWeather=route.Count>0&&start.Y>ship.WeatherDeck-.12f&&route[route.Count-1].Y>ship.WeatherDeck-.12f;for(int i=0;i<route.Count-1;i++){
+        if(ship.SteamPowered){route=AvoidSteamUnderFlight(start,route,ship);route=AvoidSteamUpperStair(start,route,ship);route=AvoidSteamDeckEquipment(start,route,ship);route=AvoidSteamCasemates(start,route,ship);route=NavalConningTowerLayout.Route(start,route,ship);route=AvoidSteamUpperStair(start,route,ship);bool sameWeather=route.Count>0&&start.Y>ship.WeatherDeck-.12f&&route[route.Count-1].Y>ship.WeatherDeck-.12f;for(int i=0;i<route.Count-1;i++){
             var point=route[i];float limit=System.Math.Max(.15f,ship.HullHalfWidth(point.Z)-.85f/ship.Scale);
             // The weather-deck battery and its ready-use ammunition occupy the
             // outer lane.  Route full-size robot bodies through the clear inner
@@ -30,7 +39,7 @@ public static class NavalShipRoutes
             bool weather=point.Y>ship.WeatherDeck-.12f;
             bool bowMount=weather&&point.Z>=3.05f&&point.Z<=4.65f;
             bool passage=sameWeather&&weather&&point.Z>=-3.85f&&point.Z<=1.05f;
-            bool stairBypass=weather&&point.Z>=-3.90f&&point.Z<=.80f&&System.Math.Abs(point.X)>=1.20f;
+            bool stairBypass=weather&&point.Z>=SteamAftGatewayZ-.01f&&point.Z<=.80f&&System.Math.Abs(point.X)>=1.20f;
             bool conningDoor=NavalConningTowerLayout.DoorLane(point,ship);
             if(conningDoor){}
             else if(bowMount)
@@ -98,12 +107,13 @@ public static class NavalShipRoutes
         route=AvoidSteamDeckEquipment(start,route,ship);
         route=AvoidSteamCasemates(start,route,ship);
         route=NavalConningTowerLayout.Route(start,route,ship);
+        route=AvoidSteamUpperStair(start,route,ship);
         bool sameWeather=route.Count>0&&start.Y>ship.WeatherDeck-.12f&&route[route.Count-1].Y>ship.WeatherDeck-.12f;
         for(int i=0;i<route.Count-1;i++)
         {
             NavalWalkPoint point=route[i];if(point.Y<=ship.WeatherDeck-.12f)continue;
             float limit=System.Math.Max(.15f,ship.HullHalfWidth(point.Z)-.85f/ship.Scale);
-            bool stairBypass=point.Z>=-3.90f&&point.Z<=.80f&&System.Math.Abs(point.X)>=1.20f;
+            bool stairBypass=point.Z>=SteamAftGatewayZ-.01f&&point.Z<=.80f&&System.Math.Abs(point.X)>=1.20f;
             if(NavalConningTowerLayout.DoorLane(point,ship)){}
             else if(point.Z>=3.05f&&point.Z<=4.65f)
             {
@@ -129,28 +139,60 @@ public static class NavalShipRoutes
     {
         if(route.Count==0)return route;
         var result=new List<NavalWalkPoint>(route.Count+4);NavalWalkPoint previous=start;
-        const float aft=-3.90f,forward=.80f;
-        foreach(NavalWalkPoint point in route)
+        // Do not push the bypass under the conning tower. The v265 -4.25
+        // corner lay in the tapered stern/tower collision and trapped a
+        // sailor from the first frame. -3.90 remains behind the aft shield,
+        // while the tower-specific router owns every point farther aft.
+        const float aft=SteamAftGatewayZ,forward=.80f;
+        for(int routeIndex=0;routeIndex<route.Count;routeIndex++)
         {
+            NavalWalkPoint point=route[routeIndex],adjusted=point;
             bool horizontal=previous.Y>ship.WeatherDeck-.12f&&point.Y>ship.WeatherDeck-.12f&&System.Math.Abs(previous.Y-point.Y)<.04f;
-            bool crosses=horizontal&&NavalSupplyRoutes.Hits(previous,point,-1.20f,1.20f,aft,forward);
+            // Door-lane points on the deck still need the lateral stair
+            // bypass. Suppressing them here created a diagonal from the
+            // conning-tower doorway straight across the open upper flight.
+            // Only points actually inside the raised tower are exempt.
+            bool conningTransit=NavalConningTowerLayout.Inside(previous,ship)||NavalConningTowerLayout.Inside(point,ship);
+            bool crosses=horizontal&&!conningTransit&&NavalSupplyRoutes.Hits(previous,point,-1.20f,1.20f,aft,forward);
             bool previousInside=System.Math.Abs(previous.X)<1.20f&&previous.Z>aft&&previous.Z<forward;
             bool pointInside=System.Math.Abs(point.X)<1.20f&&point.Z>aft&&point.Z<forward;
             // Gun posts sit just inside the broad stair exclusion but on real
             // deck.  When leaving one, step outward before travelling along
             // the ship; otherwise the diagonal cuts across the open flight.
-            if(horizontal&&previousInside&&!pointInside&&!NavalStairTraffic.SamePassage(previous,point,ship))
+            if(horizontal&&!conningTransit&&previousInside&&!pointInside&&!NavalStairTraffic.SamePassage(previous,point,ship))
             {
                 float side=System.Math.Abs(previous.X)>.05f?System.Math.Sign(previous.X):System.Math.Abs(point.X)>.05f?System.Math.Sign(point.X):1f;
-                result.Add(new NavalWalkPoint(side*SteamBatteryLane,ship.WeatherDeck,previous.Z));
+                float lane=previous.Z<=-3.70f?SteamAftGatewayLane:SteamBatteryLane;
+                result.Add(new NavalWalkPoint(side*lane,ship.WeatherDeck,previous.Z));
+            }
+            // Base same-deck planning may first add an inboard corridor point
+            // while both positions are nominally inside the flight rectangle.
+            // It is not a stair traversal; redirect that intermediate point
+            // to the bypass immediately instead of commanding an inward step
+            // followed by the outward step which stalled in the v266 battle.
+            if(horizontal&&!conningTransit&&previousInside&&pointInside&&routeIndex<route.Count-1&&!NavalStairTraffic.SamePassage(previous,point,ship))
+            {
+                float side=System.Math.Abs(previous.X)>.05f?System.Math.Sign(previous.X):System.Math.Abs(point.X)>.05f?System.Math.Sign(point.X):1f;
+                adjusted.X=side*(previous.Z<=-3.70f?SteamAftGatewayLane:SteamBatteryLane);
             }
             if(crosses&&!previousInside&&!pointInside)
             {
                 float side=System.Math.Abs(previous.X)>.05f?System.Math.Sign(previous.X):System.Math.Abs(point.X)>.05f?System.Math.Sign(point.X):1f;
-                float x=side*SteamBatteryLane,entry=previous.Z<(aft+forward)*.5f?aft:forward,exit=point.Z<(aft+forward)*.5f?aft:forward;
+                float entry=previous.Z<(aft+forward)*.5f?aft:forward,exit=point.Z<(aft+forward)*.5f?aft:forward;
+                float x=side*(entry==aft||exit==aft?SteamAftGatewayLane:SteamBatteryLane);
                 result.Add(new NavalWalkPoint(x,ship.WeatherDeck,entry));if(entry!=exit)result.Add(new NavalWalkPoint(x,ship.WeatherDeck,exit));
             }
-            result.Add(point);previous=point;
+            // A cargo/conning detour may place an intermediate weather-deck
+            // point just inside the open-flight rectangle without actually
+            // entering the stairs. Keep that point on the side bypass; the
+            // final caller-owned endpoint is preserved verbatim.
+            if(horizontal&&!conningTransit&&!previousInside&&pointInside&&routeIndex<route.Count-1&&!NavalStairTraffic.SamePassage(previous,point,ship))
+            {
+                float side=System.Math.Abs(previous.X)>.05f?System.Math.Sign(previous.X):System.Math.Abs(point.X)>.05f?System.Math.Sign(point.X):1f;
+                float x=side*SteamAftGatewayLane;
+                result.Add(new NavalWalkPoint(x,ship.WeatherDeck,aft));adjusted.X=x;
+            }
+            result.Add(adjusted);previous=adjusted;
         }
         return result;
     }

@@ -8,6 +8,9 @@ public static class NavalConningTowerLayout
     public const float CenterZ=-4.88f,HalfWidth=1.30f,HalfDepth=.72f,PlatformRise=.12f;
     // Two independent forward doors flank the wheel.  The logged v242 route
     // used x=0 and therefore walked directly into the wheel at z=-4.30.
+    // The approach stays just aft of the upper-deck stair opening (-3.90).
+    // The former -3.72 point was visibly over the open flight and left the
+    // tower doorway without supported deck beneath a full-size sailor.
     public const float DoorInnerX=.16f,DoorOuterX=1.00f,EntryX=.70f,BypassX=1.58f,ApproachZ=-3.94f;
     // Port and starboard openings provide two additional physical exits.
     public const float SideDoorZ=-4.98f,SideDoorHalfDepth=.30f;
@@ -22,6 +25,11 @@ public static class NavalConningTowerLayout
     public static float PlatformY(NavalShipDefinition ship){return ship.WeatherDeck+PlatformRise;}
     public static float StairZ(int step){return FrontZ+FirstStairOffset-step*StairSpacing;}
     public static float StairTop(int step,NavalShipDefinition ship){return ship.WeatherDeck+StairRise*(step+1);}
+    public static bool FireproofDeckCell(float x,float y,float z,float height,float weatherDeck)
+    {
+        float top=y+(float)Math.Abs(height)*.5f;
+        return Math.Abs(top-weatherDeck)<.04f&&Math.Abs(x)<=HalfWidth&&z>=RearZ&&z<=FrontZ;
+    }
     public static NavalWalkPoint HelmPost(NavalShipDefinition ship){return new NavalWalkPoint(0,PlatformY(ship),CenterZ);}
     public static bool Inside(NavalWalkPoint point,NavalShipDefinition ship)
     {return point.Y>=ship.WeatherDeck-.05f&&Math.Abs(point.X)<HalfWidth&&point.Z>RearZ&&point.Z<FrontZ;}
@@ -59,7 +67,33 @@ public static class NavalConningTowerLayout
     {
         if(!ship.SteamPowered||planned.Count==0)return planned;
         NavalWalkPoint goal=planned[planned.Count-1];bool from=Inside(start,ship),to=Inside(goal,ship);
-        if(!from&&!to)return planned;
+        if(!from&&!to)
+        {
+            // The old helper only considered the two endpoints. Cargo and
+            // repair planners can add an intermediate point inside the tower,
+            // which produced a direct lateral command through its armoured
+            // front wall (the v265 log repeatedly stopped at z=-4.36).
+            var clear=new List<NavalWalkPoint>(planned.Count+4);NavalWalkPoint previous=start;
+            for(int i=0;i<planned.Count;i++)
+            {
+                NavalWalkPoint point=planned[i];bool blocked=Inside(point,ship)||DoorLane(point,ship);
+                bool horizontal=previous.Y>=ship.WeatherDeck-.05f&&point.Y>=ship.WeatherDeck-.05f&&Math.Abs(previous.Y-point.Y)<.05f;
+                bool crosses=horizontal&&NavalSupplyRoutes.Hits(previous,point,-HalfWidth,HalfWidth,RearZ,FrontZ);
+                if(blocked||crosses)
+                {
+                    float inSide=Math.Abs(previous.X)>.05f?Math.Sign(previous.X):1f;
+                    NavalWalkPoint next=point;
+                    if(blocked)for(int j=i+1;j<planned.Count;j++)if(!Inside(planned[j],ship)&&!DoorLane(planned[j],ship)){next=planned[j];break;}
+                    float outSide=Math.Abs(next.X)>.05f?Math.Sign(next.X):inSide;
+                    Add(clear,new NavalWalkPoint(inSide*BypassX,ship.WeatherDeck,ApproachZ));
+                    Add(clear,new NavalWalkPoint(outSide*BypassX,ship.WeatherDeck,ApproachZ));
+                    if(!blocked)Add(clear,point);
+                }
+                else Add(clear,point);
+                previous=point;
+            }
+            return clear;
+        }
         var result=new List<NavalWalkPoint>(planned.Count+8);
         float side=Math.Abs(start.X)>.05f?Math.Sign(start.X):1f;
         if(from)

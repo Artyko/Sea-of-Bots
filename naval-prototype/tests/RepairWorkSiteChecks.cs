@@ -65,8 +65,40 @@ class RepairWorkSiteChecks
   GC.Collect();int gen=GC.CollectionCount(0);var watch=Stopwatch.StartNew();for(int i=0;i<200000;i++)Consume+=ScanOld(30);watch.Stop();double oldMs=watch.Elapsed.TotalMilliseconds;int oldGC=GC.CollectionCount(0)-gen;
   GC.Collect();gen=GC.CollectionCount(0);watch.Restart();for(int i=0;i<200000;i++)Consume+=ScanNew(30);watch.Stop();int newGC=GC.CollectionCount(0)-gen;
   Check(ScanOld(30)==ScanNew(30),"Benchmarks choose identical point");
-  Check(Math.Abs(NavalRepairWorkSites.EndZ(NavalShipDefinition.Ironclad,6f)-5.05f)<.001f,"Steam bow repair post stays inside the tapered collision hull");
+  Check(Math.Abs(NavalRepairWorkSites.EndZ(NavalShipDefinition.Ironclad,6f)-4.85f)<.001f,"Steam bow repair post leaves capsule shoulder clearance in the tapered hull");
   Check(Math.Abs(NavalRepairWorkSites.EndZ(NavalShipDefinition.Brigantine,-6f)+5.5f)<.001f,"Sail end-wall repair geometry is unchanged");
+  var ironclad=NavalShipDefinition.Ironclad;
+  float serviceX,serviceY,serviceZ;
+  int sternSites=0;for(int candidate=0;candidate<NavalRepairWorkSites.SteamSternBeltCandidateCount;candidate++){
+   Check(NavalRepairWorkSites.SteamSternBelt(ironclad,1.67f,1.11f,-5.63f,candidate,out serviceX,out serviceY,out serviceZ),"Every logged stern-belt fallback is defined");
+   Check(NavalCrewDeckSafety.Inside(serviceX,serviceZ,ironclad,.85f),"Stern-belt service point retains a full sailor capsule inside the taper");
+   float dx=(1.01f-serviceX)*ironclad.Scale,dy=(1.11f-serviceY)*ironclad.Scale-NavalRepairAim.HandHeight,dz=(-5.63f-serviceZ)*ironclad.Scale;
+   if(NavalRepairSite.WithinReach(dx,dy,dz))sternSites++;
+  }
+  Check(sternSites==NavalRepairWorkSites.SteamSternBeltCandidateCount,"All dedicated stern points reach the inner face of the logged seam");
+  Check(NavalRepairWorkSites.SteamBowBelt(ironclad,-1.90f,1.11f,4.13f,out serviceX,out serviceY,out serviceZ),"Logged forward port-belt hole has a dedicated service pocket");
+  Check(Math.Abs(serviceX+1.38f)<.001f&&Math.Abs(serviceY-.825f)<.001f&&Math.Abs(serviceZ-4.05f)<.001f,"Primary forward-belt service pocket is close to the plate and clear of the magazine store");
+  float serviceDx=(-1.775f-serviceX)*ironclad.Scale,serviceDy=(1.11f-serviceY)*ironclad.Scale-NavalRepairAim.HandHeight,serviceDz=(4.13f-serviceZ)*ironclad.Scale;
+  Check(NavalRepairSite.WithinReach(serviceDx,serviceDy,serviceDz),"Dedicated service pocket reaches the logged port armour hole");
+  int reachableBowSites=0;for(int candidate=0;candidate<NavalRepairWorkSites.SteamBowBeltCandidateCount;candidate++){
+   Check(NavalRepairWorkSites.SteamBowBelt(ironclad,-1.38f,1.42f,4.63f,candidate,out serviceX,out serviceY,out serviceZ),"Every damaged-bow fallback is defined");
+   float dx=(-1.38f-serviceX)*ironclad.Scale,dy=(1.42f-serviceY)*ironclad.Scale-NavalRepairAim.HandHeight,dz=(4.63f-serviceZ)*ironclad.Scale;
+   if(NavalRepairSite.WithinReach(dx,dy,dz))reachableBowSites++;
+  }
+  Check(reachableBowSites>=6,"Logged upper port-bow hole retains several independent in-reach work sites after deck damage");
+  bool aftReserve=false,weatherReserve=false;for(int candidate=5;candidate<NavalRepairWorkSites.SteamBowBeltCandidateCount;candidate++){
+   NavalRepairWorkSites.SteamBowBelt(ironclad,-1.90f,1.11f,4.13f,candidate,out serviceX,out serviceY,out serviceZ);
+   if(serviceZ<3.6f)aftReserve=true;if(Math.Abs(serviceY-ironclad.WeatherDeck)<.01f)weatherReserve=true;
+  }
+  Check(aftReserve&&weatherReserve,"Forward belt has independent aft and weather-deck emergency approaches");
+  for(int gun=0;gun<ironclad.GunCount;gun+=2){float z=NavalShipDefinition.GunZ(ironclad,gun);
+   Check(!NavalRepairWorkSites.ClearOfCasemate(ironclad,ironclad.WeatherDeck,z),"Occupied steam gun post is not a repair stand");
+   Check(!NavalRepairWorkSites.ClearOfCasemate(ironclad,ironclad.WeatherDeck,z+.55f),"Casemate shield bay remains excluded");
+   Check(NavalRepairWorkSites.ClearOfCasemate(ironclad,ironclad.WeatherDeck,z+(z>0?-.7f:.7f)),"Fore/aft casemate edge remains available for repairs");
+   float holeX=2.05f,standX=NavalRepairWorkSites.Corridor(ironclad,1),standZ=z+(z>0?-.7f:.7f);
+   float dx=(holeX-standX)*ironclad.Scale,dy=(2.24f-ironclad.WeatherDeck)*ironclad.Scale-NavalRepairAim.HandHeight,dz=(z-standZ)*ironclad.Scale;
+   Check(NavalRepairSite.WithinReach(dx,dy,dz),"Casemate-edge stand reaches the logged upper-belt hole");
+  }
   Console.WriteLine("PASS: 6000 complete ordered repair searches on both ships; physical probes remain live. 200000 equivalent candidate scans "+oldMs.ToString("F1")+" -> "+watch.Elapsed.TotalMilliseconds.ToString("F1")+" ms; Gen0 "+oldGC+" -> "+newGC+" (not Unity FPS).");
  }
 }

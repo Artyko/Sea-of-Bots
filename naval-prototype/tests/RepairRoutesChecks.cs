@@ -26,6 +26,9 @@ class RepairRoutesChecks
             if(!landed){Check(p.X==0f,"Interrupted descent finishes before sideways turn");Check(p.Y<=previous+0.03f,"Continuing down does not go back up");previous=p.Y;}
             if(p.Y==floor)landed=true;
         }
+        var steamLanding=NavalRepairRoutes.Plan(new NavalWalkPoint(1.1f,.825f,1.5f),new NavalWalkPoint(0f,.825f,NavalWalkRoutes.BottomLandingZ),true,1.1f,NavalShipDefinition.Ironclad.HoldFloor,1.1f,1.1f);
+        foreach(var point in steamLanding)if(Math.Abs(point.X)>.5f)
+            Check(point.Z>NavalWalkRoutes.BottomLandingZ+.2f,"Steam side corridor leaves the damaged aft landing before entering the centred stair approach");
         Check(landed,"Interrupted descent reaches lower landing");
         var up=NavalRepairRoutes.Plan(new NavalWalkPoint(0f,-0.7f,-1.4f),new NavalWalkPoint(2.1f,0.825f,-1f));
         foreach(var p in up)if(p.Y<0.78f)Check(p.X==0f,"Interrupted ascent stays centred");

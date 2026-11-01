@@ -4,10 +4,11 @@ using UnityEngine;
 public static class NavalMainMagazineLayout
 {
     public const float Z=4.05f,Width=3.2f,Depth=3.6f,HitRadius=1.8f;
+    public const float RouteClearance=.55f;
     // Full-size crew capsules must route around the armoured trunk, not merely
     // around its thin wall voxels. Values are returned in ship-local units.
-    public static float RouteHalfWidth(NavalShipDefinition ship){return (Width*.5f+.55f)/ship.Scale;}
-    public static float RouteHalfDepth(NavalShipDefinition ship){return (Depth*.5f+.55f)/ship.Scale;}
+    public static float RouteHalfWidth(NavalShipDefinition ship){return (Width*.5f+RouteClearance)/ship.Scale;}
+    public static float RouteHalfDepth(NavalShipDefinition ship){return (Depth*.5f+RouteClearance)/ship.Scale;}
     public static float RouteAft(NavalShipDefinition ship){return Z-RouteHalfDepth(ship);}
     public static float RouteForward(NavalShipDefinition ship){return Z+RouteHalfDepth(ship);}
 }

@@ -14,6 +14,8 @@ public sealed class NavalSternEvasionMath
  public NavalSternEvasionMath(int seed){random=(uint)seed^0x9e3779b9u;}
  private float Next(){random=unchecked(random*1664525u+1013904223u);return ((random>>8)%10000)/10000f;}
  public void Reset(){Active=BreakingAway=false;quiet=contact=phaseAge=Offset=0;combatStage=CounterSide=combatSide=0;}
+ public static bool ReleaseWhenForward(bool active,bool retreat,bool contact,float ahead,float distance)
+ {return active&&!retreat&&!contact&&ahead>Math.Max(3f,distance*.10f);}
  public bool Step(float dt,bool sternThreat,bool closeContact,bool closeQuarters,float lateral,bool retreat,int port,int starboard,bool canFire=false)
  {
   dt=Math.Max(0,dt);

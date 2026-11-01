@@ -363,7 +363,8 @@ public sealed partial class NavalFireSystem : MonoBehaviour
             if(intact>0)target.PowderPoint=hull.Root.InverseTransformPoint(centre/intact);
             if(target.FuseSound!=null)target.FuseSound.transform.localPosition=target.PowderPoint;
             Vector3 p=hull.Root.TransformPoint(target.PowderPoint);bool near=false;
-            foreach(var flame in flames)if(flame.Active&&(flame.Cell.transform.position-p).sqrMagnitude<2.25f){near=true;break;}
+            if(NavalFireProtection.AllowsNearbyHeat(target.MainMagazine))
+                foreach(var flame in flames)if(flame.Active&&(flame.Cell.transform.position-p).sqrMagnitude<2.25f){near=true;break;}
             bool wasLit=target.Powder.Lit;
             bool exploded=target.Powder.Step(.25f,near,Underwater(p));
             if(!wasLit&&target.Powder.Lit)

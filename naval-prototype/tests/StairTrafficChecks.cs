@@ -26,10 +26,17 @@ class StairTrafficChecks {
   Check(NavalStairTraffic.PassageLevel(upperLanding,ship)==1&&NavalStairTraffic.PassageLevel(middleLanding,ship)==0,"Each logged landing belongs to its own flight");
   Check(!NavalStairTraffic.SamePassage(upperLanding,middleLanding,ship),"Separate flights cannot suppress a vertical-route rebuild");
   if(ship.SteamPowered){
+   var downEntry=NavalWalkRoutes.Down(ship.UpperStairFloor);
+   Check(downEntry.Count>2&&Math.Abs(downEntry[1].Z-NavalWalkRoutes.UpperTreadEntryZ)<.001f&&NavalWalkRoutes.UpperTreadEntryZ<.85f,
+    "Upper flight first enters just inside the open coaming before descending");
+   var towerCross=NavalConningTowerLayout.Route(new NavalWalkPoint(1.5f,ship.WeatherDeck,-4.36f),
+    new System.Collections.Generic.List<NavalWalkPoint>{new NavalWalkPoint(-1.5f,ship.WeatherDeck,-4.36f)},ship);
+   Check(towerCross.Count>=3&&towerCross[0].Z>=NavalConningTowerLayout.ApproachZ-.01f&&towerCross[1].Z>=NavalConningTowerLayout.ApproachZ-.01f,
+    "Cross-deck route detours ahead of the armoured conning tower");
    var loggedTop=new NavalWalkPoint(-.13f,ship.WeatherDeck+.025f,.51f);
    var pump=new NavalWalkPoint(0,.825f,-4.9f);
    var pumpRoute=NavalSupplyRoutes.Plan(loggedTop,pump,ship);bool upperFlight=false;
-   foreach(var point in pumpRoute)if(NavalStairTraffic.PassageLevel(point,ship)==1){upperFlight=true;Check(Math.Abs(point.X)<.5f,"Cross-deck route keeps logged upper landing inside the real flight instead of battery lane");}
+   foreach(var point in pumpRoute)if(NavalStairTraffic.PassageLevel(point,ship)==1){upperFlight=true;Check(Math.Abs(point.X)<.5f,"Cross-deck route keeps logged upper landing inside the real flight instead of battery lane: "+point.X+","+point.Y+","+point.Z);}
    Check(upperFlight,"Logged pump route enters the upper stair flight");
    var loggedMiddle=new NavalWalkPoint(-.14f,.85f,.51f);
    var bilge=new NavalWalkPoint(.72f,ship.HoldFloor,1.71f);
@@ -44,6 +51,10 @@ class StairTrafficChecks {
    var storeRoute=NavalSupplyRoutes.Plan(aftWeather,middleStore,ship);bool bypass=false;var prior=aftWeather;
    foreach(var point in storeRoute){if(!NavalStairTraffic.SamePassage(prior,point,ship)&&prior.Y>ship.WeatherDeck-.12f&&point.Y>ship.WeatherDeck-.12f&&NavalSupplyRoutes.Hits(prior,point,-1.18f,1.18f,-3.88f,.78f))throw new Exception("Logged plank route crosses open upper stair: "+prior.X+","+prior.Y+","+prior.Z+" -> "+point.X+","+point.Y+","+point.Z);if(point.Y>ship.WeatherDeck-.12f&&Math.Abs(point.X)>1.2f&&point.Z<.81f)bypass=true;prior=point;}
    Check(bypass,"Aft weather-deck worker receives a side bypass before descending");
+   var loggedGateway=NavalShipRoutes.Plan(new NavalWalkPoint(1.16f,ship.WeatherDeck,-3.93f),new NavalWalkPoint(1.40f,ship.WeatherDeck,1.05f),ship);
+   string gatewayTrace="";foreach(var gatewayPoint in loggedGateway)gatewayTrace+=" ["+gatewayPoint.X+","+gatewayPoint.Z+"]";
+   Check(loggedGateway.Count>1&&loggedGateway[0].X>=NavalShipRoutes.SteamAftGatewayLane-.001f&&loggedGateway[0].Z<=-3.92f,
+    "Logged returning sailor is sent through the skinned aft gateway instead of the tangent x=1.50/z=-3.90 point; route="+gatewayTrace);
    var gunExit=NavalShipRoutes.Plan(new NavalWalkPoint(-ship.GunPostX,ship.WeatherDeck,NavalShipDefinition.GunZ(ship,0)),new NavalWalkPoint(-1.4f,ship.WeatherDeck,1.05f),ship);
    Check(gunExit.Count>1&&gunExit[0].X<=-NavalShipRoutes.SteamBatteryLane+.001f&&Math.Abs(gunExit[0].Z-NavalShipDefinition.GunZ(ship,0))<.01f,"Aft gunner first exits laterally before crossing the upper stair opening");
    var underStart=new NavalWalkPoint(.60f,.85f,.12f);var underGoal=new NavalWalkPoint(.58f,.825f,2.47f);

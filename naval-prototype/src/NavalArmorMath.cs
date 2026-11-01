@@ -8,7 +8,13 @@ public static class NavalArmorMath
     // A SphereCast can touch two neighbouring cells of the same one-cell
     // exterior belt at a seam.  That is one plate contact, not a second layer
     // of internal armour.  Real bulkheads are farther behind the skin.
-    public const float EntryPlateSeamDistance=.60f;
+    // A fast sphere cast can report several cells of the same curved/tapered
+    // exterior belt while the shell is still clearing its entry crater.  The
+    // v257 log showed those lateral cells as far as 1.10 m behind the first
+    // contact, with an unchanged outboard coordinate.  Internal barriers are
+    // explicitly excluded below, so this wider tolerance cannot hide a real
+    // armoured bulkhead.
+    public const float EntryPlateSeamDistance=1.25f;
     public const float RicochetCosine=.34f,SpallThreshold=.70f;
     public const float PointBlankRange=15f,CloseRange=55f,NormalRange=110f,LongRange=180f,ExtremeRange=260f;
     public static float BlastRadius(float radius,float multiplier)
@@ -71,11 +77,20 @@ public static class NavalArmorMath
     public static bool Perforates(float basePower,float travelled,NavalPenetrationMaterial material)
     {return ResidualPower(basePower,travelled,material)>.05f;}
     public static float InternalFuseDepth(float residualPower)
-    {return Math.Max(1.1f,Math.Min(3.0f,1.15f+Math.Max(0f,residualPower)*.25f));}
+    {
+        // A longer base-fuze delay moves ordinary AP beyond the first frame or
+        // deck beam and lets energetic heavy AP reach the next compartment.
+        // Keep a finite cap so a shell crossing an empty/destroyed hull still
+        // bursts before travelling an implausible distance.
+        return Math.Max(2.15f,Math.Min(5.5f,2.15f+Math.Max(0f,residualPower)*.45f));
+    }
     public static float InternalFuseDepth(float residualPower,NavalPenetrationMaterial material)
     {
-        float materialDelay=material==NavalPenetrationMaterial.Armor?1f:material==NavalPenetrationMaterial.Iron?.78f:material==NavalPenetrationMaterial.Machinery?.62f:.45f;
-        return Math.Max(.55f,Math.Min(3.2f,InternalFuseDepth(residualPower)*materialDelay));
+        float materialDelay=material==NavalPenetrationMaterial.Armor?1f:material==NavalPenetrationMaterial.Iron?.95f:material==NavalPenetrationMaterial.Machinery?.90f:.85f;
+        // Even a wooden deck must not produce a surface-looking burst.  The
+        // fuze now has at least 1.80 m of physical post-penetration travel;
+        // armour and high residual energy carry it substantially deeper.
+        return Math.Max(1.80f,Math.Min(5.5f,InternalFuseDepth(residualPower)*materialDelay));
     }
     public static bool ArmsInternalFuse(NavalPenetrationMaterial material,float residualPower)
     {return residualPower>.05f;}

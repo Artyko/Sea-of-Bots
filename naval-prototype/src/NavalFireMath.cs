@@ -79,6 +79,23 @@ public static class NavalFireResponseMath
     public static bool NeedsResponder(bool active,bool assigned,bool maintenanceReserved,bool urgent)
     {return active&&!assigned&&(urgent||!maintenanceReserved);}
 }
+public static class NavalFireProtection
+{
+    // The main-calibre hoist and magazine are a sealed steel citadel.  An
+    // ordinary deck fire outside the trunk cannot cook its propellant through
+    // the armour.  Direct projectile hits and blast Impact() calls remain able
+    // to ignite or detonate it.
+    public static bool AllowsNearbyHeat(bool mainMagazine){return !mainMagazine;}
+}
+public static class NavalAmmunitionFireAssignment
+{
+    public static bool OwnsReadyUse(int assignedStation,int readyGun)
+    {return readyGun>=0&&assignedStation==readyGun+1;}
+    public static bool ShouldHandoff(bool ownerAvailable,bool alreadyOwned)
+    {return ownerAvailable&&!alreadyOwned;}
+    public static bool KeepOwner(bool samePriorityTarget,bool claimedByOwner,bool active)
+    {return samePriorityTarget&&claimedByOwner&&active;}
+}
 public static class NavalFireWorkDeck
 {
     // A deck itself must be attacked from its upper face. Trying every deck

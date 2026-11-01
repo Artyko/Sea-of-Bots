@@ -80,6 +80,13 @@ public class NavalHull
     public readonly List<NavalHullVoxel> Voxels = new List<NavalHullVoxel>();
     private int damagedRevision=-1;
     private readonly List<NavalHullVoxel> damagedVoxels=new List<NavalHullVoxel>();
+    private readonly Dictionary<NavalHullVoxel,float> unavailableRepairLogAfter=new Dictionary<NavalHullVoxel,float>();
+    public bool ShouldReportUnavailableRepair(NavalHullVoxel cell,float now)
+    {
+        if(cell==null)return false;
+        float after;if(unavailableRepairLogAfter.TryGetValue(cell,out after)&&now<after)return false;
+        unavailableRepairLogAfter[cell]=now+10f;return true;
+    }
     private int deckGapRevision=-1;
     private readonly List<NavalHullVoxel> deckGaps=new List<NavalHullVoxel>();
     public List<NavalHullVoxel> GetDamagedVoxels()

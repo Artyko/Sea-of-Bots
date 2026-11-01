@@ -99,6 +99,8 @@ class SteamV232Checks
         Near(NavalConningTowerLayout.RoofBottom-NavalConningTowerLayout.SlitTop,.42f,.0001f,"A substantial upper belt physically supports the higher roof");
         Check(NavalConningTowerLayout.HalfWidth>=1.3f&&NavalConningTowerLayout.HalfDepth>=.7f&&NavalConningTowerLayout.RoofBottom>=1.3f,"Conning tower is enlarged in width, depth and height");
         Near(NavalConningTowerLayout.PlatformY(ship)-ship.WeatherDeck,NavalConningTowerLayout.PlatformRise,.0001f,"Command post feet and physical platform top share one source of truth");
+        Check(NavalConningTowerLayout.FireproofDeckCell(0,ship.WeatherDeck-.125f,NavalConningTowerLayout.CenterZ,.25f,ship.WeatherDeck),"Timber hidden beneath the armoured command platform is fireproofed");
+        Check(!NavalConningTowerLayout.FireproofDeckCell(1.8f,ship.WeatherDeck-.125f,NavalConningTowerLayout.CenterZ,.25f,ship.WeatherDeck),"Exposed weather deck beside the tower remains ordinary timber");
         Check(NavalConningTowerLayout.SideDoorHalfDepth*2f*ship.Scale>2f,"Port and starboard side entrances clear a standing sailor");
         var helmRoute=NavalShipRoutes.Plan(new NavalWalkPoint(1.5f,ship.WeatherDeck,-2.8f),NavalConningTowerLayout.HelmPost(ship),ship);
         Check(helmRoute.Count>=4,"Raised conning tower route contains an exterior approach and entrance steps");
@@ -147,8 +149,10 @@ class SteamV232Checks
         Check(!NavalMainBatteryMath.FireproofDeckCell(1.80f,ship.WeatherDeck-.125f,3.75f,.25f,ship.WeatherDeck),"Fireproof apron does not suppress ordinary side-deck fires");
         Check(!NavalMainBatteryMath.FireproofDeckCell(1.0f,.70f,3.75f,.25f,ship.WeatherDeck),"Fireproof apron does not suppress fires on a lower deck");
         Check(NavalMainBatteryMath.CrewApproachZ<NavalMainBatteryMath.CrewZ,"Main-battery crew enters through the open rear before moving to its internal seat");
-        Check(NavalMainBatteryMath.SteeringPriority(true,4,10f,1)&&!NavalMainBatteryMath.SteeringPriority(true,4,10.01f,1),"Helm begins a bounded main-battery alignment before reload completes");
+        Check(NavalMainBatteryMath.SteeringPriority(true,4,20f,1)&&NavalMainBatteryMath.SteeringPriority(true,4,0f,1),"Helm holds a continuous joint-battery course throughout the heavy-gun reload");
         Check(!NavalMainBatteryMath.SteeringPriority(false,4,0,2)&&!NavalMainBatteryMath.SteeringPriority(true,0,0,2)&&!NavalMainBatteryMath.SteeringPriority(true,4,0,0),"Broken, empty or unmanned main battery cannot divert the helm");
+        Near(NavalMainBatteryMath.MainBatterySteeringBearing(NavalMainBatteryMath.ReloadSeconds),NavalMainBatteryMath.JointBatteryBearing,.0001f,"Freshly fired main gun holds the joint 65-degree casemate course");
+        Near(NavalMainBatteryMath.MainBatterySteeringBearing(0f),NavalMainBatteryMath.MainBatteryReadyBearing,.0001f,"Ready main gun smoothly reaches its reliable 45-degree bearing");
         foreach(int batterySide in new[]{1,2})
         {
             float course=NavalMainBatteryMath.JointBatteryCourse(20f,batterySide);
@@ -160,17 +164,21 @@ class SteamV232Checks
             float readyCourse=NavalMainBatteryMath.MainBatteryCourse(20f,batterySide,0f);
             float readyLocalTarget=NavalBroadsideMath.Delta(readyCourse,20f);
             Check(NavalMainBatteryMath.WithinArc(loadingLocalTarget)&&NavalMainBatteryMath.WithinArc(readyLocalTarget),"Dynamic main-battery courses remain inside traverse");
-            Check(NavalMainBatteryMath.TraverseArc-Math.Abs(loadingLocalTarget)>=12f,"Loading course reserves traverse for target lead and hull lag");
+            Check(NavalMainBatteryMath.TraverseArc-Math.Abs(loadingLocalTarget)>=4.9f,"Loading course preserves the documented five-degree joint-battery overlap");
             Check(NavalMainBatteryMath.TraverseArc-Math.Abs(readyLocalTarget)>=25f,"Ready course turns farther toward the target for a reliable shot");
             Check(Math.Abs(readyLocalTarget)<Math.Abs(loadingLocalTarget),"Helm progressively turns the bow toward the target as reload completes");
         }
         Check(NavalMainBatteryMath.RecoverySide(100f,1)==2&&NavalMainBatteryMath.RecoverySide(-100f,2)==1,
             "Main-battery recovery chooses the shorter turn when a target leaves the forward arc");
+        Check(NavalMainBatteryMath.RecoverySide(10f,1)==1&&NavalMainBatteryMath.RecoverySide(-10f,2)==2,
+            "Main-battery recovery preserves its side inside the bow dead band");
         Check(NavalMainBatteryMath.RecoverySide(179f,1)==1&&NavalMainBatteryMath.RecoverySide(-179f,2)==2,
             "Dead-astern recovery preserves its committed side across the signed-angle seam");
         float sternRecovery=NavalMainBatteryMath.MainBatteryHelmCourse(0f,180f,2,0f);
         Near(Math.Abs(NavalBroadsideMath.Delta(sternRecovery,180f)),NavalMainBatteryMath.MainBatteryReadyBearing,.0001f,
             "Dead-astern recovery demands a course well inside the traverse stop instead of stalling at its edge");
+        Check(NavalSternEvasionMath.ReleaseWhenForward(true,false,false,90f,132f),"Stale stern evasion releases once the target is clearly forward");
+        Check(!NavalSternEvasionMath.ReleaseWhenForward(true,false,false,-40f,132f)&&!NavalSternEvasionMath.ReleaseWhenForward(true,true,false,90f,132f),"Stern hysteresis remains active behind the ship and during an ordered retreat");
         float mainCrewRadius=.8f/ship.Scale;
         Check(NavalMainBatteryMath.SideShieldX-NavalMainBatteryMath.SideShieldThickness*.5f-NavalMainBatteryMath.CrewX>mainCrewRadius,
             "Main-battery crew posts clear the solid side shields at full native capsule radius");
@@ -198,8 +206,9 @@ class SteamV232Checks
         Check(NavalArmorMath.InternalBlastRadiusMultiplier(NavalMainBatteryMath.ProjectilePower,closeResidual)>NavalArmorMath.InternalBlastRadiusMultiplier(ship.ProjectilePower,.1f),"Main-caliber internal burst wrecks a larger compartment than a low-residual casemate shell");
         Check(Math.Abs(NavalArmorMath.InternalEncounterDistance(0f,.72f,.22f)-.50f)<.001f,"Entry sweep counts only travel behind the perforated surface");
         Check(Math.Abs(NavalArmorMath.InternalEncounterDistance(.8f,.35f,0f)-1.15f)<.001f,"Later obstruction sweeps accumulate internal travel");
-        Check(NavalArmorMath.IsEntryPlateSeam(.02f,true,false)&&NavalArmorMath.IsEntryPlateSeam(.60f,true,false),"Neighbouring exterior belt cells through the full entry tolerance are not false internal armour");
-        Check(!NavalArmorMath.IsEntryPlateSeam(.02f,true,true)&&!NavalArmorMath.IsEntryPlateSeam(.61f,true,false),"Internal barriers and genuinely separated armour remain real obstructions");
+        Check(NavalArmorMath.InternalFuseDepth(.05f,NavalPenetrationMaterial.Wood)>=1.80f,"A wooden-deck perforation carries every AP shell substantially deeper before detonation");
+        Check(NavalArmorMath.IsEntryPlateSeam(.02f,true,false)&&NavalArmorMath.IsEntryPlateSeam(1.25f,true,false),"Neighbouring exterior belt cells through the full entry tolerance are not false internal armour");
+        Check(!NavalArmorMath.IsEntryPlateSeam(.02f,true,true)&&!NavalArmorMath.IsEntryPlateSeam(1.26f,true,false),"Internal barriers and genuinely separated armour remain real obstructions");
         Check(NavalMainMagazineBlastMath.HullRadius>NavalPowderBlastMath.HullRadius*2f&&NavalMainMagazineBlastMath.Power>NavalPowderBlastMath.Power*2f,"Main magazine detonation is catastrophic");
         Check(ship.Compartments&&ship.Partitions,"Ironclad retains compartment and partition systems");
         Near(ship.ArmorDamageScale,.65f,.0001f,"Ironclad collateral damage scale");

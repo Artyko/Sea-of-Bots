@@ -65,9 +65,13 @@ public static class NavalRepairRoutes
             else
             {
                 Add(route,side*lowerCorridor,holdFloor,start.Z);
-                Add(route,side*lowerCorridor,holdFloor,-3.65f);
-                Add(route,0f,holdFloor,-3.65f);
-                foreach(NavalWalkPoint p in NavalWalkRoutes.UpFrom(holdFloor,-3.65f,holdFloor))Add(route,p.X,p.Y,p.Z);
+                // Do not run the side lane all the way into the aft stair
+                // landing.  Damage and the neighbouring store can turn the
+                // old (side,-3.65) pin into a dead end.  Approach on intact
+                // deck, then enter the centred landing diagonally.
+                Add(route,side*lowerCorridor,holdFloor,NavalWalkRoutes.BottomApproachZ);
+                Add(route,0f,holdFloor,NavalWalkRoutes.BottomLandingZ);
+                foreach(NavalWalkPoint p in NavalWalkRoutes.UpFrom(holdFloor,NavalWalkRoutes.BottomLandingZ,holdFloor))Add(route,p.X,p.Y,p.Z);
             }
             start=route[route.Count-1];
         }
@@ -76,21 +80,24 @@ public static class NavalRepairRoutes
         side=start.X< -0.1f?-1f:start.X>0.1f?1f:nextSide;
         if(upper&&Math.Abs(start.X)<1.1f&&start.Z>=-3f&&start.Z<NavalWalkRoutes.TopLandingZ)
         {Add(route,0f,floor,NavalWalkRoutes.TopLandingZ);start=new NavalWalkPoint(0f,floor,NavalWalkRoutes.TopLandingZ);}
+        bool fromBottomLanding=upper&&Math.Abs(start.X)<.1f&&Math.Abs(start.Z-NavalWalkRoutes.BottomLandingZ)<.1f;
+        if(fromBottomLanding){Add(route,0f,floor,NavalWalkRoutes.BottomApproachZ);start=new NavalWalkPoint(0f,floor,NavalWalkRoutes.BottomApproachZ);}
         Add(route,side*corridor,floor,start.Z);
         if(side!=nextSide)
         {
             float cross=upper?NavalWalkRoutes.TopLandingZ:.8f;
-            if(!upper&&Math.Abs(start.Z+3.65f)+Math.Abs(goal.Z+3.65f)<Math.Abs(start.Z-0.8f)+Math.Abs(goal.Z-0.8f))cross=-3.65f;
+            if(!upper&&Math.Abs(start.Z-NavalWalkRoutes.BottomLandingZ)+Math.Abs(goal.Z-NavalWalkRoutes.BottomLandingZ)<Math.Abs(start.Z-0.8f)+Math.Abs(goal.Z-0.8f))cross=NavalWalkRoutes.BottomLandingZ;
             Add(route,side*corridor,floor,cross);Add(route,nextSide*corridor,floor,cross);
         }
-        Add(route,nextSide*corridor,floor,goal.Z);Add(route,goal.X,goal.Y,goal.Z);
+        bool toBottomLanding=upper&&Math.Abs(goal.X)<.1f&&Math.Abs(goal.Z-NavalWalkRoutes.BottomLandingZ)<.1f;
+        Add(route,nextSide*corridor,floor,toBottomLanding?NavalWalkRoutes.BottomApproachZ:goal.Z);Add(route,goal.X,goal.Y,goal.Z);
         return route;
     }
     public static float TravelCost(float x,float y,float z,float targetX,float targetY,float targetZ)
     {
         bool sameDeck=(y>0.3f)==(targetY>0.3f);
         float cost=Math.Abs(x-targetX)+Math.Abs(z-targetZ);
-        if(!sameDeck)cost+=7f+Math.Abs(z+3.65f);
+        if(!sameDeck)cost+=7f+Math.Abs(z-NavalWalkRoutes.BottomLandingZ);
         return cost;
     }
     public static float Priority(float leakPriority,float travelCost)

@@ -48,6 +48,10 @@ class FirePowderChecks
   Check(NavalFireResponseMath.NeedsResponder(true,false,true,true)&&!NavalFireResponseMath.NeedsResponder(true,true,false,true),"Urgent fire requests one responder without duplicate staffing");
   Check(!NavalFireResponseMath.ReservesMaintenance(false,true),"Engine watch no longer suppresses an ordinary-fire responder");
   Check(NavalFireResponseMath.ReservesMaintenance(true,false),"Actual repair work still reserves the maintenance slot");
+  Check(!NavalFireProtection.AllowsNearbyHeat(true)&&NavalFireProtection.AllowsNearbyHeat(false),"Sealed main magazine rejects ordinary nearby fire while ready-use stores retain cook-off behaviour");
+  Check(NavalAmmunitionFireAssignment.OwnsReadyUse(4,3)&&!NavalAmmunitionFireAssignment.OwnsReadyUse(3,3)&&!NavalAmmunitionFireAssignment.OwnsReadyUse(1,-1),"A ready-use fire maps only to the gunner of its own station");
+  Check(NavalAmmunitionFireAssignment.ShouldHandoff(true,false)&&!NavalAmmunitionFireAssignment.ShouldHandoff(false,false)&&!NavalAmmunitionFireAssignment.ShouldHandoff(true,true),"A generic powder-fire claim is handed to the available owning gunner exactly once");
+  Check(NavalAmmunitionFireAssignment.KeepOwner(true,true,true)&&!NavalAmmunitionFireAssignment.KeepOwner(false,true,true)&&!NavalAmmunitionFireAssignment.KeepOwner(true,true,false),"An assigned powder-fire owner stays sticky only while its live claimed fuse exists");
   Console.WriteLine("PASS: staged fire growth and bucket cooling, finite fuel, AP internal ignition, wetting/drying, fuses, submerged powder, single detonation and bucket mass conservation.");
  }
 }

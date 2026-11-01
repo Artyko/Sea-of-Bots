@@ -6,6 +6,7 @@ class LowerDeckSideRepairChecks
     static void Main()
     {
         NavalShipDefinition ship=NavalShipDefinition.Ironclad;int cases=0;
+        Check(Math.Abs(NavalRepairWorkSites.Corridor(ship,0)-1.90f)<.001f,"Steam lower-hull search begins in the unobstructed outer service lane");
         foreach(int side in new int[]{-1,1})
         for(int row=0;row<16;row++)
         foreach(float z in new float[]{-4.8f,-3.7f,-1.4f,0f,1.4f,3.7f,4.8f})

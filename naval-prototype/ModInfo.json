@@ -1,10 +1,10 @@
 ﻿{
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v257.dll",
+  "MainDLLFileName": "NavalPrototype-v267.dll",
   "Author": "Kirill",
-  "Version": 257,
-  "Description": "Steam ironclads with full-body tapered-hull routes, verified wood and armour penetration, delayed AP travel, and bounded impact rebuilds.",
+  "Version": 267,
+  "Description": "Steam ironclads with rack-lid recovery, wider aft passage, resilient bow repairs and corrected close-range helm release.",
   "ModDependencies": [],
   "Tags": []
 }

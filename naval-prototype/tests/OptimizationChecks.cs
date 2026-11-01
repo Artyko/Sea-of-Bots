@@ -21,7 +21,7 @@ class OptimizationChecks
         Check(NavalSpatialBatching.ChunkSize(NavalShipDefinition.Sloop)==2f,"Sail rendering keeps established chunk size");
         foreach(var steam in NavalShipDefinition.SteamChoices)Check(NavalSpatialBatching.ChunkSize(steam)==4f,"Dense steam hull uses low-draw-call chunks");
         Check(NavalSpatialBatching.ColliderChunkSize(NavalShipDefinition.Sloop)==2f,"Sail collider batching stays unchanged");
-        foreach(var steam in NavalShipDefinition.SteamChoices)Check(NavalSpatialBatching.ColliderChunkSize(steam)==4f,"Steam physics keeps exact chunks small enough for bounded impact rebuilds");
+        foreach(var steam in NavalShipDefinition.SteamChoices)Check(NavalSpatialBatching.ColliderChunkSize(steam)==2f,"Steam physics uses bounded damage-rebuild chunks independently of large render batches");
         Check(NavalSpatialBatching.ColliderChunk(-3f,8f,true)==0&&NavalSpatialBatching.ColliderChunk(3f,8f,true)==0,"Centered steam chunk does not split the beam at zero");
         Random random=new Random(8621);
         for(int test=0;test<40;test++)

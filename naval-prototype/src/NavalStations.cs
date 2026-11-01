@@ -213,11 +213,15 @@ public partial class NavalStations : MonoBehaviour
                 float foundationTop=hull.Definition.GunMountY-.23f*fixture;
                 float foundationHeight=Mathf.Max(.05f,foundationTop-hull.Definition.WeatherDeck+.02f);
                 ArmoredDecoration(boat,black,new Vector3(side*hull.Definition.GunMountX,hull.Definition.WeatherDeck+foundationHeight*.5f-.01f,gunZ),
-                    new Vector3(.42f,foundationHeight,.46f),true);
+                    new Vector3(.42f,foundationHeight,.46f),false);
                 // Iron pedestal, traversing ring, recoil slide and long jacketed
                 // tube: no wooden truck carriage or muzzle-loading wheels.
-                hull.AddDecorationBox(guns[i],black,new Vector3(0,-.08f,0),new Vector3(.72f,.30f,.82f),true);
-                hull.AddDecorationBox(guns[i],trim,new Vector3(0,.09f,0),new Vector3(.88f,.10f,.90f),true);
+                // The low plinth is visually solid but lies inside the only
+                // weather-deck bypass. Its old box collider reached x=1.89
+                // and repeatedly stopped full-size sailors at z=-2.79.
+                // Shields, breech and barrel remain physical/damageable.
+                hull.AddDecorationBox(guns[i],black,new Vector3(0,-.08f,0),new Vector3(.72f,.30f,.82f),false);
+                hull.AddDecorationBox(guns[i],trim,new Vector3(0,.09f,0),new Vector3(.88f,.10f,.90f),false);
                 hull.AddDecorationBox(barrels[i],black,new Vector3(0,0,.18f),new Vector3(.62f,.52f,.72f),true);
                 hull.AddDecorationBox(barrels[i],black,new Vector3(0,0,.58f),new Vector3(.42f,.42f,.80f),true);
                 hull.AddDecorationBox(barrels[i],black,new Vector3(0,0,1.36f),new Vector3(.27f,.27f,1.65f),true);
@@ -493,7 +497,12 @@ public class NavalCannonball : MonoBehaviour
     { velocity = speed; boat = ship; hull = shell; owner = player; ocean = sea; splash = material;metalSpark=sparks; expires = end; attackId = nextAttackId++; hostile=enemy;attacker=robot!=null?robot:player;projectilePower=Mathf.Max(.1f,power);projectileRadiusScale=Mathf.Clamp(radiusScale,1f,3f);internalArmorPiercingBurst=armorPiercingBurst; }
     private void Update()
     {
-        if (boat == null || Time.time >= expires) { Destroy(gameObject); return; }
+        if (boat == null) { Destroy(gameObject); return; }
+        if(Time.time>=expires)
+        {
+            if(armedHull!=null)DetonateArmed(transform.position,"expiry");else Destroy(gameObject);
+            return;
+        }
         NavalTestWorld world=NavalTestWorld.Active;
         if (Time.timeScale == 0f || (world!=null?!world.SimulationActive:owner==null||!owner.IsPlayerInputEnabled())) return;
         float remaining=Mathf.Min(Time.deltaTime,0.05f);
@@ -546,7 +555,11 @@ public class NavalCannonball : MonoBehaviour
                 if(underwaterTravel>=underwaterLimit-0.001f||velocity.magnitude<0.6f)
                 {
                     if(projectilePower>1.05f)Debug.Log("[NavalPrototype] Underwater projectile spent: power="+projectilePower.ToString("F2")+" distance="+underwaterTravel.ToString("F2")+" reason="+(underwaterTravel>=underwaterLimit-0.001f?"range":"drag"));
-                    Destroy(gameObject);return;
+                    // An already armed projectile must not disappear in a
+                    // flooded compartment when water drag consumes its last
+                    // metres. Complete the live fuze at the stopping point.
+                    if(armedHull!=null)DetonateArmed(transform.position,"water drag");else Destroy(gameObject);
+                    return;
                 }
             }
             remaining-=dt;

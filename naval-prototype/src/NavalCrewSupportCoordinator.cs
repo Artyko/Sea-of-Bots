@@ -9,7 +9,7 @@ public partial class NavalCrewController
         bool changed=false;foreach(var worker in workers)if(worker!=null&&worker.ChoosingNextTask)changed=true;
         if(Time.time<supportReview&&!changed)return;supportReview=Time.time+.3f;
         if(supportEligible==null){supportEligible=new bool[workers.Length];supportCosts=new float[workers.Length];}
-        foreach(var worker in workers)if(worker!=null){worker.PumpAssignment=false;worker.FireAssignment=false;}
+        foreach(var worker in workers)if(worker!=null){worker.PumpAssignment=false;worker.FireAssignment=false;worker.ClearAmmunitionFireAssignment();}
         var bilge=hull.Bilge;
         // Mark incumbent before allocating other work. Never borrow an operator mid-route.
         bool pumpOwned=bilge!=null&&bilge.Operator!=null;
@@ -18,8 +18,39 @@ public partial class NavalCrewController
         if(pumpUrgent&&!pumpOwned)AssignPump();
         var fire=hull.Fire;
         if(fire==null||!fire.HasFire){if(!pumpOwned&&!pumpUrgent)AssignPump();AssignEmergencySecondPump(pumpUrgent);return;}
+        int reservedGunOwners=0;
+        // A lit ready-use locker belongs to one known broadside station. Give
+        // that station's gunner first refusal and reserve the target before a
+        // generic firefighter can claim it. A released main-battery operator
+        // similarly owns a fire in the sealed main magazine.
+        for(int n=0;n<fire.TargetCount;n++)
+        {
+            var target=fire.TargetAt(n);if(!target.Active||target.Powder==null||!target.ReadyUse&&!target.MainMagazine)continue;
+            if(target.Claim!=null&&target.Claim.OwnsAmmunitionFire(target))
+            {
+                target.Claim.FireAssignment=true;
+                // Once TickFire has started, this sailor is included in the
+                // existing-firefighter count below. Count only reservations
+                // which have not begun so one person never consumes two slots.
+                if(!target.Claim.FightingFire)reservedGunOwners++;
+                continue;
+            }
+            for(int i=0;i<workers.Length;i++)
+            {
+                int station=assigned[i]>=0?assigned[i]:roles[i];
+                bool owns=target.ReadyUse&&NavalAmmunitionFireAssignment.OwnsReadyUse(station,target.ReadyGun)||
+                    target.MainMagazine&&DedicatedMainBatteryCrew(i)&&MainBatteryCrewSlot(i)<0;
+                if(!owns||workers[i]==null||boarders[i]!=null&&boarders[i].Busy||!workers[i].AvailableForAmmunitionFire(target))continue;
+                if(NavalAmmunitionFireAssignment.ShouldHandoff(true,target.Claim==workers[i])&&target.Claim!=null)
+                {
+                    var previous=target.Claim;
+                    if(previous.RelinquishAmmunitionFire(target))Debug.Log("[NavalPrototype] Ammunition fire handoff: ship="+hull.Root.name+" gun="+target.ReadyGun+" from="+previous.GetInstanceID()+" to="+workers[i].GetInstanceID());
+                }
+                if(workers[i].AssignAmmunitionFire(target)){assigned[i]=-1;if(!workers[i].FightingFire)reservedGunOwners++;break;}
+            }
+        }
         int existing=0;foreach(var worker in workers)if(worker!=null&&worker.FightingFire){worker.FireAssignment=true;existing++;}
-        int slots=(fire.CriticalFire?2:1)-existing;
+        int slots=(fire.CriticalFire?2:1)-existing-reservedGunOwners;
         for(int slot=0;slot<slots;slot++)
         {
             for(int i=0;i<workers.Length;i++)

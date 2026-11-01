@@ -55,7 +55,7 @@ class AllCrewRouteChecks {
  if(ship.SteamPowered){
   var loggedStart=new NavalWalkPoint(-.31f,.825f,3.40f);var loggedBow=new NavalWalkPoint(-.32f,.825f,5.50f);
   var loggedRoute=NavalSupplyRoutes.Plan(loggedStart,loggedBow,ship);var prior=loggedStart;bool detoured=false;
-  foreach(var point in loggedRoute){float mx=NavalMainMagazineLayout.RouteHalfWidth(ship);Check(!NavalSupplyRoutes.Hits(prior,point,-mx,mx,NavalMainMagazineLayout.RouteAft(ship),NavalMainMagazineLayout.RouteForward(ship)),"Logged bow repair route crosses magazine");if(Math.Abs(point.X)>=mx)detoured=true;prior=point;}
+  foreach(var point in loggedRoute){float mx=NavalMainMagazineLayout.RouteHalfWidth(ship);Check(!NavalSupplyRoutes.Hits(prior,point,-mx,mx,NavalMainMagazineLayout.RouteAft(ship),NavalMainMagazineLayout.RouteForward(ship)),"Logged bow repair route crosses magazine: "+prior.X+","+prior.Z+" -> "+point.X+","+point.Z);if(Math.Abs(point.X)>=mx)detoured=true;prior=point;}
   Check(detoured,"Logged bow repair route receives a magazine-side detour");
  }
  }

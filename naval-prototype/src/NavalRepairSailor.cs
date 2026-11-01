@@ -336,9 +336,18 @@ public partial class NavalRepairSailor : MonoBehaviour
             testedRepairSites.Add(candidate.LocalCenter);
             retryAfter[candidate]=Time.time+NavalRepairDispatch.RetryDelay(candidate.InflowRate>.00001f);
         }
-        if(selected==null)return;
+        if(selected==null)
+        {
+            if(candidates.Count>0&&hull.ShouldReportUnavailableRepair(candidates[0],Time.time))
+            {
+                NavalHullVoxel blocked=candidates[0];
+                Debug.Log("[NavalPrototype] Repair work point unavailable: sailor="+robot.GetInstanceID()+" ship="+boat.name+
+                    " hole="+blocked.LocalCenter+" flow="+blocked.InflowRate.ToString("F3")+" feet="+feet+" candidates="+candidates.Count);
+            }
+            return;
+        }
         string wetAge=float.IsNegativeInfinity(selected.LastWetAt)?"dry/never wet":(Time.time-selected.LastWetAt).ToString("F1");
-        Debug.Log("[NavalPrototype] Repair job: hole="+selected.LocalCenter+" work="+workPoint+" wet age="+wetAge);
+        Debug.Log("[NavalPrototype] Repair job: sailor="+robot.GetInstanceID()+" ship="+boat.name+" hole="+selected.LocalCenter+" work="+workPoint+" wet age="+wetAge);
         leak=selected;
         if(leak.RepairMechanism!=null&&leak.RepairMechanism.IsCannon)leak.RepairMechanism.RepairWorker=this;
         waitingForRepair=false;repairReplans=0;rejectedRepairPoints.Clear();repairDestination=workPoint;progress.Reset();route.Clear();returning=false;changingPost=false;stuck=0f;
@@ -370,9 +379,28 @@ public partial class NavalRepairSailor : MonoBehaviour
     private bool FindWorkPoint(NavalHullVoxel hole,out Vector3 point)
     {
         float preferred=NavalRepairSite.Floor(hole.LocalCenter.y,hull.Floor);
+        // Gun mechanisms are repaired at their own service point.  Only a
+        // hull patch must avoid the occupied gunner bay; otherwise this guard
+        // would make a damaged casemate itself impossible to restore.
+        bool avoidCasemate=(hole.HydraulicShell||hole.InternalBarrier)&&!hole.RepairableEquipment;
         bool stairs=NavalWalkRoutes.InStairwell(feet.x,feet.y,feet.z,hull.Definition.StairWidth*.5f+.175f,hull.Floor);
         if(NavalRepairDispatch.PreferCurrentDeck(feet.y,hull.Floor,stairs))preferred=feet.y>.3f?.825f:hull.Floor;
         if(hull.Definition.DeckCount>2&&(feet.y>hull.Definition.WeatherDeck-.25f||hole.LocalCenter.y>hull.Definition.WeatherDeck))preferred=hull.Definition.WeatherDeck;
+        float serviceX,serviceY,serviceZ;
+        for(int service=0;service<NavalRepairWorkSites.SteamSternBeltCandidateCount;service++)
+        {
+            if(!NavalRepairWorkSites.SteamSternBelt(hull.Definition,hole.LocalCenter.x,hole.LocalCenter.y,hole.LocalCenter.z,
+                service,out serviceX,out serviceY,out serviceZ))break;
+            point=new Vector3(serviceX,serviceY,serviceZ);
+            if(InsideWalkingDeck(point)&&Supported(point)&&!RejectedPoint(hole,point)&&ReachFrom(point,hole)&&ClearBody(point))return true;
+        }
+        for(int service=0;service<NavalRepairWorkSites.SteamBowBeltCandidateCount;service++)
+        {
+            if(!NavalRepairWorkSites.SteamBowBelt(hull.Definition,hole.LocalCenter.x,hole.LocalCenter.y,hole.LocalCenter.z,
+                service,out serviceX,out serviceY,out serviceZ))break;
+            point=new Vector3(serviceX,serviceY,serviceZ);
+            if(InsideWalkingDeck(point)&&Supported(point)&&!RejectedPoint(hole,point)&&ReachFrom(point,hole)&&ClearBody(point))return true;
+        }
         bool endWall=NavalRepairWorkSites.EndWall(hole.LocalCenter.z);
         for(int deck=0;deck<hull.Definition.DeckCount;deck++)
         {
@@ -382,14 +410,14 @@ public partial class NavalRepairSailor : MonoBehaviour
                 float shift=NavalRepairWorkSites.Shift(i);
                 point=new Vector3(Mathf.Clamp(hole.LocalCenter.x+shift,-2.35f,2.35f),floor,NavalRepairWorkSites.EndZ(hull.Definition,hole.LocalCenter.z));
                 if(hull.Definition.MaintenanceFloorAt(floor)&&hull.Bilge!=null)point.y=NavalBallastLayout.Surface(point.x,point.z,floor,hull.Definition);
-                if(InsideWalkingDeck(point)&&Supported(point)&&!RejectedPoint(hole,point)&&ReachFrom(point,hole)&&ClearBody(point))return true;
+                if((!avoidCasemate||NavalRepairWorkSites.ClearOfCasemate(hull.Definition,floor,point.z))&&InsideWalkingDeck(point)&&Supported(point)&&!RejectedPoint(hole,point)&&ReachFrom(point,hole)&&ClearBody(point))return true;
             }
             for(int c=0;c<NavalRepairWorkSites.CorridorCount;c++)for(int i=0;i<NavalRepairWorkSites.ShiftCount;i++)
             {
                 float corridor=NavalRepairWorkSites.Corridor(hull.Definition,c),shift=NavalRepairWorkSites.Shift(i);
                 point=new Vector3(hole.LocalCenter.x<0f?-corridor:corridor,floor,Mathf.Clamp(hole.LocalCenter.z+shift,-5.1f,5.1f));
                 if(hull.Definition.MaintenanceFloorAt(floor)&&hull.Bilge!=null)point.y=NavalBallastLayout.Surface(point.x,point.z,floor,hull.Definition);
-                if(InsideWalkingDeck(point)&&Supported(point)&&!RejectedPoint(hole,point)&&ReachFrom(point,hole)&&ClearBody(point))return true;
+                if((!avoidCasemate||NavalRepairWorkSites.ClearOfCasemate(hull.Definition,floor,point.z))&&InsideWalkingDeck(point)&&Supported(point)&&!RejectedPoint(hole,point)&&ReachFrom(point,hole)&&ClearBody(point))return true;
             }
         }
         // A flooded hold can be repaired from a swimming position without floor support.
@@ -489,7 +517,7 @@ public partial class NavalRepairSailor : MonoBehaviour
         feet=boat.InverseTransformPoint(robot.transform.position-Vector3.up*footOffset);
         Vector3 alternative;if(!FindWorkPoint(leak,out alternative))return false;
         repairDestination=alternative;route.Clear();stuck=0f;PlanTo(alternative);
-        Debug.Log("[NavalPrototype] Repair route replanned: hole="+leak.LocalCenter+" work="+alternative);
+        Debug.Log("[NavalPrototype] Repair route replanned: sailor="+robot.GetInstanceID()+" ship="+boat.name+" hole="+leak.LocalCenter+" work="+alternative);
         return true;
     }
     private void AbandonBlockedJob()

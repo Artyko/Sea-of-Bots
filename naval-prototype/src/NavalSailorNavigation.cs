@@ -58,8 +58,13 @@ public partial class NavalRepairSailor
             new Vector2(feet.x-target.x,feet.z-target.z).magnitude<.4f&&CanReachLeak();
         bool walkedOff=ledgeWaypoints==2&&NavalLedgeRecoveryMath.WalkedOff(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale);
         bool stairPoint=NavalShipRoutes.InStairwell(new NavalWalkPoint(target.x,target.y,target.z),hull.Definition);
+        // Door treads in the armoured conning tower need tighter arrival than
+        // an open deck waypoint.  The normal 1.12 m intermediate tolerance
+        // advanced sailors while their capsule was still inside the jamb,
+        // after which the lateral bypass drove them into the front armour.
+        bool preciseTower=NavalConningTowerLayout.DoorLane(new NavalWalkPoint(target.x,target.y,target.z),hull.Definition);
         bool reached=walkedOff||closeRepair||(stairExitWaypoints>0?NavalStairRecovery.Arrived(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):stairPoint&&!recovering?
-            NavalWalkRoutes.Reached(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):recovering?NavalLedgeRecoveryMath.Arrived(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):final&&returning?AtStation(target):NavalRouteArrival.Reached(feet.x,feet.y,feet.z,target.x,target.y,target.z,final));
+            NavalWalkRoutes.Reached(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):recovering?NavalLedgeRecoveryMath.Arrived(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):final&&returning?AtStation(target):NavalRouteArrival.Reached(feet.x,feet.y,feet.z,target.x,target.y,target.z,final||preciseTower));
         if(reached&&final&&finishAtRepairReach&&leak!=null&&!CanReachLeak())reached=false;
         stuck=NavalRouteProgress.Step(stuck,before,boat.TransformVector(target-feet).magnitude,dt,reached,Time.time<passageWorkUntil);
         if(closeRepair)route.Clear();else if(reached){route.RemoveAt(0);if(recovering)ledgeWaypoints--;if(stairExitWaypoints>0){stairExitWaypoints--;if(stairExitWaypoints==0)lastStairExitSide=0;}}

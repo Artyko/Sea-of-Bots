@@ -5,6 +5,9 @@ class CargoChecks {
  static void Run(){int routes=0;var profiles=new System.Collections.Generic.List<NavalShipDefinition>(NavalShipDefinition.Choices);profiles.AddRange(NavalShipDefinition.SteamChoices);foreach(var ship in profiles){
  int f=NavalCargoLayout.Factor(ship);Check(NavalCargoLayout.Boxes(ship,0)*20==80*f,"Hold ammunition totals");Check(NavalCargoLayout.Boxes(ship,1)*40==160*f,"Board totals");Check(NavalCargoLayout.Boxes(ship,2)==ship.GunCount,"One parts crate per gun");
  int total=NavalCargoLayout.Boxes(ship,0)+NavalCargoLayout.Boxes(ship,1)+NavalCargoLayout.Boxes(ship,2);
+ if(ship.SteamPowered){var lastA=NavalCargoLayout.Position(ship,total-2);var lastB=NavalCargoLayout.Position(ship,total-1);Check(lastA.Y==ship.HoldFloor&&lastB.Y==ship.HoldFloor&&lastA.X*lastB.X<0,"Steam spare-gun kits share the lower deck without blocking the middle-deck bow repair pocket");}
+ if(ship.SteamPowered){var escape=NavalSupplyRoutes.Plan(new NavalWalkPoint(1.43f,ship.HoldFloor,2.22f),new NavalWalkPoint(.64f,ship.HoldFloor,1.81f),ship);Check(escape.Count>1&&escape[0].X>1.5f,"Sailor displaced into a cargo clearance envelope first escapes its nearest face, first="+escape[0].X+","+escape[0].Y+","+escape[0].Z+" count="+escape.Count);
+ var lidEscape=NavalSupplyRoutes.Plan(new NavalWalkPoint(-.76f,1.12f,2.00f),new NavalWalkPoint(-1.10f,ship.HoldFloor,4.05f),ship);Check(lidEscape.Count>1&&lidEscape[0].X>-.60f,"Sailor standing on the logged middle-deck rack steps beyond its physical lid before resuming the plank route: first="+lidEscape[0].X+","+lidEscape[0].Y+","+lidEscape[0].Z);}
  for(int n=0;n<total;n++){
  var p=NavalCargoLayout.Position(ship,n);Check(Math.Abs(p.X)+.675f/ship.Scale<ship.HullHalfWidth(p.Z)&&Math.Abs(p.Z)+.675f/ship.Scale<6,"Crates stay inside hull");
  var pickup=NavalCargoLayout.Pickup(ship,p);

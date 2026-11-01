@@ -6,10 +6,10 @@ public sealed class NavalHelmDecision
  private readonly NavalSternEvasion stern=new NavalSternEvasion();
  private readonly NavalFirePassMath firePass=new NavalFirePassMath();
  private int mode=-1,loggedPass;
- private float observedShot;
+ private float observedShot,nextTelemetry;
  private float heading;
  private bool initialized,mainAssistKnown,mainAssistLogged;
- public void Reset(){mode=-1;loggedPass=0;observedShot=0;initialized=mainAssistKnown=mainAssistLogged=false;combat.Reset();stern.Reset();firePass.Reset();}
+ public void Reset(){mode=-1;loggedPass=0;observedShot=nextTelemetry=0;initialized=mainAssistKnown=mainAssistLogged=false;combat.Reset();stern.Reset();firePass.Reset();}
  public Vector3 Course(Transform own,NavalHull hull,NavalStations guns,Transform enemy,Vector3 enemyVelocity,float speed,float dt,bool retreat,bool targetRetreat,NavalRamDamage ram,ref float throttle)
  {
   int next=NavalHelmIntentMath.Mode(guns.RescueStop,guns.MustBoard,retreat||guns.CrewRepairRetreat||guns.AllGunsBroken&&guns.CanRestoreGun);
@@ -59,6 +59,13 @@ public sealed class NavalHelmDecision
   {
    mainAssistKnown=true;mainAssistLogged=mainAssist;
    Debug.Log("[NavalPrototype] Main battery helm assist: ship="+own.name+" active="+mainAssist+" targetYaw="+NavalBroadsideMath.Delta(own.eulerAngles.y,Mathf.Atan2(toward.x,toward.z)*Mathf.Rad2Deg).ToString("F1")+" desiredHeading="+wanted.ToString("F1"));
+  }
+  if(hull.Definition.SteamPowered&&Time.time>=nextTelemetry)
+  {
+   nextTelemetry=Time.time+15f;
+   Debug.Log("[NavalPrototype] Helm state: ship="+own.name+" heading="+own.eulerAngles.y.ToString("F1")+" wanted="+wanted.ToString("F1")+
+    " error="+Mathf.DeltaAngle(own.eulerAngles.y,wanted).ToString("F1")+" targetYaw="+NavalBroadsideMath.Delta(own.eulerAngles.y,Mathf.Atan2(toward.x,toward.z)*Mathf.Rad2Deg).ToString("F1")+
+    " distance="+toward.magnitude.ToString("F1")+" throttle="+throttle.ToString("F2")+" mainAssist="+mainAssist);
   }
   heading=NavalHelmIntentMath.Heading(heading,wanted,dt,mode==1?8:16);
   return Quaternion.Euler(0,heading,0)*Vector3.forward;
