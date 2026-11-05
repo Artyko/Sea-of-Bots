@@ -9,6 +9,14 @@ public static class NavalHoldSafety
         else travel=Math.Abs(Math.Abs(x)-1.65f)+Math.Abs(z+3.65f)+1.65f+(float)Math.Sqrt(4.45f*4.45f+(.825f-floor)*(.825f-floor))+2.5f;
         return travel*Math.Max(.1f,scale)/Math.Max(1f,speed*.8f);
     }
+    public static float DestroyerExitSeconds(float x, float z, float scale, float rise, float speed)
+    {
+        float longitudinal = Math.Abs(Math.Abs(z * scale) - 16.5f);
+        float lateral = Math.Abs(Math.Abs(x * scale) - 5.6f) + 2f;
+        float flight = (float)Math.Sqrt(64f + rise * rise);
+        return (longitudinal + lateral + flight + 2f) / Math.Max(1f, speed * .8f);
+    }
+
     public static float AirReserve(float exitSeconds)
     {return Math.Max(8f,Math.Min(22f,exitSeconds+4f));}
     public static bool MustEscape(bool headUnder,bool sinking,float air,float exitSeconds)

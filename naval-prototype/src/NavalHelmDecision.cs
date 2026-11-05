@@ -2,6 +2,9 @@
 // One tactical owner per tick. Shore/collision recovery remains the final authority.
 public sealed class NavalHelmDecision
 {
+ private readonly NavalTorpedoTactics torpedoAttack=new NavalTorpedoTactics();
+ private readonly NavalShellEvasion shellEvasion=new NavalShellEvasion();
+ private readonly NavalTorpedoAvoidance torpedoAvoid=new NavalTorpedoAvoidance();
  private readonly NavalCombatPosition combat=new NavalCombatPosition();
  private readonly NavalSternEvasion stern=new NavalSternEvasion();
  private readonly NavalFirePassMath firePass=new NavalFirePassMath();
@@ -12,7 +15,8 @@ public sealed class NavalHelmDecision
  public void Reset(){mode=-1;loggedPass=0;observedShot=nextTelemetry=0;initialized=mainAssistKnown=mainAssistLogged=false;combat.Reset();stern.Reset();firePass.Reset();}
  public Vector3 Course(Transform own,NavalHull hull,NavalStations guns,Transform enemy,Vector3 enemyVelocity,float speed,float dt,bool retreat,bool targetRetreat,NavalRamDamage ram,ref float throttle)
  {
-  int next=NavalHelmIntentMath.Mode(guns.RescueStop,guns.MustBoard,retreat||guns.CrewRepairRetreat||guns.AllGunsBroken&&guns.CanRestoreGun);
+  bool noArmedBattery=guns.PortCombatWorking+guns.StarboardCombatWorking==0&&!guns.MainBatteryCombatAvailable&&(guns.Torpedoes==null||!guns.Torpedoes.HasCombatPotential);
+  int next=NavalHelmIntentMath.Mode(guns.RescueStop,guns.MustBoard,retreat||noArmedBattery&&!guns.MustBoard||guns.CrewRepairRetreat||guns.SteamPlant!=null&&guns.SteamPlant.PropulsionFloodEmergency||guns.AllGunsBroken&&guns.CanRestoreGun);
   if(next!=mode){initialized=false;loggedPass=0;observedShot=guns.LastCrewShotAt;mode=next;combat.Reset();stern.Reset();firePass.Reset();}
   Vector3 toward=enemy.position-own.position;toward.y=0;
   if(toward.sqrMagnitude<.001f)toward=own.forward;
@@ -52,6 +56,10 @@ public sealed class NavalHelmDecision
     if(desired.sqrMagnitude<.001f)desired=combat.Course(own,hull,guns,enemy,enemyVelocity,speed,ref throttle,targetRetreat);
    }
   }
+  Vector3 torpedoCourse;
+  if(mode!=3&&torpedoAttack.Course(own,hull,guns,enemy,enemyVelocity,mode==1,ref throttle,out torpedoCourse))desired=torpedoCourse;
+  if(mode!=3)desired=shellEvasion.Course(own,hull,guns,speed,desired);
+  if(mode!=3&&torpedoAvoid.Course(own,hull,speed,ref throttle,out torpedoCourse))desired=torpedoCourse;
   if(!initialized){initialized=true;heading=own.eulerAngles.y;}
   float wanted=Mathf.Atan2(desired.x,desired.z)*Mathf.Rad2Deg;
   bool mainAssist=mode==0&&guns.MainBatteryHelmPriority;
@@ -65,8 +73,9 @@ public sealed class NavalHelmDecision
    nextTelemetry=Time.time+15f;
    Debug.Log("[NavalPrototype] Helm state: ship="+own.name+" heading="+own.eulerAngles.y.ToString("F1")+" wanted="+wanted.ToString("F1")+
     " error="+Mathf.DeltaAngle(own.eulerAngles.y,wanted).ToString("F1")+" targetYaw="+NavalBroadsideMath.Delta(own.eulerAngles.y,Mathf.Atan2(toward.x,toward.z)*Mathf.Rad2Deg).ToString("F1")+
-    " distance="+toward.magnitude.ToString("F1")+" throttle="+throttle.ToString("F2")+" mainAssist="+mainAssist);
+    " distance="+toward.magnitude.ToString("F1")+" throttle="+throttle.ToString("F2")+" mainAssist="+mainAssist+" torpedoAttack="+torpedoAttack.Phase+" torpedoAvoid="+torpedoAvoid.Phase+" shellZigzag="+shellEvasion.Active);
   }
+  if(guns.SteamPlant!=null&&guns.SteamPlant.EmergencyEconomy&&mode!=3)throttle=Mathf.Clamp(throttle,-.55f,.55f);
   heading=NavalHelmIntentMath.Heading(heading,wanted,dt,mode==1?8:16);
   return Quaternion.Euler(0,heading,0)*Vector3.forward;
  }

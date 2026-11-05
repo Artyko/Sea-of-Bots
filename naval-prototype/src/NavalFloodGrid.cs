@@ -14,7 +14,7 @@ public class NavalFloodGrid
     private float summaryTotal,summaryPort,summaryStarboard,summaryLong;
     public readonly float[] RightSill,ForwardSill;
     private readonly float[] delta,centerX,centerZ,worldColumn;
-    public NavalFloodGrid(int columns, int rows, float width, float length, float scale, float maximumDepth = float.MaxValue,bool tapered=false,bool ironclad=false)
+    public NavalFloodGrid(int columns, int rows, float width, float length, float scale, float maximumDepth = float.MaxValue,bool tapered=false,bool ironclad=false,NavalShipDefinition outline=null)
     {
         Columns=columns; Rows=rows; Width=width; Length=length; Scale=scale;
         CellWidth=width/columns; CellLength=length/rows;
@@ -23,7 +23,7 @@ public class NavalFloodGrid
         water=new float[columns*rows];Water=new NavalFloodCells(water); delta=new float[water.Length];
         centerX=new float[water.Length];centerZ=new float[water.Length];worldColumn=new float[columns];
         for(int i=0;i<water.Length;i++){centerX[i]=((i%columns)+.5f)*CellWidth-width*.5f;centerZ[i]=((i/columns)+.5f)*CellLength-length*.5f;}
-        if(tapered){activeCells=new bool[water.Length];for(int i=0;i<water.Length;i++)activeCells[i]=Math.Abs(centerX[i])<NavalHullOutline.HalfWidth(centerZ[i],true,ironclad);}
+        if(tapered||outline!=null){activeCells=new bool[water.Length];for(int i=0;i<water.Length;i++)activeCells[i]=Math.Abs(centerX[i])<(outline!=null?outline.HullHalfWidth(centerZ[i]):NavalHullOutline.HalfWidth(centerZ[i],true,ironclad));}
         RightSill=new float[water.Length];ForwardSill=new float[water.Length];
         for(int i=0;i<water.Length;i++){RightSill[i]=ForwardSill[i]=float.NegativeInfinity;}
     }
@@ -61,7 +61,27 @@ public class NavalFloodGrid
             for(int x=0;x<Columns;x++)output[row+x]=worldColumn[x]+floorTerm+worldZ+translationY;
         }
     }
-    public bool IsActive(int i){return activeCells==null||activeCells[i];}
+    private bool[] detachedRows;
+    public int RowAt(float z)
+    {return Math.Max(0,Math.Min(Rows-1,(int)Math.Floor((z+Length*.5f)/CellLength)));}
+    public bool RowDetached(int row)
+    {return detachedRows!=null&&row>=0&&row<Rows&&detachedRows[row];}
+    public float AttachedFraction=1f;
+    public void SetDetachedRows(bool[] rows)
+    {
+        detachedRows=rows;
+        int total=0,attached=0;
+        for(int i=0;i<water.Length;i++)
+        {
+            if(activeCells!=null&&!activeCells[i])continue;
+            total++;
+            if(RowDetached(i/Columns))water[i]=0f;
+            else attached++;
+        }
+        AttachedFraction=total==0?1f:(float)attached/total;
+        summaryDirty=true;
+    }
+    public bool IsActive(int i){return !RowDetached(i/Columns)&&(activeCells==null||activeCells[i]);}
     private NavalFloodStorage storage;
     private float[] storageDepths,storageCapacity;
     public void ConfigureStorage(NavalShipDefinition ship)

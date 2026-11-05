@@ -38,7 +38,7 @@ public partial class NavalTestWorld
         if(ShipMenuOpen){Cursor.lockState=CursorLockMode.None;Cursor.visible=true;}
     }
     private string ShipName(NavalShipDefinition definition)
-    {return definition==NavalShipDefinition.Sloop?"Шлюп":definition==NavalShipDefinition.Brigantine?"Бригантина":definition==NavalShipDefinition.Galleon?"Галеон":definition==NavalShipDefinition.Ironclad?"Броненосный корвет":definition.Name;}
+    {return definition==NavalShipDefinition.Sloop?"Шлюп":definition==NavalShipDefinition.Brigantine?"Бригантина":definition==NavalShipDefinition.Galleon?"Галеон":definition==NavalShipDefinition.Dreadnought?"Дредноут":definition==NavalShipDefinition.Ironclad?"Броненосец":definition.Destroyer?"Эсминец":definition.Name;}
     private void SelectProfile(bool own,NavalShipDefinition definition)
     {
         if(own)
@@ -67,6 +67,7 @@ public partial class NavalTestWorld
         hudNumberShips[index]=ship;hudNumberRevision[index]=ship.Revision;hudNumberAt[index]=Time.realtimeSinceStartup+.2f;
         values[0]=(own?(allies!=null?allies.LivingCrew:0):enemy.LivingCrew)+" / "+definition.CrewCount;
         values[1]=controls.WorkingGuns+" / "+controls.GunCount+(controls.HeelInhibitedGuns>0?" · крен −"+controls.HeelInhibitedGuns:"");
+        if(controls.Torpedoes!=null)values[1]+=" · Т: "+controls.Torpedoes.Rounds+"/8 · запас "+controls.Torpedoes.ReserveRounds;
         values[2]=(controls.SailSetting*100f).ToString("F0")+"% / "+((own?rig.PowerFactor:enemy.SailPower)*100f).ToString("F0")+"%";
         float waterSpeed=own?SpeedThroughWater:enemy.SpeedThroughWater;
         values[3]=waterSpeed.ToString("F1")+" м/с · "+NavalShipSpeedMath.Knots(waterSpeed).ToString("F1")+" уз";
@@ -87,8 +88,8 @@ public partial class NavalTestWorld
         values[11]=(ship.Cargo!=null?ship.Cargo.Total(0):0)+" шт.";
         values[12]=(ship.Cargo!=null?ship.Cargo.Total(1):0)+" шт.";
         NavalSteamPlant steam=ship.Root.GetComponent<NavalSteamPlant>();
-        values[13]=steam!=null?(steam.Pressure*100f).ToString("F0")+"% · "+steam.Coal.ToString("F1"):"—";
-        values[14]=steam!=null?(steam.BoilerIntegrity*100f).ToString("F0")+"% / "+(steam.EngineIntegrity*100f).ToString("F0")+"%":"—";
+        values[13]=steam!=null?(steam.Pressure*100f).ToString("F0")+"% · "+steam.Coal.ToString("F1")+(steam.EmergencyEconomy?" · ЭКО":""):"—";
+        values[14]=steam!=null?steam.BoilerSummary+" · "+(steam.EngineIntegrity*100f).ToString("F0")+"%":"—";
         values[15]=steam!=null?(steam.FunnelIntegrity*100f).ToString("F0")+"%":"—";
         values[16]=steam!=null?(steam.PropulsionMainIntegrity*100f).ToString("F0")+" / "+(steam.PumpMainIntegrity*100f).ToString("F0")+" / "+(steam.AuxiliaryMainIntegrity*100f).ToString("F0")+"%":"—";
         values[17]=steam!=null?steam.PumpAssist.ToString("F1")+"×"+(steam.HasLiveSteamLeak?" · УТЕЧКА ПАРА":""):"—";
@@ -105,7 +106,7 @@ public partial class NavalTestWorld
         NavalShipDefinition definition=ship!=null?ship.Definition:own?NavalSessionSettings.PlayerShip:NavalSessionSettings.EnemyShip;
         float line=y+33f;
         Row(x+12f,line,"Тип",ShipName(definition));line+=18f;
-        Row(x+12f,line,"Состояние",ship==null?"Не создан":ship.Sunk?"Тонет":(own?helmNavigator.Reversing:enemy.Reversing)?"Манёвр задним ходом":(own?retreat.Active:enemy.Retreating)?"Отход для ремонта":"На плаву");line+=18f;
+        Row(x+12f,line,"Состояние",ship==null?"Не создан":ship.Sunk?"Тонет":(own?Retreating:enemy.Retreating)?"Отход для ремонта":(own?helmNavigator.Reversing:enemy.Reversing)?"Манёвр задним ходом":"На плаву");line+=18f;
         if(ship!=null)
         {
             string[] values=ShipNumbers(own,ship,controls,definition);
@@ -124,14 +125,14 @@ public partial class NavalTestWorld
             Row(x+12f,line,"Доски в ящиках",values[12]);
             if(definition.SteamPowered)
             {
-                line+=18f;Row(x+12f,line,"Давление / уголь",values[13]);
-                line+=18f;Row(x+12f,line,"Котёл / машина",values[14]);
+                line+=18f;Row(x+12f,line,definition.Destroyer?"Давление / нефть":"Давление / уголь",values[13]);
+                line+=18f;Row(x+12f,line,"Котлы / машина",values[14]);
                 line+=18f;Row(x+12f,line,"Труба",values[15]);
                 line+=18f;Row(x+12f,line,"Пар: ход/помпа/всп.",values[16]);
                 line+=18f;Row(x+12f,line,"Режим помпы",values[17]);
             }
         }
-        GUI.Label(new Rect(x+12f,y+408f,width-24f,18f),own?(Spectating?"Смена судна после перезапуска арены":"Сменить свой — начать бой заново"):"Заменить противника — 250 м",hudText);
+        GUI.Label(new Rect(x+12f,y+408f,width-24f,18f),own?(Spectating?"Смена судна после перезапуска арены":"Сменить свой — начать бой заново"):"Заменить противника — "+NavalSessionSettings.EnemySpawnDistance.ToString("F0")+" м",hudText);
         bool enabled=GUI.enabled;
         GUI.enabled=enabled&&ShipMenuOpen;
         NavalShipDefinition[] choices=NavalSessionSettings.Choices;
@@ -170,7 +171,7 @@ public partial class NavalTestWorld
         string distance=enemy!=null?Vector3.Distance(boat.position,enemy.Boat.position).ToString("F0")+" м":"—";
         string wave=rough?"сильные":NavalSessionSettings.Era==NavalEra.Steam?"умеренные":"слабые";
         GUI.Label(new Rect(16f,infoY,650f,20f),"До противника: "+distance+"  |  "+(Spectating?"Наблюдатель":swimming?"Плавание":"На ногах")+"  |  Волны: "+wave,hudText);
-        GUI.Label(new Rect(16f,infoY+20f,650f,20f),"v270 "+NavalSessionSettings.Era+(NavalPerformance.LaptopMode?" ECO":"")+"  |  FPS: "+(1000f/Mathf.Max(1f,frameMilliseconds)).ToString("F0")+"  |  Вода CPU: "+ocean.BuildMilliseconds.ToString("F1")+" мс",hudText);
+        GUI.Label(new Rect(16f,infoY+20f,650f,20f),"v313 "+NavalSessionSettings.Era+(NavalPerformance.LaptopMode?" ECO":"")+"  |  FPS: "+(1000f/Mathf.Max(1f,frameMilliseconds)).ToString("F0")+"  |  Вода CPU: "+ocean.BuildMilliseconds.ToString("F1")+" мс",hudText);
         GUI.matrix=previous;
         NavalPerformance.Draw();
     }

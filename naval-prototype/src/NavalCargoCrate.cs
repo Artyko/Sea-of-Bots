@@ -15,9 +15,12 @@ public sealed class NavalCargoCrate {
  {var result=new List<NavalHullVoxel>(shell.Count+contents.Count);result.AddRange(shell);result.AddRange(contents);return result;}
  public bool UpdatingContents {get{return updating;}}
  private NavalCargoCollision collision;
- public NavalCargoCrate(NavalHull owner,Vector3 point,int kind,int gun,Material wood,Material trim,Material iron){
- hull=owner;Point=point;Kind=kind;Gun=gun;Width=hull.Definition.SteamPowered?1f:1.3f;Stock=new NavalCargoStock(kind==1?40:kind==2?1:20);
-  Pickup=hull.Definition.SteamPowered?new Vector3(point.x>0?.92f:-.92f,point.y,point.z):point+new Vector3(point.x>0?-1.65f:1.65f,0,0)/hull.WorldScale;
+ private static Material steel,mark;
+ private static void RackMaterials(){if(steel!=null)return;var shader=Shader.Find("Unlit/Color");if(shader==null)shader=Shader.Find("Standard");steel=new Material(shader);steel.color=new Color(.50f,.56f,.60f);mark=new Material(shader);mark.color=new Color(.92f,.91f,.73f);}
+
+ public NavalCargoCrate(NavalHull owner,Vector3 point,int kind,int gun,Material wood,Material trim,Material iron,int units=1){
+ hull=owner;Point=point;Kind=kind;Gun=gun;Width=hull.Definition.SteamPowered?1.2f:1.4f;Stock=new NavalCargoStock((kind==1?40:kind==2?1:20)*units);
+  Pickup=hull.Definition.Destroyer&&gun>=0?hull.Definition.GunOperator(gun):hull.Definition.CapitalShip&&gun>=0?new Vector3(NavalShipDefinition.GunSide(gun)*hull.Definition.GunPostX,hull.Definition.GunDeck,NavalShipDefinition.GunZ(hull.Definition,gun)):hull.Definition.SteamPowered?new Vector3(point.x>0?.92f:-.92f,point.y,point.z):point+new Vector3(point.x>0?-1.65f:1.65f,0,0)/hull.WorldScale;
  if(gun<0){var pickup=NavalCargoLayout.Pickup(hull.Definition,new NavalWalkPoint(point.x,point.y,point.z));Pickup=new Vector3(pickup.X,pickup.Y,pickup.Z);}
  // Steam ready-use ammunition is stored inside each gun mounting. It remains
  // a logical replenishment target, but no loose steel crate or collider is
@@ -25,22 +28,30 @@ public sealed class NavalCargoCrate {
  if(NavalCargoLayout.IntegratedReadyUse(hull.Definition)&&gun>=0){shown=Stock.Count;return;}
  int first=hull.Voxels.Count;
  float half=Width*.5f-.05f;
- Box(wood,new Vector3(0,.10f,0),new Vector3(Width,.20f,Width));
- // Open slatted sides, broad corner posts and contrasting rim.
- for(int side=-1;side<=1;side+=2){
-  for(int row=0;row<3;row++){
-   Box(wood,new Vector3(side*half,.28f+row*.22f,0),new Vector3(.10f,.18f,Width));
-   Box(wood,new Vector3(0,.28f+row*.22f,side*half),new Vector3(Width,.18f,.10f));
+ RackMaterials();Material frame=kind==0?steel:trim, shelf=kind==0?steel:wood;
+ // Tall open racks retain the previous footprint and full resource destruction rules.
+ for(int side=-1;side<=1;side+=2)for(int end=-1;end<=1;end+=2)
+  Box(frame,new Vector3(side*half,1.05f,end*half),new Vector3(.12f,2.10f,.12f));
+ foreach(float y in new[]{.12f,.88f,1.64f})Box(shelf,new Vector3(0,y,0),new Vector3(Width,.10f,Width));
+ for(int side=-1;side<=1;side+=2)Box(frame,new Vector3(side*half,2.02f,0),new Vector3(.10f,.12f,Width));
+ if(kind==0){
+  for(int side=-1;side<=1;side+=2){
+   Box(steel,new Vector3(side*half,1.06f,0),new Vector3(.08f,2.12f,Width));
+   Box(steel,new Vector3(0,1.06f,side*half),new Vector3(Width,2.12f,.08f));
   }
-  Box(trim,new Vector3(side*half,.85f,0),new Vector3(.14f,.12f,Width+.05f));
-  Box(trim,new Vector3(0,.85f,side*half),new Vector3(Width+.05f,.12f,.14f));
-  for(int end=-1;end<=1;end+=2)Box(trim,new Vector3(side*half,.48f,end*half),new Vector3(.16f,.9f,.16f));
+  // Raised contrasting projectile silhouette on each aisle-facing door.
+  for(int side=-1;side<=1;side+=2){float x=side*(half+.055f);
+   Box(mark,new Vector3(x,1.02f,0),new Vector3(.025f,.64f,.24f));
+   Box(mark,new Vector3(x,1.40f,0),new Vector3(.025f,.12f,.16f));
+   Box(mark,new Vector3(x,1.49f,0),new Vector3(.025f,.07f,.08f));
+   Box(mark,new Vector3(x,.66f,0),new Vector3(.025f,.08f,.29f));
+  }
  }
  for(int i=first;i<hull.Voxels.Count;i++)shell.Add(hull.Voxels[i]);first=hull.Voxels.Count;
  if(kind==0){
   if(hull.Definition.RifledWeapons){
-   for(int layer=0;layer<2;layer++)for(int x=0;x<3;x++)for(int z=0;z<3;z++)Shell(iron,new Vector3((x-1)*.34f,.42f+layer*.42f,(z-1)*.34f));
-   for(int x=-1;x<=1;x+=2)Shell(iron,new Vector3(x*.18f,1.18f,0));
+   for(int layer=0;layer<2;layer++)for(int x=0;x<3;x++)for(int z=0;z<3;z++)Shell(iron,new Vector3((x-1)*.34f,.42f+layer*.76f,(z-1)*.34f));
+   for(int x=-1;x<=1;x+=2)Shell(iron,new Vector3(x*.18f,1.88f,0));
   }else{
    for(int layer=0;layer<2;layer++)for(int x=0;x<3;x++)for(int z=0;z<3;z++)Ball(iron,new Vector3((x-1)*.37f,.38f+layer*.35f,(z-1)*.37f),.34f);
    for(int x=-1;x<=1;x+=2)Ball(iron,new Vector3(x*.185f,1.04f,0),.34f);

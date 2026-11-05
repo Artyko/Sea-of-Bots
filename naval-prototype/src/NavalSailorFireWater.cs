@@ -44,13 +44,17 @@ public partial class NavalRepairSailor
             fireSources.Add(new FireSourceCandidate{Point=point,Cell=i,Cost=boat.TransformVector(point-feet).sqrMagnitude});
         }
         fireSources.Sort(delegate(FireSourceCandidate a,FireSourceCandidate b){return a.Cost.CompareTo(b.Cost);});
-        for(int n=0;n<fireSources.Count;n++){var candidate=fireSources[n];candidate.Cost=FireSourceCost(candidate.Point);fireSources[n]=candidate;}
-        for(int n=0;n<NavalFireWaterSupply.IntakeZ.Length*2;n++)
+        // Keep a bounded bilge shortlist before constructing any routes.
+        if(fireSources.Count>6)fireSources.RemoveRange(6,fireSources.Count-6);
+        for(int n=0;n<NavalFireWaterSupply.For(hull.Definition).Length*2;n++)
         {
-            float z=NavalFireWaterSupply.IntakeZ[n/2],x=NavalFireWaterSupply.SeaX(hull.Definition,z);
+            float z=NavalFireWaterSupply.For(hull.Definition)[n/2],x=NavalFireWaterSupply.SeaX(hull.Definition,z);
             Vector3 point=new Vector3(n%2==0?-x:x,hull.Definition.WeatherDeck,z);
-            if(!SourceRejected(point))fireSources.Add(new FireSourceCandidate{Point=point,Cell=-1,Cost=FireSourceCost(point)});
+            if(!SourceRejected(point))fireSources.Add(new FireSourceCandidate{Point=point,Cell=-1,Cost=boat.TransformVector(point-feet).sqrMagnitude});
         }
+        fireSources.Sort(delegate(FireSourceCandidate a,FireSourceCandidate b){return a.Cost.CompareTo(b.Cost);});
+        if(fireSources.Count>12)fireSources.RemoveRange(12,fireSources.Count-12);
+        for(int n=0;n<fireSources.Count;n++){var candidate=fireSources[n];candidate.Cost=FireSourceCost(candidate.Point);fireSources[n]=candidate;}
         fireSources.Sort(delegate(FireSourceCandidate a,FireSourceCandidate b){return a.Cost.CompareTo(b.Cost);});
         // Prefer a completely clear route. If the sailor begins inside a
         // transient gun/crew cluster, still assign a supported intake and let

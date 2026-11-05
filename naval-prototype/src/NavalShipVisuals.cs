@@ -37,6 +37,7 @@ public class NavalShipVisuals : MonoBehaviour,INavalPropulsion
         if(owner.Definition.SteamPowered)ApplyIroncladPalette(armorBelowWater??dark);
         Material hullTrim=owner.Definition.SteamPowered?dark:trim;
         foreach(Material fuel in owner.Definition.SteamPowered?new Material[]{timber,trim,deck,alternatePlank}:new Material[]{timber,trim,mast,fabric,dark,deck,alternatePlank})owner.RegisterFireMaterial(fuel);
+        if(owner.Definition.Destroyer){NavalDestroyerLayout.BuildDecks(owner,mast,metalAccent??trim);steamPlant=gameObject.AddComponent<NavalSteamPlant>();steamPlant.Initialize(owner,mast,dark,metalAccent??trim);return;}
         // The central aft companionway leaves solid deck beneath both guns.
         // The hydraulic bottom forms the walkable lower deck at the profile floor.
         float opening=owner.Definition.StairWidth*.5f+.025f;
@@ -137,6 +138,7 @@ public class NavalShipVisuals : MonoBehaviour,INavalPropulsion
     }
     private void RawDeck(Vector3 position,Vector3 size,Material first,Material second)
     {
+        if(hull.Definition.CapitalShip){float top=position.y+size.y*.5f;size.y=hull.Definition.DeckThickness;position.y=top-size.y*.5f;}
         // The steam weather deck covered more than a thousand tiny cube
         // meshes although its planks are read from a distance. Half-metre
         // rows retain damage holes and the alternating finish at one quarter
@@ -217,7 +219,7 @@ public class NavalShipVisuals : MonoBehaviour,INavalPropulsion
         // gun positions without cutting windows into the armoured shell.
         for(int side=-1;side<=1;side+=2)
         {
-            for(int bay=0;bay<3;bay++)
+            for(int bay=0;bay<hull.Definition.GunCount/2;bay++)
             {
                 float z=NavalShipDefinition.GunZ(hull.Definition,bay*2);
                 float outer=side*(hull.Definition.HullHalfWidth(z)-NavalIroncladVisualLayout.GunFoundationInset);
@@ -227,33 +229,23 @@ public class NavalShipVisuals : MonoBehaviour,INavalPropulsion
         }
         BuildIroncladRails(iron,dark);
         BuildClosedIroncladBow(iron,accent,dark);
-        BuildCaptainConningTower(iron,accent,dark);
+        if(hull.Definition.CapitalShip)BuildCapitalBridge(iron,accent,dark);else BuildCaptainConningTower(iron,accent,dark);
     }
+    private void BuildCapitalBridge(Material iron,Material accent,Material dark){BuildRaisedCommand(iron,accent,dark);}
     private void BuildClosedIroncladBow(Material iron,Material accent,Material dark)
     {
-        float water=hull.Definition.DesignWaterline,deck=hull.Definition.WeatherDeck;
-        // Overlapping cheek plates bridge the last tapered hull cells.  They
-        // follow the outline, so the entrance stays fine instead of becoming
-        // a rectangular cap when seen from the side.
-        for(int side=-1;side<=1;side+=2)for(int row=0;row<3;row++)
-        {
-            float y=water+.20f+(deck-water-.36f)*row*.5f;
-            for(int i=0;i<6;i++)
-            {
-                float z=4.48f+i*.23f,x=side*(hull.Definition.HullHalfWidth(z)-.045f);
-                VisualBox(new Vector3(x,y,z),new Vector3(.10f,.32f,.29f),iron);
-            }
+        // No sacrificial visual cheeks over a separate invisible pressure hull.
+        // The hydraulic shell itself closes the stem; the raised fore bulwark
+        // is built as solid armour by BuildIroncladRails.
+    }
+    private void BowArmorBox(Vector3 position,Vector3 size,Material material)
+    {
+        if(hull.Definition.IsOpening(position.x,position.y,position.z,size.x*.5f,size.y*.5f,size.z*.5f))return;
+        int first=hull.Voxels.Count;RawBox(position,size,material,true);
+        for(int i=first;i<hull.Voxels.Count;i++){
+            var cell=hull.Voxels[i];cell.Metallic=true;cell.Flammable=false;cell.Armored=true;
+            cell.HydraulicShell=true;cell.OpeningArea=cell.transform.localScale.y*cell.transform.localScale.z;
         }
-        // A stepped, narrow stem closes the frontal line of sight at every
-        // height.  Adjacent plates overlap in Y and Z to hide voxel seams.
-        float bottom=water-.48f,top=deck+.38f;const int layers=8;
-        for(int layer=0;layer<layers;layer++)
-        {
-            float t=(layer+.5f)/layers,y=Mathf.Lerp(bottom,top,t);
-            float width=Mathf.Lerp(.46f,hull.Definition.HullHalfWidth(5.70f)*2f+.10f,Mathf.Sin(t*Mathf.PI));
-            VisualBox(new Vector3(0,y,5.80f),new Vector3(width,(top-bottom)/layers+.055f,.20f),layer==layers-1?accent:iron);
-        }
-        VisualBox(new Vector3(0,deck+.05f,5.73f),new Vector3(hull.Definition.HullHalfWidth(5.62f)*2f,.12f,.48f),iron);
     }
     private void VisualSheerBand(int side,float baseY,float height,Material material,float rise)
     {
@@ -264,16 +256,16 @@ public class NavalShipVisuals : MonoBehaviour,INavalPropulsion
     }
     private void BuildIroncladRails(Material iron,Material dark)
     {
-        float deck=hull.Definition.WeatherDeck;
+        float deck=hull.Definition.WeatherDeck,fitting=hull.Definition.CapitalShip?4f/hull.WorldScale:1f;
         for(int side=-1;side<=1;side+=2)
         {
             // Open rail is retained aft and amidships.  It ends before the bow;
             // closely spaced stanchions there read as a fence from a distance.
             for(int i=0;i<9;i++){
-                float z=-4.8f+i*.8f,x=side*(hull.Definition.HullHalfWidth(z)-.08f);
-                VisualBox(new Vector3(x,deck+.23f,z),new Vector3(.055f,.46f,.055f),dark);
-                float next=z+.8f,mid=(z+next)*.5f,mx=side*(hull.Definition.HullHalfWidth(mid)-.08f);
-                VisualBox(new Vector3(mx,deck+.45f,mid),new Vector3(.06f,.055f,.86f),iron);
+                float z=-4.8f+i*.8f;if(Mathf.Abs(z-hull.Definition.LadderZ)<.70f)continue;float x=side*(hull.Definition.HullHalfWidth(z)-.08f);
+                VisualBox(new Vector3(x,deck+.23f*fitting,z),new Vector3(.055f,.46f*fitting,.055f),dark);
+                float next=z+.8f,mid=(z+next)*.5f;if(Mathf.Abs(mid-hull.Definition.LadderZ)<.98f)continue;float mx=side*(hull.Definition.HullHalfWidth(mid)-.08f);
+                VisualBox(new Vector3(mx,deck+.45f*fitting,mid),new Vector3(.06f,.055f*fitting,.86f),iron);
             }
             // Forward bulwark is one overlapping armoured run.  Overlap hides
             // voxel bevel seams and closes the conspicuous gaps at the stem.
@@ -281,84 +273,42 @@ public class NavalShipVisuals : MonoBehaviour,INavalPropulsion
             int count=Mathf.CeilToInt((end-start)/step);
             for(int i=0;i<count;i++){
                 float z=Mathf.Min(end,start+(i+.5f)*step),x=side*(hull.Definition.HullHalfWidth(z)-.055f);
-                VisualBox(new Vector3(x,deck+.20f,z),new Vector3(.11f,.40f,step+.08f),dark);
-                VisualBox(new Vector3(x-side*.015f,deck+.42f,z),new Vector3(.13f,.055f,step+.10f),iron);
+                BowArmorBox(new Vector3(x,deck+.20f*fitting,z),new Vector3(.11f,.40f*fitting,step+.08f),dark);
+                VisualBox(new Vector3(x-side*.015f,deck+.42f*fitting,z),new Vector3(.13f,.055f*fitting,step+.10f),iron);
             }
         }
-        VisualBox(new Vector3(0,deck+.20f,5.68f),new Vector3(hull.Definition.HullHalfWidth(5.60f)*2f,.40f,.12f),iron);
+        BowArmorBox(new Vector3(0,deck+.20f*fitting,5.68f),new Vector3(hull.Definition.HullHalfWidth(5.60f)*2f,.40f*fitting,.12f),iron);
     }
-    private void BuildCaptainConningTower(Material iron,Material accent,Material dark)
-    {
-        float deck=hull.Definition.WeatherDeck,z=NavalConningTowerLayout.CenterZ,w=NavalConningTowerLayout.HalfWidth*2f,d=NavalConningTowerLayout.HalfDepth*2f;
-        float platform=NavalConningTowerLayout.PlatformRise,lowerTop=NavalConningTowerLayout.LowerWallTop;
-        float slitTop=NavalConningTowerLayout.SlitTop,roofBottom=NavalConningTowerLayout.RoofBottom;
-        float lowerHeight=lowerTop-platform,lowerY=deck+(lowerTop+platform)*.5f;
-        float upperHeight=roofBottom-slitTop,upperY=deck+(roofBottom+slitTop)*.5f;
-        float front=NavalConningTowerLayout.FrontZ,rear=NavalConningTowerLayout.RearZ;
-        // The armoured platform covers the original timber weather deck.
-        // Keep those support cells destructible, but turn the hidden surface
-        // into a steel-covered, non-flammable deck so it cannot create a fire
-        // that firefighters can neither see nor reach beneath the tower.
-        foreach(var cell in hull.Voxels)
-            if(NavalConningTowerLayout.FireproofDeckCell(cell.LocalCenter.x,cell.LocalCenter.y,cell.LocalCenter.z,
-                cell.transform.localScale.y,deck))
-            {cell.Flammable=false;cell.Metallic=true;cell.Armored=true;}
-        // A large raised armoured command position. Two forward doors flank
-        // the wheel and a side door is cut into each wall, giving four real
-        // passages instead of a single centre line obstructed by the wheel.
-        // Keep the physical floor top exactly at PlatformY. v243 reduced the
-        // rise to .12 but left a .14-thick slab, embedding both command-post
-        // capsules two centimetres into NavalPrototype_HullCollisionBox.
-        ArmoredTowerBox(new Vector3(0,deck+platform*.5f,z),new Vector3(w,platform,d),accent);
-        for(int side=-1;side<=1;side+=2)
-        {
-            float wallX=side*(NavalConningTowerLayout.HalfWidth-.07f);
-            float sideDoorRear=NavalConningTowerLayout.SideDoorZ-NavalConningTowerLayout.SideDoorHalfDepth;
-            float sideDoorFront=NavalConningTowerLayout.SideDoorZ+NavalConningTowerLayout.SideDoorHalfDepth;
-            float rearLength=sideDoorRear-rear,frontLength=front-sideDoorFront;
-            ArmoredTowerBox(new Vector3(wallX,lowerY,rear+rearLength*.5f),new Vector3(.14f,lowerHeight,rearLength),iron);
-            ArmoredTowerBox(new Vector3(wallX,lowerY,sideDoorFront+frontLength*.5f),new Vector3(.14f,lowerHeight,frontLength),iron);
-            ArmoredTowerBox(new Vector3(wallX,upperY,z),new Vector3(.14f,upperHeight,d),dark);
-            // Uprights break each side slit into separate viewing ports while
-            // staying outside the full-height side doorway.
-            foreach(float postZ in new[]{rear+.16f,front-.16f})
-                ArmoredTowerBox(new Vector3(wallX,deck+(lowerTop+slitTop)*.5f,postZ),new Vector3(.16f,slitTop-lowerTop,.14f),iron);
-
-            float outerWidth=NavalConningTowerLayout.HalfWidth-NavalConningTowerLayout.DoorOuterX;
-            float outerX=side*(NavalConningTowerLayout.DoorOuterX+outerWidth*.5f);
-            ArmoredTowerBox(new Vector3(outerX,lowerY,front-.07f),new Vector3(outerWidth,lowerHeight,.14f),iron);
-            // A narrow central armoured pier separates the two forward doors.
-            ArmoredTowerBox(new Vector3(side*NavalConningTowerLayout.DoorInnerX*.5f,lowerY,front-.07f),
-                new Vector3(NavalConningTowerLayout.DoorInnerX,lowerHeight,.14f),iron);
-            ArmoredTowerBox(new Vector3(side*(NavalConningTowerLayout.DoorOuterX+.045f),lowerY,front-.09f),new Vector3(.09f,lowerHeight,.18f),accent);
+    private void BuildCaptainConningTower(Material iron,Material accent,Material dark){BuildRaisedCommand(iron,accent,dark);}
+    private void BuildRaisedCommand(Material iron,Material accent,Material dark){
+        var s=hull.Definition;float q=s.Scale,z=NavalRaisedBridge.Center(s),w=NavalRaisedBridge.HalfWidth(s),d=NavalRaisedBridge.HalfDepth(s),floor=s.WeatherDeck,top=NavalRaisedBridge.Top(s),t=.16f/q;
+        // Lower vestibule, with a full-size entrance on the accessible side of the ship.
+        int doorway=s.CapitalShip?-1:1;float doorHalf=1.2f/q;
+        for(int side=-1;side<=1;side+=2){
+            ArmoredTowerBox(new Vector3(side*w,floor+(top-floor)*.5f,z),new Vector3(t,top-floor,d*2),iron);
+            if(side==doorway){
+                float span=w-doorHalf;
+                for(int edge=-1;edge<=1;edge+=2)ArmoredTowerBox(new Vector3(edge*(doorHalf+span*.5f),floor+(top-floor)*.5f,z+side*d),new Vector3(span,top-floor,t),iron);
+                ArmoredTowerBox(new Vector3(0,top-.2f/q,z+side*d),new Vector3(doorHalf*2,.4f/q,t),iron);
+            }else ArmoredTowerBox(new Vector3(0,floor+(top-floor)*.5f,z+side*d),new Vector3(w*2,top-floor,t),iron);
         }
-        // A narrow rear observation slit is framed by solid lower armour, a
-        // continuous roof-bearing upper belt and three vertical mullions. It
-        // is a window only: the opening remains far above capsule foot level.
-        ArmoredTowerBox(new Vector3(0,lowerY,rear+.07f),new Vector3(w,lowerHeight,.14f),iron);
-        ArmoredTowerBox(new Vector3(0,upperY,rear+.07f),new Vector3(w,upperHeight,.14f),dark);
-        foreach(float postX in new[]{-NavalConningTowerLayout.HalfWidth*.48f,0f,NavalConningTowerLayout.HalfWidth*.48f})
-            ArmoredTowerBox(new Vector3(postX,deck+(lowerTop+slitTop)*.5f,rear+.07f),new Vector3(.14f,slitTop-lowerTop,.16f),iron);
-        // The full-width forward upper belt is the visible pair of door
-        // lintels and closes the old floating-roof gap.
-        ArmoredTowerBox(new Vector3(0,upperY,front-.07f),new Vector3(w,upperHeight,.14f),dark);
-        ArmoredTowerBox(new Vector3(0,deck+roofBottom+NavalConningTowerLayout.RoofThickness*.5f,z),
-            new Vector3(w+.12f,NavalConningTowerLayout.RoofThickness,d+.12f),dark);
-        // Separate low treads lead to both forward doors and both side doors.
-        float frontStepWidth=NavalConningTowerLayout.DoorOuterX-NavalConningTowerLayout.DoorInnerX-.08f;
-        float sideStepWidth=NavalConningTowerLayout.SideDoorHalfDepth*2f-.08f;
-        for(int step=0;step<NavalConningTowerLayout.StairCount;step++)
-        {
-            float height=NavalConningTowerLayout.StairRise*(step+1);
-            for(int side=-1;side<=1;side+=2)
-            {
-                ArmoredTowerBox(new Vector3(side*NavalConningTowerLayout.EntryX,deck+height*.5f,NavalConningTowerLayout.StairZ(step)),
-                    new Vector3(frontStepWidth,height,NavalConningTowerLayout.StairDepth),step==NavalConningTowerLayout.StairCount-1?accent:iron);
-                float stepX=side*(NavalConningTowerLayout.HalfWidth+NavalConningTowerLayout.FirstStairOffset-step*NavalConningTowerLayout.StairSpacing);
-                ArmoredTowerBox(new Vector3(stepX,deck+height*.5f,NavalConningTowerLayout.SideDoorZ),
-                    new Vector3(NavalConningTowerLayout.StairDepth,height,sideStepWidth),step==NavalConningTowerLayout.StairCount-1?accent:iron);
-            }
+        float left=(NavalRaisedBridge.StairX-NavalRaisedBridge.StairWidth*.5f)/q,right=(NavalRaisedBridge.StairX+NavalRaisedBridge.StairWidth*.5f)/q,run=NavalRaisedBridge.Run*.5f/q,holeRun=run+.85f/q;
+        ArmoredTowerBox(new Vector3((-w+left)*.5f,top-t*.5f,z),new Vector3(w+left,t,d*2),dark);
+        ArmoredTowerBox(new Vector3((right+w)*.5f,top-t*.5f,z),new Vector3(w-right,t,d*2),dark);
+        for(int end=-1;end<=1;end+=2)ArmoredTowerBox(new Vector3((left+right)*.5f,top-t*.5f,z+end*(d+holeRun)*.5f),new Vector3(right-left,t,d-holeRun),dark);
+        for(int i=0;i<NavalRaisedBridge.Steps;i++){
+            float h=NavalRaisedBridge.Rise*(i+1)/NavalRaisedBridge.Steps/q,step=NavalRaisedBridge.Run/NavalRaisedBridge.Steps/q;
+            ArmoredTowerBox(new Vector3(NavalRaisedBridge.StairX/q,floor+h*.5f,z+run-(i+.5f)*step),new Vector3(NavalRaisedBridge.StairWidth/q,h,step+.002f),i%2==0?iron:accent);
         }
+        for(int side=-1;side<=1;side+=2){
+            ArmoredTowerBox(new Vector3(side*w,top+.5f/q,z),new Vector3(t,1f/q,d*2),iron);
+            ArmoredTowerBox(new Vector3(0,top+.5f/q,z+side*d),new Vector3(w*2,1f/q,t),iron);
+            ArmoredTowerBox(new Vector3(side*w,top+2.9f/q,z),new Vector3(t,.6f/q,d*2),iron);
+            ArmoredTowerBox(new Vector3(0,top+2.9f/q,z+side*d),new Vector3(w*2,.6f/q,t),iron);
+            foreach(float x in new[]{-w,0,w})ArmoredTowerBox(new Vector3(x,top+1.8f/q,z+side*d),new Vector3(t,1.6f/q,t),accent);
+            foreach(float dz in new[]{-d,0,d})ArmoredTowerBox(new Vector3(side*w,top+1.8f/q,z+dz),new Vector3(t,1.6f/q,t),accent);
+        }
+        ArmoredTowerBox(new Vector3(0,top+3.3f/q,z),new Vector3(w*2+.2f/q,t,d*2+.2f/q),dark);
     }
     private void ArmoredTowerBox(Vector3 position,Vector3 size,Material material)
     {
@@ -368,6 +318,7 @@ public class NavalShipVisuals : MonoBehaviour,INavalPropulsion
     }
     private void BuildIroncladDeckFittings(Material iron,Material accent,Material dark,Material timber)
     {
+        if(hull.Definition.CapitalShip)return;
         float roof=hull.Definition.WeatherDeck;
         // Short signal staff only: no sail cloth, yards or active sailing rig.
         VisualBox(new Vector3(0,roof+.68f,-3.45f),new Vector3(.11f,1.36f,.11f),dark);

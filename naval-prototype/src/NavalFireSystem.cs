@@ -18,21 +18,20 @@ public sealed class NavalFireTarget
     public int ReadyGun=-1;
     public bool Magazine {get{return Powder is NavalMagazineState;}}
     public bool ReadyUse {get{return ReadyGun>=0;}}
+    public System.Func<bool> HasStock;public System.Action Detonated;public float BlastRadiusOverride,BlastPowerOverride;
     public bool MainMagazine;
+    public int MainSlot;
     public NavalCargoCrate CargoCrate;
-    public bool Active {get{return Powder!=null?Powder.Lit:Cell!=null&&!Cell.Missing&&!Cell.Detached&&Flame.Burning;}}
+    public bool Active {get{return Powder!=null?Powder.Lit&&(HasStock==null||HasStock()):Cell!=null&&!Cell.Missing&&!Cell.Detached&&Flame.Burning;}}
     public Vector3 Point {get{return Powder!=null?PowderPoint:Cell.Owner.Root.InverseTransformPoint(Cell.transform.position);}}
 }
 [DefaultExecutionOrder(80)]
 public sealed partial class NavalFireSystem : MonoBehaviour
 {
-    // Keep the number of independently simulated/destructible fire cells low.
-    // In v250 two ships reached 30+ cells each: the particle batch stayed
-    // cheap, but burned voxels repeatedly rebuilt hull collider chunks and
-    // the extra firefighter routes congested every damage-control passage.
-    public const int FireLimit=12;
+    // Simulation is limited by available fuel, never by an arbitrary fire count.
+    public const int FireLimit=int.MaxValue;
     private NavalHull hull;
-    private readonly List<NavalFireTarget> flames=new List<NavalFireTarget>(FireLimit),powder=new List<NavalFireTarget>();
+    private readonly List<NavalFireTarget> flames=new List<NavalFireTarget>(16),powder=new List<NavalFireTarget>();
     private readonly Dictionary<NavalHullVoxel,NavalFireTarget> history=new Dictionary<NavalHullVoxel,NavalFireTarget>();
     private readonly NavalPointIndex fuelIndex=new NavalPointIndex();
     private readonly List<int> nearby=new List<int>();
@@ -116,9 +115,12 @@ public sealed partial class NavalFireSystem : MonoBehaviour
         BuildReadyUseAmmunition();
         BuildMainBatteryMagazine();
         BuildCargoAmmunition();
+        var torpedoes=hull.Root.GetComponent<NavalTorpedoBattery>();if(torpedoes!=null)torpedoes.RegisterWarheads(this);
+        BuildHeatIndex();
         foreach(NavalHullVoxel cell in hull.Voxels)if(cell.Flammable&&!cell.MovableEquipment&&!cell.RepairableEquipment)
         {int id=fuels.Count;fuels.Add(cell);Vector3 p=cell.LocalCenter;fuelIndex.Add(id,p.x,p.y,p.z);}
     }
+    public void RegisterExplosive(NavalFireTarget store){powder.Add(store);}
     private void BuildMagazines()
     {
         int count=NavalMagazineLayout.Count(hull.Definition);if(count==0)return;
@@ -127,7 +129,7 @@ public sealed partial class NavalFireSystem : MonoBehaviour
         magazineMaterials=new Material[]{armor,edge,marking};
         for(int index=0;index<count;index++)
         {
-            Vector3 floor=new Vector3(NavalMagazineLayout.X(index),NavalMagazineLayout.Floor(hull.Definition),NavalMagazineLayout.Z(index));
+            Vector3 floor=new Vector3(NavalMagazineLayout.X(index),NavalMagazineLayout.Floor(hull.Definition),NavalMagazineLayout.Z(hull.Definition,index));
             float scale=hull.WorldScale,w=NavalMagazineLayout.Width/scale,h=NavalMagazineLayout.Height/scale,d=NavalMagazineLayout.Depth/scale;
             List<NavalHullVoxel> supports=MagazineSupports(floor,w,d);
             int first=hull.Voxels.Count;
@@ -135,6 +137,12 @@ public sealed partial class NavalFireSystem : MonoBehaviour
             // bulkhead. Only recessed double doors and their riveted frame are
             // visible in the hold, so no free-standing box can overlap cargo.
             float wallX=NavalCompartmentMath.WallX+.025f;
+            // Self-contained armoured lockers replace dependence on removed partitions.
+            float back=wallX+w,thickness=.10f/scale;
+            MagazineBox(armor,new Vector3(back,floor.y+h*.5f,floor.z),new Vector3(thickness,h,d));
+            for(int end=-1;end<=1;end+=2)
+                MagazineBox(armor,new Vector3((wallX+back)*.5f,floor.y+h*.5f,floor.z+end*d*.5f),new Vector3(w,h,thickness));
+            MagazineBox(armor,new Vector3((wallX+back)*.5f,floor.y+h,floor.z),new Vector3(w,thickness,d));
             for(int door=-1;door<=1;door+=2)
                 MagazineBox(armor,new Vector3(wallX,floor.y+h*.50f,floor.z+door*d*.245f),new Vector3(.10f/scale,h*.82f,d*.46f));
             MagazineBox(edge,new Vector3(wallX-.01f,floor.y+.07f/scale,floor.z),new Vector3(.14f/scale,.14f/scale,d));
@@ -167,12 +175,13 @@ public sealed partial class NavalFireSystem : MonoBehaviour
     private void BuildReadyUseAmmunition()
     {
         int count=NavalReadyAmmoLayout.Count(hull.Definition);if(count==0)return;
+        if(magazineMaterials==null)magazineMaterials=new[]{Mat(new Color(.28f,.31f,.33f)),Mat(new Color(.13f,.16f,.18f)),Mat(new Color(.62f,.54f,.25f))};
         Material armor=magazineMaterials[0],edge=magazineMaterials[1],brass=magazineMaterials[2];
         float scale=hull.WorldScale,w=NavalReadyAmmoLayout.Width/scale,h=NavalReadyAmmoLayout.Height/scale,d=NavalReadyAmmoLayout.Depth/scale,t=.10f/scale;
         for(int gun=0;gun<count;gun++)
         {
             float side=NavalShipDefinition.GunSide(gun);
-            Vector3 floor=new Vector3(NavalReadyAmmoLayout.X(hull.Definition,gun),NavalReadyAmmoLayout.Floor(hull.Definition),NavalReadyAmmoLayout.Z(hull.Definition,gun));
+            Vector3 floor=new Vector3(NavalReadyAmmoLayout.X(hull.Definition,gun),hull.Definition.Destroyer?hull.Definition.GunOperator(gun).y:NavalReadyAmmoLayout.Floor(hull.Definition),NavalReadyAmmoLayout.Z(hull.Definition,gun));
             int first=hull.Voxels.Count;
             // Low armoured ready-use locker bolted to the outboard side of the
             // fixed mounting.  The open inboard face exposes individual brass
@@ -234,7 +243,7 @@ public sealed partial class NavalFireSystem : MonoBehaviour
     public bool Ignite(NavalHullVoxel cell){return Ignite(cell,.30f);}
     public bool Ignite(NavalHullVoxel cell,float strength)
     {
-        if(cell==null||!cell.Flammable||cell.Missing||cell.Detached||cell.RepairableEquipment||cell.MovableEquipment||flames.Count>=FireLimit)return false;
+        if(cell==null||!cell.Flammable||cell.Missing||cell.Detached||cell.RepairableEquipment||cell.MovableEquipment)return false;
         NavalFireTarget target;
         if(!history.TryGetValue(cell,out target))
         {target=new NavalFireTarget{Cell=cell,Flame=new NavalFireState(cell.RigFabric)};history.Add(cell,target);}
@@ -253,6 +262,7 @@ public sealed partial class NavalFireSystem : MonoBehaviour
         if(power<.9f)return; // Underwater hits still damage wood, but do not light dry powder.
         foreach(var target in powder)
         {
+            if(target.HasStock!=null&&!target.HasStock())continue;
             if((point-target.PowderPoint).magnitude>radius+target.ExplosiveRadius/hull.WorldScale)continue;
             bool directStore=direct!=null&&target.PowderCells!=null&&target.PowderCells.Contains(direct);
             if(target.Magazine&&!penetrated&&!directStore)continue;
@@ -289,7 +299,7 @@ public sealed partial class NavalFireSystem : MonoBehaviour
         int limit=NavalArmorMath.InternalFireLimit(basePower,residualPower),started=0;
         float strength=Mathf.Clamp(.38f+basePower*.055f+residualPower*.045f,.42f,.92f);
         // Prefer fuel actually inside the burst, then let at most a few hot
-        // fragments seed separate localized fires. FireLimit remains global.
+        // fragments seed separate localized fires; no global fire-count cap.
         nearby.Sort((a,b)=>(fuels[a].LocalCenter-point).sqrMagnitude.CompareTo((fuels[b].LocalCenter-point).sqrMagnitude));
         foreach(int i in nearby)
         {
@@ -349,6 +359,7 @@ public sealed partial class NavalFireSystem : MonoBehaviour
                 foreach(int index in nearby)if(Random.value<spreadChance&&(fuels[index].transform.position-p).sqrMagnitude<1.44f&&!Underwater(fuels[index].transform.position)&&Ignite(fuels[index],Mathf.Max(.22f,target.Flame.Intensity*.48f)))break;
             }
         }
+        if(spread)HeatMechanisms();
         EmitFireSmoke(.25f);
         foreach(var target in powder)
         {
@@ -357,7 +368,7 @@ public sealed partial class NavalFireSystem : MonoBehaviour
                 int support=0;foreach(var cell in target.SupportCells)if(cell!=null&&!cell.Missing&&!cell.Detached)support++;
                 if(!NavalMagazineSupport.Stable(support,target.SupportCells.Count)){CollapseMagazine(target);continue;}
             }
-            if(target.Collapsed)continue;
+            if(target.Collapsed||target.HasStock!=null&&!target.HasStock())continue;
             Vector3 centre=Vector3.zero;int intact=0;
             foreach(var cell in target.PowderCells)if(cell!=null&&!cell.Missing){centre+=cell.transform.position;intact++;}
             if(intact>0)target.PowderPoint=hull.Root.InverseTransformPoint(centre/intact);
@@ -381,9 +392,9 @@ public sealed partial class NavalFireSystem : MonoBehaviour
             dead.Clear();foreach(Character robot in NavalCharacters.Snapshot())
             {
                 if(robot==null||!robot.IsAlive())continue;bool hot=false;
-                foreach(var target in flames)if(target.Active&&(target.Cell.transform.position-(robot.transform.position+Vector3.up*.3f)).sqrMagnitude<1f){hot=true;break;}
+                foreach(var target in flames)if(target.Active&&(target.Cell.transform.position-(robot.transform.position+Vector3.up*.3f)).sqrMagnitude<1.96f){hot=true;break;}
                 float seconds;exposure.TryGetValue(robot,out seconds);seconds=hot?seconds+1:Mathf.Max(0,seconds-2);
-                if(seconds>=6){robot.Kill(null,DamageSourceType.ScriptedKill,-1);dead.Add(robot);}else if(seconds>0)exposure[robot]=seconds;else exposure.Remove(robot);
+                if(seconds>=4){robot.Kill(null,DamageSourceType.ScriptedKill,-1);dead.Add(robot);}else if(seconds>0)exposure[robot]=seconds;else exposure.Remove(robot);
             }
             foreach(Character robot in exposure.Keys)if(robot==null||!robot.IsAlive())dead.Add(robot);
             foreach(Character robot in dead)exposure.Remove(robot);
@@ -397,20 +408,21 @@ public sealed partial class NavalFireSystem : MonoBehaviour
             if(hull.Cargo!=null)hull.Cargo.LoseReadyAmmo(source.ReadyGun);
             if(controls!=null)controls.AmmunitionDetonated(source.ReadyGun);
         }
-        if(source!=null&&source.MainMagazine&&controls!=null)controls.MainMagazineDetonated();
+        if(source!=null&&source.MainMagazine&&controls!=null)controls.MainMagazineDetonated(source.MainSlot);
         if(source!=null&&source.CargoCrate!=null)source.CargoCrate.DestroyAmmunition();
-        if(source!=null&&source.Magazine&&hull.Cargo!=null)
+        if(source!=null&&source.Magazine&&hull.Cargo!=null&&(!hull.Definition.CapitalShip||!source.MainMagazine))
         {
             int stores=1;foreach(var target in powder)if(target.Magazine&&!target.Powder.Spent)stores++;
             hull.Cargo.LoseMagazineAmmo(stores);
         }
+        if(source!=null&&source.Detonated!=null)source.Detonated();
         bool ready=source!=null&&source.ReadyUse,magazine=source!=null&&source.Magazine,main=source!=null&&source.MainMagazine;
-        float radius=NavalAmmunitionBlastMath.HullRadius(ready,magazine,main);
-        float power=NavalAmmunitionBlastMath.Power(ready,magazine,main);
-        foreach(NavalSeaLadder ship in NavalSeaLadder.All)if(ship!=null&&ship.Hull!=null)
-            ship.Hull.Damage(ship.transform.InverseTransformPoint(point),radius/ship.Hull.WorldScale,true,null,power,power,true);
+        float radius=source!=null&&source.BlastRadiusOverride>0?source.BlastRadiusOverride:NavalAmmunitionBlastMath.HullRadius(ready,magazine,main);
+        float power=source!=null&&source.BlastPowerOverride>0?source.BlastPowerOverride:NavalAmmunitionBlastMath.Power(ready,magazine,main);
+        foreach(NavalSeaLadder ship in NavalSeaLadder.All)if(ship!=null&&ship.Hull!=null&&(source==null||source.BlastRadiusOverride<=0||ship.Hull==hull))
+            ship.Hull.Damage(ship.transform.InverseTransformPoint(point),radius,true,null,power,power,true);
         foreach(Character robot in NavalCharacters.Snapshot())if(robot!=null&&robot.IsAlive()&&
-            NavalAmmunitionBlastMath.HitsRobot((robot.transform.position-point).sqrMagnitude,ready,magazine,main))robot.Kill(null,DamageSourceType.ScriptedKill,-1);
+            (source!=null&&source.BlastRadiusOverride>0?(robot.transform.position-point).sqrMagnitude<radius*radius:NavalAmmunitionBlastMath.HitsRobot((robot.transform.position-point).sqrMagnitude,ready,magazine,main)))robot.Kill(null,DamageSourceType.ScriptedKill,-1);
         GameObject blast=new GameObject("Naval powder explosion flash");
         blast.AddComponent<NavalPowderBlastVisual>().Initialize(effects,point,orange,smoke,charred,NavalAmmunitionBlastMath.VisualScale(ready,magazine,main));
         AudioSource.PlayClipAtPoint(boom,point,1f);

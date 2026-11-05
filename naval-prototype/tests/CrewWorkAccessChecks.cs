@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 class CrewWorkAccessChecks {
  static void Check(bool v,string why){if(!v)throw new Exception(why);}
  static void Main(){try{var profiles=new System.Collections.Generic.List<NavalShipDefinition>(NavalShipDefinition.Choices);profiles.AddRange(NavalShipDefinition.SteamChoices);foreach(var ship in profiles){
@@ -10,7 +10,8 @@ class CrewWorkAccessChecks {
  for(int i=0;i<ship.CrewCount;i++){
  float x=Math.Abs(NavalShipDefinition.StandbyX(ship,i)),z=Math.Abs(NavalShipDefinition.StandbyZ(ship,i));var ballast=NavalBallastLayout.For(ship);
  bool besideBallast=z>=ballast.InnerZ&&z<=ballast.Z+ballast.Length*.5f;
- if(besideBallast)Check((ballast.X-ballast.Width*.5f-x)*ship.Scale>radius,"Standby clear of ballast wall");
+ if(besideBallast&&!ship.Destroyer)Check((ballast.X-ballast.Width*.5f-x)*ship.Scale>radius,"Standby clear of ballast wall");
+ if(ship.Destroyer){var post=NavalShipDefinition.StandbyPost(ship,i);Check(NavalCrewDeckSafety.Inside(post.x,post.z,ship,radius),"Destroyer standby within full capsule bounds");Check(Math.Abs(NavalBallastLayout.Surface(post.x,post.z,ship.HoldFloor,ship)-ship.HoldFloor)<.001,"Destroyer ballast remains below standby floor");}
  if(ship.Scale<=2)Check(.95f*ship.Scale-.675f-x*ship.Scale>radius,"Sloop standby clear of central stocks");
  }
  }

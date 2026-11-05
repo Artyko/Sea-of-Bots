@@ -65,9 +65,9 @@ public sealed class NavalStabilityMath
     public float AngularVelocity {get;private set;}
     public float Waterline {get;private set;}
     public float RightingArm {get;private set;}
-    public NavalStabilityMath(float scale,float floor,float rim,float initialGMFraction=DefaultGMFraction,float designWaterline=0,float dryCenterY=float.NaN)
+    public NavalStabilityMath(float scale,float floor,float rim,float initialGMFraction=DefaultGMFraction,float designWaterline=0,float dryCenterY=float.NaN,float beamWorld=0)
     {
-        Beam=BoatDimensions.HalfWidth*2*scale;Bottom=floor*scale;Top=rim*scale;Length=BoatDimensions.HalfLength*2*scale;
+        Beam=beamWorld>0?beamWorld:BoatDimensions.HalfWidth*2*scale;Bottom=floor*scale;Top=rim*scale;Length=BoatDimensions.HalfLength*2*scale;
         double draft=designWaterline*scale-Bottom;DryMass=Beam*draft*Length;
         // Production profiles specify their physical dry CG independently of GM.
         // The inverse-GM fallback preserves historical comparison fixtures only.
@@ -76,28 +76,30 @@ public sealed class NavalStabilityMath
     }
     public void Observe(float actualAngle)
     {if(Math.Abs(NavalBroadsideMath.Delta(Angle,actualAngle))>20)AngularVelocity=0;Angle=actualAngle;}
-    public double Torque(NavalMassMoments water,float angle,float waveAngle)
+    public double Torque(NavalMassMoments water,float angle,float waveAngle,float attachedFraction=1f)
     {
-        double mass=DryMass+water.Mass;
+        double remaining=Math.Max(.01,attachedFraction);
+        double dryMass=DryMass*remaining;
+        double mass=dryMass+water.Mass;
         // A local wave-support frame approximates wave pressure without a separate angle correction.
         double relative=angle-waveAngle;
-        section.Solve(Beam,Bottom,Top,relative,mass/Length);
-        double phi=relative*Math.PI/180,worldGX=(water.MX*Math.Cos(phi)-(DryMass*DryY+water.MY)*Math.Sin(phi))/mass;
+        section.Solve(Beam,Bottom,Top,relative,mass/(Length*remaining));
+        double phi=relative*Math.PI/180,worldGX=(water.MX*Math.Cos(phi)-(dryMass*DryY+water.MY)*Math.Sin(phi))/mass;
         Waterline=(float)(section.Waterline/Math.Max(.5,Math.Cos(waveAngle*Math.PI/180)));RightingArm=(float)(section.CenterX-worldGX);
         return mass*9.81*RightingArm;
     }
-    public float Step(float dt,NavalMassMoments water,float waveAngle)
+    public float Step(float dt,NavalMassMoments water,float waveAngle,float attachedFraction=1f)
     {
         int steps=Math.Max(1,(int)Math.Ceiling(Math.Max(0,dt)/.016));double h=Math.Max(0,dt)/steps;
         for(int i=0;i<steps;i++)
         {
-            double acceleration=Torque(water,Angle,waveAngle)/Math.Max(1,DryInertia+water.Inertia);
+            double acceleration=Torque(water,Angle,waveAngle,attachedFraction)/Math.Max(1,DryInertia*Math.Max(.01,attachedFraction)+water.Inertia);
             double velocity=AngularVelocity*Math.PI/180;
             velocity=(velocity+acceleration*h)*Math.Exp(-1.1*h);
             AngularVelocity=(float)(velocity*180/Math.PI);
             Angle=(float)(((Angle+AngularVelocity*h+540)%360)-180);
         }
-        Torque(water,Angle,waveAngle);return Angle;
+        Torque(water,Angle,waveAngle,attachedFraction);return Angle;
     }
     public void AddTank(ref NavalMassMoments mass,NavalBallastTank tank,float scale,float floor)
     {

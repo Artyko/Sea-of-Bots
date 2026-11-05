@@ -17,6 +17,7 @@ public sealed class NavalRepairableMechanism
     public float DisplaySeconds,ProgressUntil;
     public string RepairStage;
     private readonly string customName;
+    private readonly bool fieldRepairable;
     public bool PermanentlyDestroyed {get{return IsCannon&&cannonRepair.Lost;}}
     public bool CanFetchParts {get{return !PermanentlyDestroyed&&(PartsDelivered||hull.HasCannonStock);}}
     public bool RecoverableWithParts {get{return !PermanentlyDestroyed&&(CanFetchParts||hull.CannonSupply!=null&&hull.CannonSupply.PlayerHasKit||RepairWorker!=null&&RepairWorker.CarryingCannonParts(this));}}
@@ -24,8 +25,9 @@ public sealed class NavalRepairableMechanism
     public bool RestoringCannon {get;private set;}
     public bool RepairUsed {get{return IsCannon&&cannonRepair.Used;}}
     public float RepairSeconds {get{return IsCannon?NavalCannonRepairBudget.Duration:4f;}}
-    public NavalRepairableMechanism(NavalHull owner,IEnumerable<NavalHullVoxel> members,bool pump,bool cannon=false,string name=null,bool steamMain=false,bool mainBattery=false)
+    public NavalRepairableMechanism(NavalHull owner,IEnumerable<NavalHullVoxel> members,bool pump,bool cannon=false,string name=null,bool steamMain=false,bool mainBattery=false,bool fieldRepair=true)
     {
+        fieldRepairable=fieldRepair;
         hull=owner;IsPump=pump;IsCannon=cannon;IsSteamMain=steamMain;IsMainBattery=mainBattery;customName=name;cells=new List<NavalHullVoxel>(members);
         foreach(NavalHullVoxel cell in cells)
         {
@@ -40,7 +42,7 @@ public sealed class NavalRepairableMechanism
         foreach(NavalHullVoxel cell in cells)if(cell==null||cell.Missing||cell.Detached)damaged++;
         state.Observe(cells.Count,damaged);
     }
-    public bool CanRepair {get{Refresh();return cells.Count>0&&(IsCannon?!cannonRepair.Used:!state.Destroyed);}}
+    public bool CanRepair {get{Refresh();return fieldRepairable&&cells.Count>0&&(IsCannon?!cannonRepair.Used:!state.Destroyed);}}
     public bool NeedsRepair {get{Refresh();return damaged>0&&CanRepair;}}
     public bool Destroyed {get{Refresh();return IsCannon?damaged>0&&cannonRepair.Used:state.Destroyed;}}
     public bool Functional {get{Refresh();return cells.Count>0&&damaged==0&&(IsCannon||!state.Destroyed);}}

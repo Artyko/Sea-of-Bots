@@ -39,11 +39,12 @@ public static class NavalPowderLayout
 public static class NavalMagazineLayout
 {
     public const float Width=2.4f,Height=2.0f,Depth=3.0f,HitRadius=1.35f;
-    public static int Count(NavalShipDefinition ship){return ship.SteamPowered?2:0;}
+    public static int Count(NavalShipDefinition ship){return ship.SteamPowered&&!ship.Destroyer?2:0;}
     // These are built-in rooms behind the starboard longitudinal bulkhead,
     // not loose steel chests placed among the shell racks.
     public static float X(int index){return 1.65f;}
     public static float Z(int index){return index%2==0?-1.35f:1.35f;}
+    public static float Z(NavalShipDefinition ship,int index){return ship.CapitalShip?(index%2==0?-2.8f:2.8f):Z(index);}
     public static float Floor(NavalShipDefinition ship){return ship.MaintenanceFloor(0);}
 }
 public static class NavalReadyAmmoLayout
@@ -51,11 +52,13 @@ public static class NavalReadyAmmoLayout
     public const float Width=.90f,Height=1.15f,Depth=.70f,HitRadius=.80f;
     public static int Count(NavalShipDefinition ship){return ship.SteamPowered?ship.GunCount:0;}
     public static float X(NavalShipDefinition ship,int gun)
-    {return NavalShipDefinition.GunSide(gun)*(ship.GunMountX+.05f);}
+    {return ship.Destroyer?ship.GunPosition(gun).x-1.25f/ship.Scale:NavalShipDefinition.GunSide(gun)*(ship.GunMountX+.05f);}
     public static float Z(NavalShipDefinition ship,int gun)
     {
+        if(ship.Destroyer)return ship.GunPosition(gun).z-1.5f/ship.Scale;
         float gunZ=NavalShipDefinition.GunZ(ship,gun);
-        return gunZ+(gunZ>1f?-.58f:.58f);
+        float offset=gunZ>1f?-.58f:.58f;float z=gunZ+offset;
+        return Math.Abs(z-ship.LadderZ)<.8f?gunZ-offset:z;
     }
     public static float Floor(NavalShipDefinition ship){return ship.WeatherDeck;}
 }
@@ -165,6 +168,7 @@ public static class NavalExplosiveImpact
     public static bool DirectHit(INavalExplosiveStore store,float roll)
     {
         if(store==null||store.Spent||store.Wet)return false;
+        if(store is NavalTorpedoWarheadState)return store.Impact(roll);
         float instant=store is NavalPowderState?NavalPowderState.InstantChance:NavalMagazineState.InstantChance;
         if(roll<instant)return store.Impact(0f);
         store.Ignite(0f);return false;

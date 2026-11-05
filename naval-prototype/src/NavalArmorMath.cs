@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 public enum NavalPenetrationMaterial {Wood,Iron,Machinery,Armor}
 
@@ -64,7 +64,7 @@ public static class NavalArmorMath
         else if(travelled<=LongRange)multiplier=Lerp(1.60f,1.32f,(travelled-NormalRange)/(LongRange-NormalRange));
         else if(travelled<=ExtremeRange)multiplier=Lerp(1.32f,.68f,(travelled-LongRange)/(ExtremeRange-LongRange));
         else multiplier=.68f;
-        return basePower*multiplier;
+        return basePower*multiplier*1.35f;
     }
     public static NavalPenetrationMaterial Material(bool armored,bool metallic,bool equipment)
     {return armored?NavalPenetrationMaterial.Armor:equipment?NavalPenetrationMaterial.Machinery:metallic?NavalPenetrationMaterial.Iron:NavalPenetrationMaterial.Wood;}
@@ -76,24 +76,8 @@ public static class NavalArmorMath
     {return Math.Max(0f,PenetrationPower(basePower,travelled)-Resistance(material));}
     public static bool Perforates(float basePower,float travelled,NavalPenetrationMaterial material)
     {return ResidualPower(basePower,travelled,material)>.05f;}
-    public static float InternalFuseDepth(float residualPower)
-    {
-        // A longer base-fuze delay moves ordinary AP beyond the first frame or
-        // deck beam and lets energetic heavy AP reach the next compartment.
-        // Keep a finite cap so a shell crossing an empty/destroyed hull still
-        // bursts before travelling an implausible distance.
-        return Math.Max(2.15f,Math.Min(5.5f,2.15f+Math.Max(0f,residualPower)*.45f));
-    }
-    public static float InternalFuseDepth(float residualPower,NavalPenetrationMaterial material)
-    {
-        float materialDelay=material==NavalPenetrationMaterial.Armor?1f:material==NavalPenetrationMaterial.Iron?.95f:material==NavalPenetrationMaterial.Machinery?.90f:.85f;
-        // Even a wooden deck must not produce a surface-looking burst.  The
-        // fuze now has at least 1.80 m of physical post-penetration travel;
-        // armour and high residual energy carry it substantially deeper.
-        return Math.Max(1.80f,Math.Min(5.5f,InternalFuseDepth(residualPower)*materialDelay));
-    }
     public static bool ArmsInternalFuse(NavalPenetrationMaterial material,float residualPower)
-    {return residualPower>.05f;}
+    {return material!=NavalPenetrationMaterial.Wood&&residualPower>.05f;}
     public static float ExitVelocityFactor(float impactPower,float residualPower,NavalPenetrationMaterial material)
     {
         float retained=impactPower<=.001f?0f:Math.Max(0f,Math.Min(1f,residualPower/impactPower));
@@ -111,6 +95,7 @@ public static class NavalArmorMath
         return basePower>2f?Math.Min(basePower,2.15f+residualPower*.72f):
             Math.Min(Math.Max(1.05f,basePower*1.35f),1.05f+residualPower*.72f);
     }
+    public static float InternalBlastWorldRadius(float basePower,float residualPower){float calibreRadius=basePower>6f?1.45f:basePower>2f?1.10f:.65f;float retained=basePower>.001f?Math.Max(0,Math.Min(1,residualPower/basePower)):0;return calibreRadius*(.85f+.25f*retained);}
     public static float InternalBlastRadiusMultiplier(float basePower,float residualPower)
     {return basePower>2f?Math.Min(1.75f,1.35f+Math.Max(0f,residualPower)*.075f):Math.Min(1.32f,1.10f+Math.Max(0f,residualPower)*.12f);}
     public static float InternalFireChance(float basePower,float residualPower)

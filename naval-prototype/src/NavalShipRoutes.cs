@@ -15,6 +15,8 @@ public static class NavalShipRoutes
     public const float SteamAftGatewayLane=1.58f,SteamAftGatewayZ=-4.05f;
     public static bool InStairwell(NavalWalkPoint p,NavalShipDefinition ship)
     {
+        if(NavalRaisedBridge.Flight(p,ship))return true;
+        if(ship.Destroyer)return NavalStairTraffic.InPassage(p,ship);
         if(NavalWalkRoutes.InStairwell(p.X,p.Y,p.Z,ship.StairWidth*.5f+.175f,ship.HoldFloor))return true;
         return ship.DeckCount>2&&NavalWalkRoutes.InStairwell(p.X,p.Y-ship.UpperDeckOffset,p.Z,ship.StairWidth*.5f+.175f,ship.UpperStairFloor);
     }
@@ -27,7 +29,9 @@ public static class NavalShipRoutes
     }
     public static List<NavalWalkPoint> Plan(NavalWalkPoint start,NavalWalkPoint goal,NavalShipDefinition ship)
     {
+        if(ship.Destroyer)return NavalDestroyerLayout.Route(start,goal,ship);
         var route=NavalStairTraffic.Apply(start,PlanCore(start,goal,ship),ship);
+        if(ship.CapitalShip)return NavalCapitalLayout.Route(start,AvoidSteamUnderFlight(start,route,ship),ship);
         if(ship.SteamPowered){route=AvoidSteamUnderFlight(start,route,ship);route=AvoidSteamUpperStair(start,route,ship);route=AvoidSteamDeckEquipment(start,route,ship);route=AvoidSteamCasemates(start,route,ship);route=NavalConningTowerLayout.Route(start,route,ship);route=AvoidSteamUpperStair(start,route,ship);bool sameWeather=route.Count>0&&start.Y>ship.WeatherDeck-.12f&&route[route.Count-1].Y>ship.WeatherDeck-.12f;for(int i=0;i<route.Count-1;i++){
             var point=route[i];float limit=System.Math.Max(.15f,ship.HullHalfWidth(point.Z)-.85f/ship.Scale);
             // The weather-deck battery and its ready-use ammunition occupy the
@@ -102,6 +106,7 @@ public static class NavalShipRoutes
     public static List<NavalWalkPoint> ClearSteamWeatherDeck(NavalWalkPoint start,List<NavalWalkPoint> route,NavalShipDefinition ship)
     {
         if(!ship.SteamPowered)return route;
+        if(ship.CapitalShip)return NavalCapitalLayout.Route(start,AvoidSteamUnderFlight(start,route,ship),ship);
         route=AvoidSteamUnderFlight(start,route,ship);
         route=AvoidSteamUpperStair(start,route,ship);
         route=AvoidSteamDeckEquipment(start,route,ship);

@@ -134,7 +134,7 @@ public partial class NavalWorldMap : MonoBehaviour
         float bottom=equipment!=null?equipment.Hull.Floor*scale-.3f:-2.5f*scale;
         float top=equipment!=null?equipment.Hull.Definition.RimY*scale:2.25f*scale;
         offset=Vector3.up*((bottom+top)*.5f);
-        half=new Vector3((BoatDimensions.HalfWidth+.2f)*scale,(top-bottom)*.5f,(BoatDimensions.HalfLength+.25f)*scale);
+        half=new Vector3(((equipment!=null?equipment.Hull.Definition.HullBeam*.5f/scale:BoatDimensions.HalfWidth)+.2f)*scale,(top-bottom)*.5f,(BoatDimensions.HalfLength+.25f)*scale);
     }
     private struct ClearanceMemo {public Transform Ship;public Vector3 Point,Direction;public float Range,Result,Until;}
     private readonly ClearanceMemo[] clearances=new ClearanceMemo[32];private int clearanceCursor;

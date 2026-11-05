@@ -21,12 +21,13 @@ public partial class NavalBilgeSystem : MonoBehaviour
     private int statusKind=-1;
     private static readonly string[] pumpModes={"Авто","За борт","Левый -> правые ёмкости","Правый -> левые ёмкости","Балласт -> море","Нос -> кормовые ёмкости","Корма -> носовые ёмкости"};
     private int mode; // 0 automatic, 1 bilge then ballast overboard, 2 port->starboard, 3 reverse, 4 ballast only overboard
-    public Vector3 PumpPost {get{return new Vector3(0f,hull.Floor,-4.9f);}}
+    public Vector3 PumpPost {get{return new Vector3(hull.Definition.Destroyer?NavalDestroyerAccess.PumpX/hull.WorldScale:0f,hull.Floor,hull.Definition.Destroyer?NavalDestroyerAccess.PumpZ/hull.WorldScale:-4.9f);}}
     public string Status {get;private set;}
     public bool Functional {get{foreach(var station in pumps)if(station.Functional)return true;return false;}}
     public bool NeedsRepair {get{foreach(var station in pumps)if(station.Mechanism.NeedsRepair)return true;return false;}}
     public float LongitudinalList {get{return Mathf.Clamp(hull.WaterLongitudinalMoment/(BoatDimensions.HalfHoldArea*hull.VolumeScale)*15f,-15f,15f);}}
     public bool UrgentTrim {get{return Functional&&hull.UrgentTrim;}}
+    public bool BoilerEmergency {get{return hull.SteamMachinery!=null&&hull.SteamMachinery.PropulsionFloodEmergency;}}
     private readonly NavalPumpDemand crewDemand=new NavalPumpDemand();
     public void UpdateCrewDemand(float dt)
     {
@@ -35,7 +36,7 @@ public partial class NavalBilgeSystem : MonoBehaviour
     }
     public bool WantsOperator {get{return Functional&&!hull.Sunk&&(crewDemand.Active||RawOperatorDemand);}}
     public bool CrewOperating {get{foreach(var station in pumps)if(station.Operator!=null)return true;return false;}}
-    private bool RawOperatorDemand {get{return Functional&&!hull.Sunk&&(UrgentTrim||hull.Flood.Total>1f||BallastVolume>1f&&(trimPlan.WantsTransfer||Mathf.Abs(NavalHullStability.Roll(transform))>6f||Mathf.Abs(LongitudinalList)>3f));}}
+    private bool RawOperatorDemand {get{return Functional&&!hull.Sunk&&(UrgentTrim||BoilerEmergency||hull.Flood.Total>1f||BallastVolume>1f&&(trimPlan.WantsTransfer||Mathf.Abs(NavalHullStability.Roll(transform))>6f||Mathf.Abs(LongitudinalList)>3f));}}
     public void Initialize(NavalHull owner,FirstPersonMover observer,Material wood,Material trim,Material metal)
     {
         hull=owner;player=observer;owner.Bilge=this;
@@ -141,10 +142,15 @@ public partial class NavalBilgeSystem : MonoBehaviour
     private int Wettest(int region)
     {
         int selected=-1;float most=0f;
+        if(BoilerEmergency&&hull.BoilerProtection!=null){
+            for(int i=0;i<hull.Flood.Water.Length;i++)if(hull.BoilerProtection.ContainsCell(i)&&hull.Flood.Water[i]>most){most=hull.Flood.Water[i];selected=i;}
+            if(selected>=0)return selected;
+        }
         for(int i=0;i<hull.Flood.Water.Length;i++)if((region<0||NavalCompartmentMath.Region(hull.Flood.X(i),hull.Flood.Z(i))==region)&&hull.Flood.Water[i]>most)
         {most=hull.Flood.Water[i];selected=i;}
         return selected;
     }
+    private float ballastReviewLogAt;
     public void Pump(float dt,bool automatic,NavalPumpStation station=null)
     {
         if(station==null)station=playerPump?playerStation:NearestPump(PumpPost,false);
@@ -167,6 +173,12 @@ public partial class NavalBilgeSystem : MonoBehaviour
         bool transfer=(selectedMode==2||selectedMode==3||selectedMode==5||selectedMode==6)||selectedMode==0&&(longitudinal||trimPlan.WantsTransfer)&&NavalBallastTrim.AllowsTransfer(hull.HasActiveLeaks,hull.Inflow,UrgentTrim);
         bool fromPort=selectedMode==2||selectedMode==0&&trimPlan.FilteredHeel>0;
         bool fromStern=selectedMode==6||selectedMode==0&&pitchPlan.FilteredHeel<0;
+        if(automatic&&BoilerEmergency&&!UrgentTrim)transfer=false;
+        if(Time.time>=ballastReviewLogAt){
+            ballastReviewLogAt=Time.time+10f;
+            string reason=transfer?"correcting list/trim":BoilerEmergency?"priority: boiler room drain":trimPlan.Cooldown>0?"transfer ineffective: cooling down":!trimPlan.WantsTransfer&&!pitchPlan.WantsTransfer?"list and trim below activation":"active leaks or no effective transfer";
+            Debug.Log("[NavalPrototype] Ballast decision: ship="+hull.Root.name+" reason="+reason+" roll="+NavalHullStability.Roll(transform).ToString("F1")+" pitch="+LongitudinalList.ToString("F1")+" stored="+BallastVolume.ToString("F1"));
+        }
         bool attempted=transfer;
         if(transfer)
         {

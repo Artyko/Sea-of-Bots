@@ -12,6 +12,7 @@ public class NavalWater : MonoBehaviour
     public Material SurfaceMaterial { get { return surfaceMaterial; } }
     private Material surfaceMaterial;
     private Mesh mesh;
+    private NavalDistantWater distant;
     private Vector3[] vertices;
     private readonly List<int> indices = new List<int>(60000);
     private readonly List<Vector3> clippedVertices = new List<Vector3>(14000);
@@ -66,6 +67,8 @@ public class NavalWater : MonoBehaviour
         renderer.sharedMaterial = surfaceMaterial;
         renderer.shadowCastingMode = ShadowCastingMode.Off;
         renderer.receiveShadows = !NavalPerformance.LaptopMode;
+        var horizon=new GameObject("Distant ocean");horizon.transform.SetParent(transform,false);
+        distant=horizon.AddComponent<NavalDistantWater>();distant.Initialize(this);
     }
 
     private Material WaterMaterial(Shader shader, Color color)
@@ -98,6 +101,7 @@ public class NavalWater : MonoBehaviour
         using(NavalPerformance.Measure(NavalPerfArea.Ocean))
         {
         simulationTime += Mathf.Min(Time.deltaTime, 0.05f);
+        if(distant!=null)distant.Refresh(Focus,simulationTime,Amplitude);
         bool laptop=NavalPerformance.LaptopMode;
         if(Time.time<nextMeshAt||laptop&&Time.frameCount<nextMeshFrame)return;
         // Integrated GPUs pay both the CPU mesh upload and the GPU cost of a
@@ -201,6 +205,7 @@ public class NavalWater : MonoBehaviour
     private bool PrepareClip(Transform boat)
     {
         NavalSeaLadder equipment=boat.GetComponent<NavalSeaLadder>();
+        clipDefinition=equipment!=null?equipment.Hull.Definition:null;
         ironcladClip=equipment!=null&&equipment.Hull.Definition.SteamPowered;
         clipPlanes=!ironcladClip&&equipment!=null&&equipment.Hull.Definition.DeckCount>2?9:5;
         clipRim=equipment!=null?equipment.Hull.Definition.RimY:BoatDimensions.Rim;
@@ -230,15 +235,16 @@ public class NavalWater : MonoBehaviour
     private static Vector3 Corner(Vector3 low,Vector3 high,int corner)
     {return new Vector3((corner&1)==0?low.x:high.x,(corner&2)==0?low.y:high.y,(corner&4)==0?low.z:high.z);}
 
+    private NavalShipDefinition clipDefinition;
     private float Distance(Vector3 p, int plane)
     {
         switch (plane)
         {
-            case 0: return p.x - (ironcladClip?NavalHullOutline.HalfWidth(p.z,true,true):BoatDimensions.HalfWidth);
-            case 1: return -p.x - (ironcladClip?NavalHullOutline.HalfWidth(p.z,true,true):BoatDimensions.HalfWidth);
+            case 0: return p.x - (clipDefinition!=null?clipDefinition.HullHalfWidth(p.z):BoatDimensions.HalfWidth);
+            case 1: return -p.x - (clipDefinition!=null?clipDefinition.HullHalfWidth(p.z):BoatDimensions.HalfWidth);
             case 2: return p.z - BoatDimensions.HalfLength;
             case 3: return -p.z - BoatDimensions.HalfLength;
-            case 4: return p.y - clipRim;
+            case 4: return p.y - (clipDefinition!=null&&clipDefinition.Destroyer?clipDefinition.RimAt(p.z):clipRim);
             default: return NavalHullOutline.EndPlane(p.x,p.z,plane-5);
         }
     }

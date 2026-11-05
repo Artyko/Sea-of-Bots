@@ -19,6 +19,11 @@ public static class NavalHullOutline
         float t=Math.Max(0,Math.Min(1,(Math.Abs(z)-5.2f)/.8f));
         return BoatDimensions.HalfWidth-t*(z>=0?1.5f:.75f);
     }
+    public static bool ClipEndCell(float x,float half,float unit,out float centre,out float width)
+    {
+        float left=Math.Max(-half,x-unit*.5f),right=Math.Min(half,x+unit*.5f);
+        width=Math.Max(0,right-left);centre=(left+right)*.5f;return width>.001f;
+    }
     public static float EndPlane(float x,float z,int plane)
     {
         if(plane<2)return (plane==0?x:-x)+1.875f*(z-5.2f)-3;

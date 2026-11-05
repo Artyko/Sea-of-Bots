@@ -15,7 +15,7 @@ public static class NavalCrewDeckSafety
         float margin=Math.Max(.05f,radius)/Math.Max(.1f,scale);
         return Math.Abs(z)<=BoatDimensions.HalfLength-margin&&Math.Abs(x)<=halfWidth-margin;
     }
-    public static bool Near(float x,float z,float halfWidth,float scale,float radius,float slack=.45f)
+    public static bool Near(float x,float z,float halfWidth,float scale,float radius,float slack=.50f)
     {
         float localSlack=Math.Max(0,slack)/Math.Max(.1f,scale);
         float margin=Math.Max(.05f,radius)/Math.Max(.1f,scale);
@@ -30,6 +30,8 @@ public static class NavalCrewDeckSafety
 // horizontal hull cell.
 public static class NavalDeckGapMath
 {
+    public static bool IsDeckLayer(float y,float height,NavalShipDefinition ship)
+    {float top=y+height*.5f,tolerance=.12f/ship.Scale;return ship.Destroyer&&Math.Abs(top-NavalDestroyerLayout.Foredeck(ship))<tolerance||ship.SteamPowered&&Math.Abs(top-ship.HelmDeck)<tolerance||Math.Abs(top-ship.HoldFloor)<tolerance||Math.Abs(top-ship.WeatherDeck)<tolerance||ship.DeckCount>2&&Math.Abs(top-.825f)<tolerance;}
     public static bool Overlaps(float px,float py,float pz,float radiusWorld,float scale,
         float cx,float cy,float cz,float sx,float sy,float sz)
     {

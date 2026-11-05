@@ -36,7 +36,7 @@ public class NavalEnemyShip : MonoBehaviour
     public void Initialize(FirstPersonMover observer,Transform opponent,NavalWater sea,float feet)
     {
         player=observer;target=opponent;ocean=sea;footOffset=feet;
-        Boat=new GameObject(NavalSessionSettings.EnemyShip.SteamPowered?"EnemyIroncladCorvette":"EnemyWoodenShip").transform;Boat.SetParent(transform,false);
+        Boat=new GameObject(NavalSessionSettings.EnemyShip.SteamPowered?"Enemy"+NavalSessionSettings.EnemyShip.Name.Replace(" ",""):"EnemyWoodenShip").transform;Boat.SetParent(transform,false);
         Boat.localScale=Vector3.one*NavalSessionSettings.EnemyShip.Scale;
         Vector3 facing=target.forward;facing.y=0f;facing.Normalize();
         Boat.position=target.position+facing*NavalSessionSettings.EnemySpawnDistance;
@@ -48,7 +48,7 @@ public class NavalEnemyShip : MonoBehaviour
         Material armorAccent=Mat(new Color(.52f,.39f,.16f)),redOxide=Mat(new Color(.29f,.075f,.055f));
         Hull=new NavalHull(NavalSessionSettings.EnemyShip);
         crew=new Character[Hull.Definition.CrewCount];repairers=new NavalRepairSailor[crew.Length];recruited=new bool[crew.Length];
-        Hull.Build(Boat,Hull.Definition.Armored?armorIron:wood,ocean.InteriorMaterial,deck,wood);
+        Hull.Build(Boat,Hull.Definition.SteamPowered?armorIron:wood,ocean.InteriorMaterial,deck,wood);
         rig=Boat.gameObject.AddComponent<NavalShipVisuals>();
         rig.Initialize(Hull,wood,trim,Hull.Definition.SteamPowered?armorIron:iron,Mat(new Color(.48f,.15f,.12f)),
             Hull.Definition.SteamPowered?darkIron:Mat(new Color(.12f,.085f,.05f)),deck,plank,
@@ -81,7 +81,7 @@ public class NavalEnemyShip : MonoBehaviour
         {
             Vector3 initialPost;
             if(Hull.Definition.SteamPowered)
-                initialPost=i>=Hull.Definition.CrewCount-2?stations.MainBatteryCrewPost(i-(Hull.Definition.CrewCount-2)):
+                initialPost=i>=Hull.Definition.CrewCount-Hull.Definition.HeavyCrewCount?stations.MainBatteryCrewPost(i-(Hull.Definition.CrewCount-Hull.Definition.HeavyCrewCount)):
                     i==0?stations.Post(0):NavalShipDefinition.StandbyPost(Hull.Definition,i);
             else initialPost=i<=Hull.Definition.GunCount?stations.Post(i):NavalShipDefinition.StandbyPost(Hull.Definition,i);
             Vector3 position=Boat.TransformPoint(initialPost)+Vector3.up*footOffset;
@@ -127,7 +127,7 @@ public class NavalEnemyShip : MonoBehaviour
         throttle=stations.StepPropulsion(dt,throttle,!Hull.Sunk&&CanHelm()&&stations.IsFunctional(0));
         ram.StepMomentum(dt,ref speed);
         speed=NavalRigMath.StepSpeed(speed,throttle,rig.PowerFactor,dt,Hull.Definition.MaxSailingSpeed);
-        float depth=Hull.Volume/(BoatDimensions.HoldArea*Hull.AreaScale);
+        float depth=Hull.Volume/(BoatDimensions.HoldArea*Hull.AreaScale*Mathf.Max(.01f,Hull.Flood.AttachedFraction));
         rudder=stations.IsFunctional(0)?NavalRigMath.StepRudder(rudder,turn,dt):0f;
         heading+=NavalRigMath.RudderRate(speed,rudder,Hull.Definition.SteeringRateScale)*stations.SteeringFactor*dt/(1f+depth);
         Quaternion flat=Quaternion.Euler(0f,heading,0f);Vector3 forward=flat*Vector3.forward,right=flat*Vector3.right;

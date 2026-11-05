@@ -35,14 +35,17 @@ public static class NavalRigMath
     public static float StepRudder(float current,float target,float dt)
     {
         target=Math.Max(-1f,Math.Min(1f,target));
-        return target+(current-target)*(float)Math.Exp(-2f*Math.Max(0f,dt));
+        const float response=.60f;
+        return target+(current-target)*(float)Math.Exp(-response*Math.Max(0f,dt));
     }
     public static float StepSpeed(float speed, float throttle, float sailPower, float dt,float maxSpeed=4f)
     {
         float target = throttle * maxSpeed * sailPower;
         // Releasing the helm takes longer to stop than active reverse thrust.
         bool coasting = Math.Abs(target) < 0.001f;
-        float response = coasting ? 0.14f : (speed * target < 0f ? 0.42f : 0.30f);
+        bool reversing = speed * target < 0f;
+        bool slowing = Math.Abs(target) < Math.Abs(speed);
+        float response = coasting ? .065f : reversing ? .21f : slowing ? .14f : .24f;
         float next = target + (speed - target) * (float)Math.Exp(-response * Math.Max(0f, dt));
         return coasting && Math.Abs(next) < 0.02f ? 0f : next;
     }

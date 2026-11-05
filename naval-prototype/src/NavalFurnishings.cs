@@ -6,6 +6,7 @@ public sealed class NavalFurnishings : MonoBehaviour
  private static Material Tint(Color color){var material=new Material(Shader.Find("Unlit/Color"));material.color=color;return material;}
  public void Initialize(NavalHull hull,Material wood,Material trim,Material iron)
  {
+  if(hull.Definition.Destroyer)return; // fittings supplied by the independent central layout
   rope=Tint(new Color(.57f,.44f,.25f));canvas=Tint(new Color(.72f,.67f,.54f));glow=Tint(new Color(.92f,.58f,.21f));
   hull.RegisterFireMaterial(wood);hull.RegisterFireMaterial(trim);hull.RegisterFireMaterial(rope);hull.RegisterFireMaterial(canvas);
   var palette=new Material[]{wood,trim,iron,rope,canvas,glow};int first=hull.Voxels.Count;

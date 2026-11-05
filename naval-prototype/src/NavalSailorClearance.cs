@@ -8,11 +8,23 @@ public partial class NavalRepairSailor
         foreach(var worker in hull.RepairWorkers)if(worker!=null&&worker.robot==character&&character.IsPlayerTeam==robot.IsPlayerTeam)return true;
         return false;
     }
+    private CollisionFlags movementContacts;
+    private void NavigationCapsule(Vector3 local,out Vector3 bottom,out Vector3 top,out float radius)
+    {
+        var body=Controller();radius=NavigationRadius;Vector3 foot=boat.TransformPoint(local);
+        if(body!=null&&body.enabled&&body.bounds.size.y>1f){
+            Bounds bounds=body.bounds;Vector3 offset=foot-(robot.transform.position-Vector3.up*footOffset),centre=bounds.center+offset;
+            bottom=centre+Vector3.up*(-bounds.extents.y+radius+.03f);top=centre+Vector3.up*(bounds.extents.y-radius);
+        }else {bottom=foot+Vector3.up*(radius+.03f);top=foot+Vector3.up*Mathf.Max(radius+.03f,2.6f-radius);}
+        // Planning points lie on the deck plane, while an upright capsule on
+        // a tilted deck rests above that plane. Do not classify the supporting deck as a wall.
+        float cosine=Mathf.Max(.5f,Mathf.Abs(boat.up.y));
+        Vector3 clearanceLift=Vector3.up*(radius*(1f/cosine-1f)+.04f);
+        bottom+=clearanceLift;top+=clearanceLift;
+    }
     private bool ClearBody(Vector3 local)
     {
-        CharacterController body=Controller();float height=body!=null?Mathf.Max(1.8f,body.bounds.size.y):2.6f;
-        float radius=NavigationRadius;
-        Vector3 bottom=boat.TransformPoint(local)+Vector3.up*(radius+.03f),top=boat.TransformPoint(local)+Vector3.up*Mathf.Max(radius+.03f,height-radius);
+        Vector3 bottom,top;float radius;NavigationCapsule(local,out bottom,out top,out radius);
         int count;
         while(true)
         {
@@ -32,7 +44,7 @@ public partial class NavalRepairSailor
             if(count<repairSightHits.Length)break;System.Array.Resize(ref repairSightHits,repairSightHits.Length*2);
         }
         bool clear=true;
-        for(int i=0;i<count;i++)if(repairSightHits[i].collider!=null&&!repairSightHits[i].collider.transform.IsChildOf(robot.transform))
+        for(int i=0;i<count;i++)if(repairSightHits[i].collider!=null&&!repairSightHits[i].collider.transform.IsChildOf(robot.transform)&&!FriendlyCrewShape(repairSightHits[i].collider))
         {
             NavalHullVoxel hit=equipment!=null?NavalVoxelHit.Resolve(repairSightHits[i].collider,repairSightHits[i].point):null;
             if(equipment==null){

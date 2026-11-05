@@ -12,7 +12,7 @@ public partial class NavalRepairSailor
         {
             int choice=pumpApproach++%3;Vector3 goal=pumpStation.Post;
             goal.z+=.65f/hull.WorldScale;
-            goal.x=choice==0?0:choice==1?-.55f:.55f;
+            goal.x+=(choice==0?0:choice==1?-.55f:.55f)/hull.WorldScale;
             if(!ClearBody(goal)||!Supported(goal))continue;
             feet=boat.InverseTransformPoint(robot.transform.position-Vector3.up*footOffset);
             route.Clear();stuck=0;PlanTo(goal);return true;
@@ -36,7 +36,7 @@ public partial class NavalRepairSailor
         {ReleasePump();BeginReturn();return false;}
         bool otherRepair=false;
         foreach(NavalRepairSailor worker in hull.RepairWorkers)if(worker!=null&&worker!=this&&worker.RepairingLeak)otherRepair=true;
-        if(pumpDuty&&pumpArrived&&hull.HasRepairDemand&&!system.UrgentTrim&&!otherRepair&&Time.time>=pumpReview)
+        if(pumpDuty&&pumpArrived&&hull.HasRepairDemand&&!system.UrgentTrim&&!system.BoilerEmergency&&!otherRepair&&Time.time>=pumpReview)
         {
             pumpReview=Time.time+1f;HoldPosition();TryFindLeak();
             if(leak!=null){ReleasePump();return false;}
@@ -45,9 +45,9 @@ public partial class NavalRepairSailor
         {
             if(!PumpAssignment||!allowed||leak!=null||bailState!=0||system.OpenPumpSlots==0||!system.WantsOperator||Time.time<pumpRetry)return false;
             bool repairAvailable=false;
-            if(hull.HasRepairDemand&&!system.UrgentTrim&&!otherRepair)
+            if(hull.HasRepairDemand&&!system.UrgentTrim&&!system.BoilerEmergency&&!otherRepair)
             {TryFindLeak();repairAvailable=leak!=null;if(repairAvailable)return false;}
-            if(!system.UrgentTrim&&!NavalMaintenanceMath.NeedPump(hull.HasRepairDemand,otherRepair,repairAvailable,hull.ParallelMaintenance,SpareMaintenance))return false;
+            if(!system.UrgentTrim&&!system.BoilerEmergency&&!NavalMaintenanceMath.NeedPump(hull.HasRepairDemand,otherRepair,repairAvailable,hull.ParallelMaintenance,SpareMaintenance))return false;
             pumpStation=system.NearestPump(feet,true);if(pumpStation==null)return false;
             waitingForRepair=false;pumpStation.Operator=this;pumpDuty=true;pumpArrived=false;pumpReview=Time.time+1f;
             Debug.Log("[NavalPrototype] Crew assigned to bilge pump");returning=false;changingPost=false;route.Clear();stuck=0f;

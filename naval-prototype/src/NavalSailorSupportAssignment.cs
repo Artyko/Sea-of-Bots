@@ -5,7 +5,7 @@ public partial class NavalRepairSailor
     public bool ChoosingNextTask {get{return nextTaskPending;}}
     public bool CanReceiveSupport(bool fire)
     {
-        return robot!=null&&robot.IsAlive()&&!stranded&&!Defending&&!Rescuing&&!Assaulting&&!FinalAttackDuty&&!HandlingSails&&!DeliveringAmmo&&
+        return !StationDutyProtected&&!Yielding&&robot!=null&&robot.IsAlive()&&!stranded&&!Defending&&!Rescuing&&!Assaulting&&!FinalAttackDuty&&!HandlingSails&&!DeliveringAmmo&&
             (nextTaskPending||!MaintenanceDuty&&!HasJob)&&Time.time>=(fire?fireRetry:pumpRetry);
     }
     private readonly System.Collections.Generic.Dictionary<Vector3,float> travelCosts=new System.Collections.Generic.Dictionary<Vector3,float>();

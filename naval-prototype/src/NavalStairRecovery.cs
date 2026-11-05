@@ -9,6 +9,7 @@ public static class NavalStairRecovery
  {
   floor=ship.HoldFloor;
   if(NavalStairTraffic.InPassage(feet,ship))return false;
+  if(ship.Destroyer){float x=feet.X*ship.Scale,z=feet.Z*ship.Scale;foreach(float centre in new[]{-20.5f,20.5f})if(Math.Abs(Math.Abs(x)-3.6f)<1.7f&&Math.Abs(z-centre)<4.2f){float t=Math.Max(0,Math.Min(1,(z-centre+4f)/8f)),surface=ship.HoldFloor+(ship.WeatherDeck-ship.HoldFloor)*t;if((surface-feet.Y)*ship.Scale>.8f&&feet.Y>=ship.HoldFloor-.05f){floor=ship.HoldFloor;return true;}}return false;}
   // Recover under the flight for every duty, including floor-level cargo routes.
   for(int level=ship.DeckCount-2;level>=0;level--){
    float offset=level==0?0:ship.UpperDeckOffset;
@@ -23,6 +24,7 @@ public static class NavalStairRecovery
  {return (dx*dx+dz*dz)*scale*scale<.12f*.12f&&Math.Abs(dy)*scale<.35f;}
  public static List<NavalWalkPoint> Exit(NavalWalkPoint feet,NavalWalkPoint goal,NavalShipDefinition ship,float floor,int side,float bodyRadius=.45f)
  {
+  if(ship.Destroyer){float q=ship.Scale,escapeX=(feet.X<0?-1:1)*5.6f/q,centre=feet.Z<0?-20.5f:20.5f;var escapeRoute=new List<NavalWalkPoint>();escapeRoute.Add(new NavalWalkPoint(escapeX,feet.Y,feet.Z));escapeRoute.Add(new NavalWalkPoint(escapeX,floor,feet.Z));var farLanding=new NavalWalkPoint(escapeX,floor,(centre+(goal.Z>feet.Z?5.8f:-5.8f))/q);escapeRoute.Add(farLanding);escapeRoute.AddRange(NavalSupplyRoutes.Plan(farLanding,goal,ship));return escapeRoute;}
   // The old .30 m margin ended exactly on the broad native capsule cast at
   // x ~= .83 on the ironclad. The next tick then rebuilt the same escape.
   float x=side*SideLane(ship,bodyRadius);

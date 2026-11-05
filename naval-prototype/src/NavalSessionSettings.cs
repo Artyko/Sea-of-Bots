@@ -1,6 +1,6 @@
 ﻿public static class NavalSessionSettings
 {
-    public const float SailSpawnDistance=250f,SteamSpawnDistance=800f;
+    public const float SailSpawnDistance=250f,SteamSpawnDistance=1200f;
     public static float EnemySpawnDistance {get{return Era==NavalEra.Steam?SteamSpawnDistance:SailSpawnDistance;}}
     public static NavalEra Era {get;private set;}
     public static NavalShipDefinition PlayerShip=NavalShipDefinition.Brigantine;
@@ -9,7 +9,7 @@
     public static void Configure(NavalEra era)
     {
         Era=era;
-        if(era==NavalEra.Steam){PlayerShip=EnemyShip=NavalShipDefinition.Ironclad;}
+        if(era==NavalEra.Steam){if(!PlayerShip.SteamPowered)PlayerShip=NavalShipDefinition.Ironclad;if(!EnemyShip.SteamPowered)EnemyShip=NavalShipDefinition.Ironclad;}
         else
         {
             if(PlayerShip.SteamPowered)PlayerShip=NavalShipDefinition.Brigantine;

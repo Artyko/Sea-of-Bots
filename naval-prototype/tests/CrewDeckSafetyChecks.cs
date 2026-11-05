@@ -7,7 +7,7 @@ class CrewDeckSafetyChecks
   var profiles=new System.Collections.Generic.List<NavalShipDefinition>(NavalShipDefinition.Choices);profiles.AddRange(NavalShipDefinition.SteamChoices);
   foreach(var ship in profiles)
   {
-   Check(NavalCrewDeckSafety.Inside(1.35f,2.4f,ship.HullHalfWidth(2.4f),ship.Scale,.38f),"Sail work post remains reachable inside safety margin");
+   Check(NavalCrewDeckSafety.Inside(ship.Destroyer?ship.GunOperator(0).x:1.35f,ship.Destroyer?ship.GunOperator(0).z:2.4f,ship.HullHalfWidth(ship.Destroyer?ship.GunOperator(0).z:2.4f),ship.Scale,.38f),"Sail work post remains reachable inside safety margin");
    Check(!NavalCrewDeckSafety.Inside(3.2f,0,ship.HullHalfWidth(0),ship.Scale,.38f),"Ordinary walking cannot exit through side rail");
    Check(!NavalCrewDeckSafety.Inside(0,6.1f,ship.HullHalfWidth(6.1f),ship.Scale,.38f),"Ordinary walking cannot exit bow/stern");
    Check(NavalCrewDeckSafety.Near(0,6.01f,ship.HullHalfWidth(6.01f),ship.Scale,.38f),"Small moving-deck contact error remains attached");

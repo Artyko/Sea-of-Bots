@@ -186,7 +186,7 @@ public static class NavalBallastLayout
     // The ironclad uses low double-bottom wing tanks fitted inside its tapered
     // shell.  The sailing layout is intentionally retained verbatim.
     public static Dimensions For(NavalShipDefinition ship)
-    {return ship.SteamPowered?new Dimensions(1.55f,3.70f,.25f,.90f,.78f,.60f,4):new Dimensions(X,Z,Width,Length,Height,RampRun,Steps);}
+    {return ship.Destroyer?new Dimensions(5.8f/ship.Scale,14f/ship.Scale,1.8f/ship.Scale,18f/ship.Scale,1.2f,.8f,5):ship.SteamPowered?new Dimensions(1.70f,3.55f,.40f,.90f,1.35f,.80f,5):new Dimensions(X,Z,Width,Length,Height,RampRun,Steps);}
     public static float InnerZ {get{return Z-Length*.5f;}}
     public static float Capacity(float scale)
     {return Width*Height*(Length-RampRun/scale*(Steps-1f)/(2f*Steps))*scale*scale;}
@@ -200,6 +200,7 @@ public static class NavalBallastLayout
     {Dimensions d=For(ship);return d.Width*d.Height*(d.Length-d.RampRun/ship.Scale*(d.Steps-1f)/(2f*d.Steps))*ship.Scale*ship.Scale;}
     public static float Surface(float x,float z,float floor,NavalShipDefinition ship)
     {
+        if(ship.Destroyer)return ship.HoldFloor; // reservoirs lie under the walking floor
         Dimensions d=For(ship);if(Math.Abs(x)<d.X-d.Width*.5f||Math.Abs(x)>d.X+d.Width*.5f||Math.Abs(z)<d.InnerZ||Math.Abs(z)>d.Z+d.Length*.5f)return floor;
         int step=Math.Max(1,Math.Min(d.Steps,1+(int)((Math.Abs(z)-d.InnerZ)/(d.RampRun/ship.Scale/d.Steps))));
         return floor+d.Height*step/(d.Steps*ship.Scale);

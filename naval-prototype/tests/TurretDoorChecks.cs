@@ -1,0 +1,29 @@
+﻿using System;
+using UnityEngine;
+class TurretDoorChecks
+{
+ static void Check(bool ok,string why){if(!ok)throw new Exception(why);}
+ static void Main(){
+  var ship=NavalShipDefinition.Dreadnought;
+  Check(NavalTurretAccessLayout.FitsCapsule(.8f,2.5f,ship.Scale),"Full-size sailor fits door and hollow chamber");
+  foreach(var vessel in NavalShipDefinition.SteamChoices)for(int gun=0;gun<vessel.GunCount;gun++)
+   Check(Math.Abs(NavalReadyAmmoLayout.Z(vessel,gun)-vessel.LadderZ)>=.8f,"Ready-use ammunition leaves the boarding ladder exit clear");
+  float radius=.8f/ship.Scale;
+  Check(NavalTurretAccessLayout.Seat.z-radius>-.30f&&NavalTurretAccessLayout.Seat.z+radius<.22f,"Seated controller clears rear wall and gun breeches");
+  for(int slot=0;slot<5;slot++){
+   var approach=NavalTurretAccessLayout.Approach(ship,slot);var path=NavalTurretAccessLayout.Entry(ship,slot);
+   Check(path.Count>4,"Entry has real stairs and an interior segment");Vector3 previous=approach;
+   foreach(var point in path){
+    Check(NavalCrewDeckSafety.Inside(point.x,point.z,ship,.8f),"Access stairs stay inside ship: "+slot);
+    Check(Math.Abs(point.y-previous.y)*ship.Scale<.15f,"Each riser is walkable: "+slot);
+    previous=point;
+   }
+   Vector3 seat=NavalTurretAccessLayout.ToShip(ship,slot,NavalTurretAccessLayout.Seat);
+   Check((previous-seat).sqrMagnitude<.0001f,"Walking path terminates at actual interior seat");
+   Check(Math.Abs(NavalTurretAccessLayout.Seat.x)<.20f&&NavalTurretAccessLayout.Seat.z>-.30f&&NavalTurretAccessLayout.Seat.z<.08f,"Seat inside hollow armour, behind breeches");
+   Check((NavalTurretAccessLayout.RoofBottom-NavalTurretAccessLayout.Floor)*ship.Scale>=3f-.001f,"Standing capsule clears ceiling while entering and leaving");
+  }
+  Check(NavalRecoverySlice.Take(111111)&&!NavalRecoverySlice.Take(111111)&&NavalRecoverySlice.Take(111112),"Heavy detour search is globally shared one slice per frame");
+  Console.WriteLine("PASS: five physical hatch approaches, walkable raised-turret treads, full-size head/door clearance, interior seats and shared recovery slices.");
+ }
+}

@@ -1,6 +1,17 @@
 ﻿using UnityEngine;
 public partial class NavalStations
 {
+    private float ArmorAimIncidence(NavalHullVoxel cell,Vector3 source,bool deck)
+    {
+        return ArmorAimIncidenceLocal(cell,boat.InverseTransformPoint(source),deck);
+    }
+    private float ArmorAimIncidenceLocal(NavalHullVoxel cell,Vector3 view,bool deck)
+    {
+        Vector3 p=cell.LocalCenter;
+        float slope=(hull.Definition.HullHalfWidth(p.z+.04f)-hull.Definition.HullHalfWidth(p.z-.04f))/.08f;
+        bool end=Mathf.Abs(p.z)>5.85f;
+        return NavalHullAimZones.Incidence(view.x,view.y,view.z,p.x,p.y,p.z,slope,end,deck);
+    }
     private bool HullPointVisible(int gun,NavalStations victim,NavalHullVoxel cell)
     {
         if(cell==null||cell.Missing||cell.Detached)return false;
@@ -17,15 +28,16 @@ public partial class NavalStations
         foreach(var cell in deck?victim.deckTargets:victim.shellTargets)
         {
             if(cell==null||cell.Missing||cell.Detached)continue;
-            Vector3 local=cell.LocalCenter,world=cell.transform.position;float score;
+            Vector3 world=cell.transform.position;float score;
             if(deck)
             {
                 if(!AboveWater(cell))continue;
-                score=(world-muzzle).sqrMagnitude;
+                score=(world-muzzle).magnitude*.01f+(1f-victim.ArmorAimIncidenceLocal(cell,view,true))*18f;
             }
             else
             {
-                if(!NavalHullAimZones.Facing(view.x,view.z,local.x,local.z,victim.hull.Definition.HullHalfWidth(local.z)))continue;
+                float incidence=victim.ArmorAimIncidenceLocal(cell,view,false);
+                if(incidence<.12f)continue;
                 float sea=ocean.Height(world.x,world.z),depth=world.y-sea;
                 if(belowWaterline)
                 {
@@ -33,7 +45,7 @@ public partial class NavalStations
                 }
                 else if(depth<-.08f||depth>.78f)continue;
                 score=Mathf.Abs(depth-NavalGunneryMath.DesiredHullDepth(belowWaterline))*10f+
-                    (world-muzzle).magnitude*.01f+Random.value*.55f;
+                    (world-muzzle).magnitude*.01f+Random.value*.55f+(1f-incidence)*18f;
             }
             // Keep several candidates: one hidden or unreachable plank must not suppress firing.
             for(int i=0;i<8;i++)if(score<hullProbeScores[i])

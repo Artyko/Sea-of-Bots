@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 public static class NavalMainBatteryMath
@@ -145,10 +145,11 @@ public partial class NavalStations
     private int mainAimAvailable;
     public int MainBatteryReleasedHands {get;set;}
     private bool mainTargetInArc,mainTargetSolution;
-    public bool HasMainBattery {get{return mainTurret!=null;}}
-    public int MainBatteryAmmunition {get{return mainAmmunition;}}
+    public bool HasMainBattery {get{return capitalTurrets!=null||mainTurret!=null;}}
+    public int MainBatteryAmmunition {get{return capitalTurrets!=null?CapitalAmmo:mainAmmunition;}}
     public Vector3 MainBatteryCrewPost(int slot)
     {
+        if(capitalTurrets!=null)return CapitalSeat(slot);
         if(mainTurret==null)return new Vector3(slot==0?-NavalMainBatteryMath.CrewX:NavalMainBatteryMath.CrewX,hull.Definition.WeatherDeck+.08f,3.80f);
         // Both seats live inside the rotating shield, beside the breech. Their
         // ship-space destinations therefore follow the mount as it trains.
@@ -156,6 +157,7 @@ public partial class NavalStations
     }
     public Vector3 MainBatteryCrewApproachPost(int slot)
     {
+        if(capitalTurrets!=null)return NavalTurretAccessLayout.Approach(hull.Definition,slot);
         float x=slot==0?-NavalMainBatteryMath.CrewX:NavalMainBatteryMath.CrewX;
         if(mainTurret==null)return new Vector3(x,hull.Definition.WeatherDeck,3.39f);
         // The mount is open at the rear. Always enter along that opening as
@@ -163,10 +165,10 @@ public partial class NavalStations
         return boat.InverseTransformPoint(mainTurret.TransformPoint(new Vector3(x,-NavalMainBatteryMath.MountHeight,NavalMainBatteryMath.CrewApproachZ)));
     }
     public Vector3 MainBatteryCrewForward {get{return mainBarrel!=null?mainBarrel.forward:boat.forward;}}
-    public bool MainBatteryCanRestore {get{return mainBatteryMechanism!=null&&mainBatteryMechanism.NeedsRepair&&mainBatteryMechanism.RecoverableWithParts&&hull.Fire!=null&&hull.Fire.MainBatteryMagazineFunctional;}}
-    public bool MainBatteryFunctional {get{return mainBatteryMechanism!=null&&mainBatteryMechanism.Functional&&hull.Fire!=null&&hull.Fire.MainBatteryMagazineFunctional;}}
-    public bool MainBatteryCombatAvailable {get{return MainBatteryFunctional&&mainAmmunition>0;}}
-    public bool MainBatteryHelmPriority {get{return HasMainBattery&&NavalMainBatteryMath.SteeringPriority(MainBatteryFunctional,mainAmmunition,mainReloadRemaining,mainCrewReady);}}
+    public bool MainBatteryCanRestore {get{if(capitalTurrets!=null)return CapitalCanRepair;return mainBatteryMechanism!=null&&mainBatteryMechanism.NeedsRepair&&mainBatteryMechanism.RecoverableWithParts&&hull.Fire!=null&&hull.Fire.MainBatteryMagazineFunctional;}}
+    public bool MainBatteryFunctional {get{if(capitalTurrets!=null)return CapitalFunctional;return mainBatteryMechanism!=null&&mainBatteryMechanism.Functional&&hull.Fire!=null&&hull.Fire.MainBatteryMagazineFunctional;}}
+    public bool MainBatteryCombatAvailable {get{return MainBatteryFunctional&&MainBatteryAmmunition>0;}}
+    public bool MainBatteryHelmPriority {get{if(capitalTurrets!=null)return CapitalFunctional&&CapitalAmmo>0;return HasMainBattery&&NavalMainBatteryMath.SteeringPriority(MainBatteryFunctional,mainAmmunition,mainReloadRemaining,mainCrewReady);}}
     public float MainBatteryLeadBearing(float shipHeading,float fallbackBearing)
     {
         // TickMainBattery predicts interception with relative ship velocity.
@@ -175,14 +177,15 @@ public partial class NavalStations
         return mainTargetSolution?shipHeading+mainTargetYaw:fallbackBearing;
     }
     public float MainBatteryHelmCourse(float shipHeading,float fallbackBearing,int side)
-    {return NavalMainBatteryMath.MainBatteryHelmCourse(shipHeading,MainBatteryLeadBearing(shipHeading,fallbackBearing),side,mainReloadRemaining);}
-    public string MainBatteryDiagnostics {get{return "ammo="+mainAmmunition+" crew="+mainCrewReady+" released="+MainBatteryReleasedHands+" reload="+mainReloadRemaining.ToString("F1")+
+    {if(capitalTurrets!=null)return fallbackBearing+(side==1?80f:-80f);return NavalMainBatteryMath.MainBatteryHelmCourse(shipHeading,MainBatteryLeadBearing(shipHeading,fallbackBearing),side,mainReloadRemaining);}
+    public string MainBatteryDiagnostics {get{if(capitalTurrets!=null)return CapitalDiagnostics;return "ammo="+mainAmmunition+" crew="+mainCrewReady+" released="+MainBatteryReleasedHands+" reload="+mainReloadRemaining.ToString("F1")+
         " mount="+(mainBatteryMechanism!=null&&mainBatteryMechanism.Functional)+" magazine="+(hull.Fire!=null&&hull.Fire.MainBatteryMagazineFunctional)+" range="+mainTargetRange.ToString("F1")+" yaw="+mainYaw.ToString("F1")+" targetYaw="+mainTargetYaw.ToString("F1")+
         " solution="+mainTargetSolution+" inArc="+mainTargetInArc+" aim="+(mainAimZone>=0?NavalMainBatteryMath.AimZoneName(mainAimZone):"none")+" availableZones="+mainAimAvailable+" helmAssist="+MainBatteryHelmPriority;}}
 
     private void InitializeMainBattery(Material armor,Material accent)
     {
-        if(!hull.Definition.SteamPowered)return;
+        if(!hull.Definition.SteamPowered||hull.Definition.Destroyer)return;
+        if(hull.Definition.CapitalShip){InitializeCapitalBattery(armor,accent);return;}
         // Compact low mount: the axis only just clears the bow rim. The hoist
         // joins a shallow barbette instead of lifting a tall box above deck.
         mainTurret=Root("ForwardMainBattery",new Vector3(0,hull.Definition.WeatherDeck+NavalMainBatteryMath.MountHeight,4.05f));
@@ -203,9 +206,7 @@ public partial class NavalStations
             hull.AddDecorationBox(mainTurret,armor,new Vector3(side*NavalMainBatteryMath.CrewX,-.25f,-.40f),new Vector3(.28f,.30f,.07f),false);
         }
         mainBarrel=new GameObject("Main caliber barrel").transform;mainBarrel.SetParent(mainTurret,false);mainBarrel.localPosition=new Vector3(0,NavalMainBatteryMath.TrunnionOffset,.16f);
-        ArmoredDecoration(mainBarrel,armor,new Vector3(0,0,.22f),new Vector3(.30f,.32f,.54f),true);
-        ArmoredDecoration(mainBarrel,armor,new Vector3(0,0,.91f),new Vector3(.21f,.21f,1.34f),true);
-        ArmoredDecoration(mainBarrel,accent,new Vector3(0,0,1.54f),new Vector3(.27f,.27f,.12f),true);
+        CalibratedTube(mainBarrel,armor,accent,NavalGunDimensions.IroncladMainCalibre,hull.WorldScale);
         List<NavalHullVoxel> members=new List<NavalHullVoxel>();
         for(int i=first;i<hull.Voxels.Count;i++){var cell=hull.Voxels[i];cell.Metallic=true;cell.Flammable=false;cell.Armored=true;members.Add(cell);}
         mainBatteryMechanism=new NavalRepairableMechanism(hull,members,false,true,"Орудие главного калибра",false,true);
@@ -222,6 +223,7 @@ public partial class NavalStations
 
     public void TickMainBattery(Transform target,Vector3 targetVelocity,float dt,int crewReady)
     {
+        if(capitalTurrets!=null){TickCapitalBattery(target,targetVelocity,dt);return;}
         mainCrewReady=crewReady;mainTargetInArc=false;mainTargetSolution=false;mainTargetRange=-1f;
         if(mainTurret==null||crewReady<1||!MainBatteryFunctional||mainAmmunition<=0)return;
         if(mainReloadRemaining>0f)
@@ -234,12 +236,12 @@ public partial class NavalStations
             if(!NavalMainBatteryMath.CanTraverse(crewReady,mainReloadRemaining))return;
         }
         if(target==null)return;
-        Vector3 muzzle=mainBarrel.TransformPoint(new Vector3(0,0,NavalMainBatteryMath.MuzzleZ));
+        Vector3 muzzle=mainBarrel.TransformPoint(new Vector3(0,0,MainMuzzleZ));
         NavalStations victim=ForShip(target);
         Vector3 relativeVelocity=targetVelocity-FiringPlatformVelocity();
         if(victim!=null&&(mainAimTarget!=target||mainAimZone<0||Time.time>=mainAimReviewAt))
             ReviewMainAim(target,victim,relativeVelocity,muzzle);
-        Vector3 point=victim!=null?target.TransformPoint(mainAimLocal):target.position;
+        Vector3 point=victim!=null?target.TransformPoint(victim.CurrentMainAim(mainAimZone,boat.position)):target.position;
         Vector3 predicted=point;
         for(int i=0;i<3;i++)predicted=point+relativeVelocity*(Vector3.Distance(muzzle,predicted)/NavalMainBatteryMath.ProjectileSpeed);
         Vector3 delta=predicted-muzzle,flat=delta;flat.y=0;
@@ -262,7 +264,8 @@ public partial class NavalStations
         mainAimAvailable=0;
         for(int zone=0;zone<mainAimYaws.Length;zone++)
         {
-            Vector3 point=target.TransformPoint(NavalMainBatteryMath.AimPoint(victim.hull.Definition,zone,nearSide));
+            Vector3 point=target.TransformPoint(victim.CurrentMainAim(zone,muzzle));
+            if(point.y<ocean.Height(point.x,point.z)+.03f){mainAimYaws[zone]=float.NaN;continue;}
             Vector3 predicted=point;
             for(int iteration=0;iteration<3;iteration++)predicted=point+relativeVelocity*(Vector3.Distance(muzzle,predicted)/NavalMainBatteryMath.ProjectileSpeed);
             Vector3 delta=predicted-muzzle,flat=delta;flat.y=0f;float elevation;
@@ -276,7 +279,7 @@ public partial class NavalStations
         }
         int previous=mainAimZone;
         mainAimZone=NavalMainBatteryMath.SelectAvailableAimZone(mainAimYaws,mainAimSequence,mainAimTarget==target?mainAimZone:-1);
-        if(mainAimZone>=0)mainAimLocal=NavalMainBatteryMath.AimPoint(victim.hull.Definition,mainAimZone,nearSide);
+        if(mainAimZone>=0)mainAimLocal=victim.CurrentMainAim(mainAimZone,muzzle);
         mainAimTarget=target;mainAimReviewAt=Time.time+(mainAimAvailable>0?.65f:.20f);
         if(previous>=0&&mainAimZone!=previous)
             Debug.Log("[NavalPrototype] Main battery aim retarget: ship="+boat.name+" from="+NavalMainBatteryMath.AimZoneName(previous)+" to="+NavalMainBatteryMath.AimZoneName(mainAimZone)+" available="+mainAimAvailable);
@@ -285,7 +288,7 @@ public partial class NavalStations
     private void FireMainBattery()
     {
         Vector3 direction=mainBarrel.forward;
-        Vector3 muzzle=mainBarrel.TransformPoint(new Vector3(0,0,NavalMainBatteryMath.MuzzleZ));
+        Vector3 muzzle=mainBarrel.TransformPoint(new Vector3(0,0,MainMuzzleZ));
         GameObject shell=NavalProjectileVisual.CreateRifledShell();shell.name="NavalPrototype_MainCaliberShell";
         shell.transform.SetParent(NavalTestWorld.Active!=null?NavalTestWorld.Active.transform:null,false);
         shell.transform.position=muzzle;shell.transform.rotation=Quaternion.LookRotation(direction);shell.transform.localScale=Vector3.one*1.8f;
@@ -305,6 +308,7 @@ public partial class NavalStations
 
     private void DrawMainBatteryReloadBar(Camera camera)
     {
+        if(capitalTurrets!=null){DrawCapitalReload(camera);return;}
         if(mainTurret==null||camera==null)return;
         bool mechanism=MainBatteryFunctional;
         bool hasAmmunition=mainAmmunition>0;

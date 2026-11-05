@@ -20,7 +20,7 @@ public class NavalAlliedCrew : MonoBehaviour
     {
         if(hull.Definition.SteamPowered)
         {
-            if(i>=hull.Definition.CrewCount-2)return stations.MainBatteryCrewPost(i-(hull.Definition.CrewCount-2));
+            if(i>=hull.Definition.CrewCount-hull.Definition.HeavyCrewCount)return stations.MainBatteryCrewPost(i-(hull.Definition.CrewCount-hull.Definition.HeavyCrewCount));
             return i==0?stations.Post(0):NavalShipDefinition.StandbyPost(hull.Definition,i);
         }
         return i<=hull.Definition.GunCount?stations.Post(i):NavalShipDefinition.StandbyPost(hull.Definition,i);

@@ -5,13 +5,15 @@ public class NavalSeaLadder : MonoBehaviour
     public static readonly List<NavalSeaLadder> All=new List<NavalSeaLadder>();
     private readonly List<NavalHullVoxel>[] cells={new List<NavalHullVoxel>(),new List<NavalHullVoxel>()};
     public NavalHull Hull;
-    public float OuterX(int side){return (side==0?-1f:1f)*(Hull.Definition.HullHalfWidth(Hull.Definition.LadderZ)+.35f);}
-    public float DeckX(int side){return (side==0?-1f:1f)*(Hull.Definition.HullHalfWidth(Hull.Definition.LadderZ)-.35f);}
+    public float OuterX(int side){return (side==0?-1f:1f)*(Hull.Definition.HullHalfWidth(Hull.Definition.LadderZ)+(Hull.Definition.Destroyer?.65f/Hull.WorldScale:.35f));}
+    public float DeckX(int side){return (side==0?-1f:1f)*(Hull.Definition.HullHalfWidth(Hull.Definition.LadderZ)-(Hull.Definition.Destroyer?1f/Hull.WorldScale:.35f));}
     private int usableRevision=-1;
     private readonly bool[] usable=new bool[2];
     public void Initialize(NavalHull hull,Material material)
     {
         Hull=hull;All.Add(this);
+        if(hull.Definition.Destroyer){float q=hull.WorldScale;for(int side=0;side<2;side++){int first=hull.Voxels.Count;float x=OuterX(side);for(int rail=-1;rail<=1;rail+=2)hull.AddDecorationBox(transform,material,new Vector3(x,hull.Definition.WeatherDeck-2.5f/q,rail*.55f/q),new Vector3(.12f,6f,.12f)/q,true);for(int step=0;step<20;step++)hull.AddDecorationBox(transform,material,new Vector3(x,hull.Definition.WeatherDeck+(.5f-step*.3f)/q,0),new Vector3(.18f,.12f,1.1f)/q,true);for(int n=first;n<hull.Voxels.Count;n++)cells[side].Add(hull.Voxels[n]);}return;}
+
         for(int side=0;side<2;side++)
         {
             float sign=side==0?-1f:1f,edge=hull.Definition.HullHalfWidth(hull.Definition.LadderZ);

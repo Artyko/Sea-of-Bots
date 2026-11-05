@@ -5,6 +5,8 @@ public static class NavalSupplyRoutes
 {
  public static List<NavalWalkPoint> Plan(NavalWalkPoint start,NavalWalkPoint goal,NavalShipDefinition ship)
  {
+ List<NavalWalkPoint> raised;if(NavalRaisedBridge.TryRoute(start,goal,ship,out raised))return raised;
+ if(ship.Destroyer)return NavalDestroyerLayout.Route(start,goal,ship);
  var route=NavalShipRoutes.Plan(start,goal,ship);
   for(int i=0;i+1<route.Count;i++){
    var a=route[i];var b=route[i+1];
@@ -16,14 +18,14 @@ public static class NavalSupplyRoutes
    float before=i==0?start.Z:route[i-1].Z,after=i+2<route.Count?route[i+2].Z:goal.Z;
    float z=NavalCargoLayout.Crossing(before,after,ship);a.Z=b.Z=z;route[i]=a;route[i+1]=b;
   }
-  if(ship.SteamPowered)route=AroundMagazine(route,start,ship);
+  if(ship.SteamPowered&&!ship.CapitalShip)route=AroundMagazine(route,start,ship);
   int crates=NavalCargoLayout.Boxes(ship,0)+NavalCargoLayout.Boxes(ship,1)+NavalCargoLayout.Boxes(ship,2);
   for(int i=0;i<crates;i++){var crate=NavalCargoLayout.Position(ship,i);
    route=AroundCargo(route,start,ship,crate);
   }
   // The underside of each flight is not a walk-through corridor.
   for(int level=0;level<ship.MaintenanceDeckCount;level++)
-   route=Around(route,start,ship,ship.MaintenanceFloor(level),-1.25f,ship.StairWidth*ship.Scale,3.5f*ship.Scale);
+   route=Around(route,start,ship,ship.MaintenanceFloor(level),-1.25f,ship.StairWidth*ship.Scale,3.5f*ship.Scale,0,1f);
   // A detour corner may overlap the stair exclusion; never make it a mandatory endpoint.
   for(int i=route.Count-2;i>=0;i--){
    var p=route[i];bool floor=false;for(int level=0;level<ship.MaintenanceDeckCount;level++)if(Math.Abs(p.Y-ship.MaintenanceFloor(level))<.001f)floor=true;
@@ -34,7 +36,7 @@ public static class NavalSupplyRoutes
   // stair lanes so a detour beside the aft stores cannot approach the upper
   // flight diagonally and push a full-size sailor onto the landing coaming.
   var repaired=RepairSegments(start,route,ship);
-  if(ship.SteamPowered){repaired=NavalStairTraffic.Apply(start,repaired,ship);repaired=RepairSegments(start,repaired,ship);repaired=AroundMagazine(repaired,start,ship);}
+  if(ship.SteamPowered){repaired=NavalStairTraffic.Apply(start,repaired,ship);repaired=RepairSegments(start,repaired,ship);if(!ship.CapitalShip)repaired=AroundMagazine(repaired,start,ship);}
   // Stair traffic can legitimately move the top landing towards the centre.
   // Reapply the weather-deck exclusion last so a same-deck trip is never
   // pulled back through the open flight or the funnel corridor.
@@ -90,16 +92,18 @@ public static class NavalSupplyRoutes
   }
   return result??route;
  }
- private static bool CargoClear(NavalWalkPoint a,NavalWalkPoint b,NavalShipDefinition ship){
-  if(ship.SteamPowered&&!HullClear(a,b,ship))return false;
+ internal static bool CargoClear(NavalWalkPoint a,NavalWalkPoint b,NavalShipDefinition ship){
+  if(ship.Destroyer)return NavalDestroyerNavigation.Clear(a,b,ship);
+  if(ship.SteamPowered&&(!HullClear(a,b,ship)||NavalSteamLayout.BlocksPassage(a,b,ship)))return false;
   for(int level=0;level<ship.MaintenanceDeckCount;level++){float floor=ship.MaintenanceFloor(level);
-   if(System.Math.Abs(a.Y-floor)<.08f&&System.Math.Abs(b.Y-floor)<.08f&&Hits(a,b,-ship.StairWidth*.5f-.5f/ship.Scale,ship.StairWidth*.5f+.5f/ship.Scale,-3f-.5f/ship.Scale,.5f+.5f/ship.Scale))return false;
+   if(System.Math.Abs(a.Y-floor)<.08f&&System.Math.Abs(b.Y-floor)<.08f&&Hits(a,b,-ship.StairWidth*.5f-1f/ship.Scale,ship.StairWidth*.5f+1f/ship.Scale,-3f-1f/ship.Scale,.5f+1f/ship.Scale))return false;
   }
   int count=NavalCargoLayout.Boxes(ship,0)+NavalCargoLayout.Boxes(ship,1)+NavalCargoLayout.Boxes(ship,2);float half=NavalCargoLayout.RouteHalfExtent(ship);
   for(int i=0;i<count;i++){var c=NavalCargoLayout.Position(ship,i);if(System.Math.Abs(a.Y-c.Y)>.08f||System.Math.Abs(b.Y-c.Y)>.08f)continue;
    if(Hits(a,b,c.X-half,c.X+half,c.Z-half,c.Z+half))return false;
   }
-  if(ship.SteamPowered&&ship.MaintenanceFloorAt(a.Y)&&ship.MaintenanceFloorAt(b.Y)&&System.Math.Abs(a.Y-b.Y)<.08f){
+  if(NavalCapitalLayout.MagazineBlocks(a,b,ship))return false;
+  if(ship.SteamPowered&&!ship.CapitalShip&&ship.MaintenanceFloorAt(a.Y)&&ship.MaintenanceFloorAt(b.Y)&&System.Math.Abs(a.Y-b.Y)<.08f){
    float mx=NavalMainMagazineLayout.RouteHalfWidth(ship);
    if(Hits(a,b,-mx,mx,NavalMainMagazineLayout.RouteAft(ship),NavalMainMagazineLayout.RouteForward(ship)))return false;
   }
@@ -122,7 +126,7 @@ public static class NavalSupplyRoutes
  }
  private static readonly Dictionary<NavalShipDefinition,Dictionary<float,PassageGraph>> graphs=new Dictionary<NavalShipDefinition,Dictionary<float,PassageGraph>>();
  public static int GraphBuildCount {get;private set;}
- public static void Warm(NavalShipDefinition ship){for(int level=0;level<ship.MaintenanceDeckCount;level++)Graph(ship,ship.MaintenanceFloor(level));}
+ public static void Warm(NavalShipDefinition ship){if(ship.Destroyer)return;for(int level=0;level<ship.MaintenanceDeckCount;level++)Graph(ship,ship.MaintenanceFloor(level));}
  private static PassageGraph Graph(NavalShipDefinition ship,float floor){
   Dictionary<float,PassageGraph> floors;if(!graphs.TryGetValue(ship,out floors)){floors=new Dictionary<float,PassageGraph>();graphs.Add(ship,floors);}
   PassageGraph graph;if(floors.TryGetValue(floor,out graph))return graph;
@@ -134,12 +138,18 @@ public static class NavalSupplyRoutes
     // Include flight corners as graph nodes: a crate detour may itself meet a staircase.
     for(int level=0;level<ship.MaintenanceDeckCount;level++){
      float landingFloor=ship.MaintenanceFloor(level);if(System.Math.Abs(floor-landingFloor)>.08f)continue;
-     float x=ship.StairWidth*.5f+.55f/ship.Scale;
-     foreach(float side in new float[]{-x,x})foreach(float z in new float[]{-3f-.55f/ship.Scale,.5f+.55f/ship.Scale}){
+     float x=ship.StairWidth*.5f+1.05f/ship.Scale;
+     foreach(float side in new float[]{-x,x})foreach(float z in new float[]{-3f-1.05f/ship.Scale,.5f+1.05f/ship.Scale}){
       var node=new NavalWalkPoint(side,landingFloor,z);if(CargoClear(node,node,ship))graph.Nodes.Add(node);
      }
     }
-    if(ship.SteamPowered&&ship.MaintenanceFloorAt(floor)){
+    if(ship.CapitalShip&&ship.MaintenanceFloorAt(floor)){
+     float hx=(NavalMainMagazineLayout.Width*.5f+1.25f)/ship.Scale,hz=(NavalMainMagazineLayout.Depth*.5f+1.25f)/ship.Scale;
+     for(int turret=0;turret<NavalCapitalLayout.Turrets;turret++){var mount=NavalCapitalLayout.Mount(turret);
+      foreach(float side in new[]{-hx,hx})foreach(float z in new[]{-hz,hz}){var node=new NavalWalkPoint(mount.x+side,floor,mount.z+z);if(CargoClear(node,node,ship))graph.Nodes.Add(node);}
+     }
+    }
+    if(ship.SteamPowered&&!ship.CapitalShip&&ship.MaintenanceFloorAt(floor)){
      // Keep graph corners strictly outside the inclusive magazine rectangle.
      // Previously they sat exactly on its boundary and CargoClear rejected
      // all four; a nearby cargo crate accidentally supplied the only detour
@@ -151,6 +161,12 @@ public static class NavalSupplyRoutes
      }
     }
 
+  // Machinery-room service lanes: enough corners to pass either end without
+  // inventing a route through the now solid boiler or magazine lockers.
+  if(ship.SteamPowered)foreach(float x in new float[]{-2.02f,-1.10f,-.55f,.55f,1.10f,2.02f})
+   foreach(float z in new float[]{-2.25f,-1.15f,-.45f,.45f,1.55f,2.35f,2.85f}){
+    var node=new NavalWalkPoint(x,floor,z);if(CargoClear(node,node,ship))graph.Nodes.Add(node);
+   }
   int n=graph.Nodes.Count;graph.Distance=new float[n+2];graph.Parent=new int[n+2];graph.Done=new bool[n+2];graph.WorkNodes.Capacity=n+2;graph.Edges=new bool[n,n];graph.Lengths=new float[n,n];
   for(int i=0;i<n;i++)for(int j=i+1;j<n;j++){
    bool clear=CargoClear(graph.Nodes[i],graph.Nodes[j],ship);graph.Edges[i,j]=graph.Edges[j,i]=clear;
@@ -219,9 +235,9 @@ public static class NavalSupplyRoutes
   }
   return result??route;
  }
- private static List<NavalWalkPoint> Around(List<NavalWalkPoint> route,NavalWalkPoint start,NavalShipDefinition ship,float floor,float z,float width,float depth,float centerX=0)
+ private static List<NavalWalkPoint> Around(List<NavalWalkPoint> route,NavalWalkPoint start,NavalShipDefinition ship,float floor,float z,float width,float depth,float centerX=0,float clearance=.5f)
  {
-  List<NavalWalkPoint> result=null;var previous=start;float half=(width*.5f+.5f)/ship.Scale,front=z-(depth*.5f+.5f)/ship.Scale,back=z+(depth*.5f+.5f)/ship.Scale;
+  List<NavalWalkPoint> result=null;var previous=start;float half=(width*.5f+clearance)/ship.Scale,front=z-(depth*.5f+clearance)/ship.Scale,back=z+(depth*.5f+clearance)/ship.Scale;
   for(int i=0;i<route.Count;i++){
    var point=route[i];
    if(Math.Abs(previous.Y-floor)<.15f&&Math.Abs(point.Y-floor)<.15f&&Hits(new NavalWalkPoint(previous.X-centerX,previous.Y,previous.Z),new NavalWalkPoint(point.X-centerX,point.Y,point.Z),-half,half,front,back)){

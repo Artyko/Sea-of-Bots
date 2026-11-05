@@ -1,0 +1,5 @@
+﻿using System;
+class SteamIsolationChecks {
+ static void Check(bool v,string message){if(!v)throw new Exception(message);}
+ static void Main(){var v=new NavalSteamIsolation();v.Step(0,1,1,1,1,false);v.Toggle(0);Check(v.Supply(0,.2f)==0,"Closed header supplies no machinery");Check(v.Steam(0)==1,"Closing does not instantly delete trapped steam");v.Step(2,1,.2f,1,1,false);Check(Math.Abs(v.Steam(0)-.5f)<.001,"Trapped steam vents gradually");v.Step(4,1,.2f,1,1,false);Check(v.Steam(0)==0,"Isolated leak eventually stops");Check(v.Leak(.2f,1,1)==0,"Isolated pipe stops draining boilers");Check(v.Supply(1,1)==1,"Backup header remains live");v.Step(1,1,1,1,1,true);Check(v.Closed(0),"Crew respects manually shut valve");v.Toggle(0);v.Step(1,1,.3f,1,1,true);Check(v.Closed(0),"Engineer isolates damaged branch with reserve");v.Step(1,1,1,1,1,true);Check(!v.Closed(0),"Engineer restores repaired branch");v.Step(1,1,.3f,.3f,1,true);Check(!v.Closed(0)&&!v.Closed(1),"Do not auto-isolate both propulsion headers");Console.WriteLine("PASS: manual valves, residual steam, backup supply, automatic isolation and restored service.");}
+}

@@ -14,9 +14,9 @@ class FireWaterSupplyChecks
    float partial=NavalFireWaterSupply.Take(grid,cell,1.8f);Check(Math.Abs(partial-1.2f)<.001,"Partially drained source supplies only actual remaining water");
    Check(NavalFireWaterSupply.Take(grid,cell,1.8f)==0,"Already pumped-dry source requests reselection instead of inventing water");
    float sea=NavalFireWaterSupply.Take(grid,-1,1.8f);Check(sea==1.8f&&grid.Total==0,"Sea collection fills bucket without adding bilge water");
-   foreach(float z in NavalFireWaterSupply.IntakeZ){
+   foreach(float z in NavalFireWaterSupply.For(ship)){
     Check(NavalFireWaterSupply.SeaX(ship,z)<ship.HullHalfWidth(z),"Sea bucket post remains on the tapered deck "+ship.Name);
-    if(ship.SteamPowered)for(int gun=0;gun<ship.GunCount;gun++)Check(Math.Abs(z-NavalShipDefinition.GunZ(ship,gun))*ship.Scale>3.5f,"Steam water intake stays between gun mounts");
+    if(ship.SteamPowered)for(int gun=0;gun<ship.GunCount;gun++)Check(Math.Abs(z-NavalShipDefinition.GunZ(ship,gun))*ship.Scale>3.5f,"Steam water intake stays between gun mounts: "+ship.Name+" z="+z+" gun="+gun);
    }
    grid.Add(cell,bucket+partial);Check(Math.Abs(grid.Total-before)<.001,"Water poured inside returns conserved volume");
   }

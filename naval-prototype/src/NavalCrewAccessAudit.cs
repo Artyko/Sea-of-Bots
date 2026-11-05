@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections.Generic;
 // One target per review, once after spawn. Reports real physics rather than assuming route clearance.
 public sealed class NavalCrewAccessAudit:MonoBehaviour {
@@ -12,18 +12,22 @@ public sealed class NavalCrewAccessAudit:MonoBehaviour {
   if(body==null)return;
   if(!prepared){
    var ship=hull.Definition;Add("helm",new Vector3(0,ship.HelmDeck,NavalShipDefinition.HelmZ(ship)));Add("tiller",stations.EmergencyPost);Add(ship.SteamPowered?"engine telegraph":"sails",stations.Post(stations.SailStation));
+   if(stations.Torpedoes!=null)for(int mount=0;mount<4;mount++)Add("torpedo operator "+mount,stations.Torpedoes.Post(mount));
+   if(ship.Destroyer&&stations.SteamPlant!=null)for(int watch=0;watch<2;watch++)Add("oil engineer "+watch,stations.SteamPlant.OilEngineerPost(watch));
+   if(ship.Destroyer)for(int valve=0;valve<3;valve++)Add("steam valve "+valve,new Vector3(5.5f/ship.Scale,ship.HoldFloor,(-23-valve*2)/ship.Scale));
    for(int gun=1;gun<=stations.GunCount;gun++)Add("gun "+gun,stations.Post(gun));
-   if(stations.HasMainBattery)for(int slot=0;slot<2;slot++)Add("main battery crew "+slot,stations.MainBatteryCrewPost(slot));
+   if(stations.HasMainBattery)for(int slot=0;slot<hull.Definition.HeavyCrewCount;slot++)Add("main battery crew "+slot,stations.MainBatteryCrewPost(slot));
    if(hull.Bilge!=null)for(int i=0;i<hull.Bilge.PumpCount;i++)Add("pump "+i,hull.Bilge.PumpAt(i).Post+new Vector3(0,0,.65f/hull.WorldScale));
    if(hull.Cargo!=null)foreach(var crate in hull.Cargo.Crates)Add("cargo kind="+crate.Kind+" gun="+crate.Gun,crate.Pickup);
    // The last two steam-era sailors belong inside the rotating main mount and
    // have no ordinary standby post. Auditing the obsolete bow posts reported
    // false failures after the main battery replaced that area.
-   int standbyCount=ship.SteamPowered?ship.CrewCount-2:ship.CrewCount;
+   int standbyCount=ship.SteamPowered?ship.CrewCount-ship.HeavyCrewCount:ship.CrewCount;
    for(int i=0;i<standbyCount;i++)Add("standby "+i,NavalShipDefinition.StandbyPost(ship,i));
-   float[] auditX=ship.SteamPowered?new float[]{-.65f,.65f}:new float[]{-2.35f,2.35f};
+   if(ship.Destroyer){foreach(float z in new[]{26f,18f,10f,2f,-6f,-14f,-25f})foreach(int side in new[]{-1,1})Add("machinery service",new Vector3(side*3.6f/ship.Scale,ship.HoldFloor,z/ship.Scale));foreach(int row in NavalDestroyerAccess.BulkheadRows)foreach(int side in new[]{-1,1}){float z=NavalDestroyerAccess.BulkheadZ(row);Add("door approach",new Vector3(side*5.2f/ship.Scale,ship.HoldFloor,(z-1.5f)/ship.Scale));Add("door exit",new Vector3(side*5.2f/ship.Scale,ship.HoldFloor,(z+1.5f)/ship.Scale));}}
+   float[] auditX=ship.SteamPowered?new float[]{-.50f,.50f}:new float[]{-2.35f,2.35f};
    float[] auditZ=ship.SteamPowered?new float[]{-4f,1.4f,3.2f,4f}:new float[]{-4.8f,-1.4f,1.4f,4.8f};
-   for(int level=0;level<ship.MaintenanceDeckCount;level++)foreach(float x in auditX)foreach(float z in auditZ)Add("maintenance deck="+level,new Vector3(x,NavalBallastLayout.Surface(x,z,ship.MaintenanceFloor(level),ship),z));
+   for(int level=0;!ship.Destroyer&&level<ship.MaintenanceDeckCount;level++)foreach(float x in auditX)foreach(float z in auditZ)Add("maintenance deck="+level,new Vector3(x,NavalBallastLayout.Surface(x,z,ship.MaintenanceFloor(level),ship),z));
    foreach(float side in new float[]{-1,1})Add("sea ladder",new Vector3(side*(ship.HullHalfWidth(ship.LadderZ)-.35f),ship.WeatherDeck,ship.LadderZ));
    prepared=true;
   }

@@ -42,6 +42,13 @@ public partial class NavalBilgeSystem
  }
  private void BuildPumpStation(float floor,Material trim,Material metal)
  {
+  if(hull.Definition.Destroyer){
+   float q=hull.WorldScale;var pump=new NavalPumpStation{Post=new Vector3(NavalDestroyerAccess.PumpX/q,floor,NavalDestroyerAccess.PumpZ/q)};int begin=hull.Voxels.Count;
+   NavalDestroyerLayout.Box(hull,metal,pump.Post+new Vector3(0,.5f,-.9f)/q,new Vector3(1f,1f,1f),false,true,null);
+   pump.Crank=new GameObject("Pump crank").transform;pump.Crank.SetParent(transform,false);pump.Crank.localPosition=pump.Post+new Vector3(0,1.1f,-.9f)/q;
+   hull.AddDecorationBox(pump.Crank,trim,Vector3.zero,new Vector3(1.1f,.12f,.12f)/q,false);
+   var cells=new System.Collections.Generic.List<NavalHullVoxel>();for(int i=begin;i<hull.Voxels.Count;i++)cells.Add(hull.Voxels[i]);pump.Mechanism=new NavalRepairableMechanism(hull,cells,true);pumps.Add(pump);return;
+  }
   var station=new NavalPumpStation{Post=new Vector3(0,floor,-4.9f)};int first=hull.Voxels.Count;
   hull.AddDecorationBox(transform,metal,station.Post+new Vector3(0,.3f,NavalMaintenanceMath.PumpOffsetZ),new Vector3(.5f,.6f,.5f),true);
   hull.AddDecorationBox(transform,trim,station.Post+new Vector3(0,.65f,NavalMaintenanceMath.PumpOffsetZ),new Vector3(.8f,.12f,.15f),true);

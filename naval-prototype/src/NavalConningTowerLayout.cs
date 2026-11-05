@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 public static class NavalConningTowerLayout
@@ -22,7 +22,7 @@ public static class NavalConningTowerLayout
     public const float StairRise=PlatformRise/StairCount,StairDepth=.10f,StairSpacing=.06f,FirstStairOffset=.22f;
     public static float FrontZ {get{return CenterZ+HalfDepth;}}
     public static float RearZ {get{return CenterZ-HalfDepth;}}
-    public static float PlatformY(NavalShipDefinition ship){return ship.WeatherDeck+PlatformRise;}
+    public static float PlatformY(NavalShipDefinition ship){return NavalRaisedBridge.Top(ship);}
     public static float StairZ(int step){return FrontZ+FirstStairOffset-step*StairSpacing;}
     public static float StairTop(int step,NavalShipDefinition ship){return ship.WeatherDeck+StairRise*(step+1);}
     public static bool FireproofDeckCell(float x,float y,float z,float height,float weatherDeck)
@@ -32,11 +32,11 @@ public static class NavalConningTowerLayout
     }
     public static NavalWalkPoint HelmPost(NavalShipDefinition ship){return new NavalWalkPoint(0,PlatformY(ship),CenterZ);}
     public static bool Inside(NavalWalkPoint point,NavalShipDefinition ship)
-    {return point.Y>=ship.WeatherDeck-.05f&&Math.Abs(point.X)<HalfWidth&&point.Z>RearZ&&point.Z<FrontZ;}
+    {return !ship.Destroyer&&!ship.CapitalShip&&point.Y>=ship.WeatherDeck-.05f&&Math.Abs(point.X)<HalfWidth&&point.Z>RearZ&&point.Z<FrontZ;}
     public static bool DoorLane(NavalWalkPoint point,NavalShipDefinition ship)
     {
         float x=Math.Abs(point.X);
-        return point.Y>=ship.WeatherDeck-.05f&&x>=DoorInnerX&&x<=DoorOuterX&&point.Z>=CenterZ-.05f&&point.Z<=ApproachZ+.05f;
+        return !ship.Destroyer&&!ship.CapitalShip&&point.Y>=ship.WeatherDeck-.05f&&x>=DoorInnerX&&x<=DoorOuterX&&point.Z>=CenterZ-.05f&&point.Z<=ApproachZ+.05f;
     }
     private static void Add(List<NavalWalkPoint> route,NavalWalkPoint point)
     {
@@ -65,7 +65,9 @@ public static class NavalConningTowerLayout
     }
     public static List<NavalWalkPoint> Route(NavalWalkPoint start,List<NavalWalkPoint> planned,NavalShipDefinition ship)
     {
-        if(!ship.SteamPowered||planned.Count==0)return planned;
+        List<NavalWalkPoint> raised;
+        if(planned.Count>0&&NavalRaisedBridge.TryRoute(start,planned[planned.Count-1],ship,out raised))return raised;
+        if(!ship.SteamPowered||ship.CapitalShip||planned.Count==0)return planned;
         NavalWalkPoint goal=planned[planned.Count-1];bool from=Inside(start,ship),to=Inside(goal,ship);
         if(!from&&!to)
         {

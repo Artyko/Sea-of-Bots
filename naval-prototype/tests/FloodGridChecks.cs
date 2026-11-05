@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 class FloodGridChecks
 {
     static void Check(bool result,string name) { if(!result)throw new Exception(name); }
@@ -42,6 +42,17 @@ class FloodGridChecks
         float full=capped.Total; capped.Spread(5f,incline,0.85f);
         Near(capped.Total,full,0.002f,"Capacity-limited transfers conserve mass");
         capped.Pump(5f); Near(capped.Total,full-5f,0.002f,"Pump works after saturation");
+        var severed = new NavalFloodGrid(2,3,2f,3f,1f,4f);
+        severed.Add(0,3f);
+        severed.Add(2,1f);
+        severed.SetDetachedRows(new[]{true,false,false});
+        Near(severed.Total,1f,.001f,"Water in a severed section leaves the ship");
+        Near(severed.AttachedFraction,2f/3f,.001f,"Only the remaining footprint contributes");
+        Check(severed.Add(0,1f)==0f,"Severed cells cannot admit water");
+        severed.Spread(1f,new float[6],1f);
+        Check(severed.Water[0]==0f&&severed.Water[1]==0f,"Spread excludes the severed section");
+        severed.SetDetachedRows(new bool[3]);
+        Check(severed.Add(0,1f)==1f,"Restored section starts empty and admits water");
         Console.WriteLine("PASS: local spread, finite propagation, mass conservation, pump, nonnegative volumes and gravity.");
     }
 }

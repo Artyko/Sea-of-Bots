@@ -1,10 +1,10 @@
 ﻿{
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v270.dll",
+  "MainDLLFileName": "NavalPrototype-v343.dll",
   "Author": "Kirill",
-  "Version": 270,
-  "Description": "Match route avoidance to full-capsule deck-gap checks, prevent early corner skipping and bound leak-access waiting.",
+  "Version": 343,
+  "Description": "Novik playable steam destroyer: three guns, four twin torpedo mounts, twelve crew, independent oil boilers and shafts, watertight closures, steam isolation and torpedo tactics.",
   "ModDependencies": [],
   "Tags": []
 }

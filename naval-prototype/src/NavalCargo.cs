@@ -22,13 +22,14 @@ public sealed class NavalCargo : MonoBehaviour {
  hull=owner;hull.Cargo=this;directRounds=new int[controls.GunCount];deckCrates=new NavalCargoCrate[controls.GunCount];player=observer;stations=controls;hostile=enemy;
  int n=0;for(int kind=0;kind<3;kind++)for(int i=0;i<NavalCargoLayout.Boxes(hull.Definition,kind);i++,n++){
  var p=NavalCargoLayout.Position(hull.Definition,n);float x=p.X,y=p.Y,z=p.Z;
- var crate=new NavalCargoCrate(hull,new Vector3(x,y,z),kind,-1,wood,trim,iron);Crates.Add(crate);
+ var crate=new NavalCargoCrate(hull,new Vector3(x,y,z),kind,-1,wood,trim,iron,NavalCargoLayout.Units(hull.Definition,kind,i));Crates.Add(crate);
  if(kind==1)gameObject.AddComponent<NavalPlankSupply>().InitializeCargo(hull,crate);
  if(kind==2)gameObject.AddComponent<NavalCannonSupply>().InitializeCargo(hull,crate,player,stations,enemy);
  }
  for(int gun=0;gun<stations.GunCount;gun++){
   Vector3 post=stations.Post(gun+1);float side=NavalShipDefinition.GunSide(gun);
-  if(hull.Definition.SteamPowered){post.x+=side*1.65f/hull.WorldScale;post.z+=(post.z>1f?-3f:3f)/hull.WorldScale;}
+  if(hull.Definition.Destroyer){}
+  else if(hull.Definition.SteamPowered){post.x+=side*1.65f/hull.WorldScale;post.z+=(post.z>1f?-3f:3f)/hull.WorldScale;}
   else {post.x+=side*.95f/hull.WorldScale;post.z+=1.5f/hull.WorldScale;}
  deckCrates[gun]=new NavalCargoCrate(hull,post,0,gun,wood,trim,iron);Crates.Add(deckCrates[gun]);}
  NavalSupplyRoutes.Warm(hull.Definition);

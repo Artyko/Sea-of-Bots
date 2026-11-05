@@ -30,7 +30,16 @@ public partial class NavalSailorRescue
     private void PlanHoldEscape()
     {
         escapeRoute.Clear();
-        escapeRoute.AddRange(NavalSupplyRoutes.Plan(new NavalWalkPoint(escapeFeet.x,escapeFeet.y,escapeFeet.z),new NavalWalkPoint(1.65f,escapeShip.Definition.WeatherDeck,1.1f),escapeShip.Definition));
+        var definition=escapeShip.Definition;
+        var start=new NavalWalkPoint(escapeFeet.x,escapeFeet.y,escapeFeet.z);
+        var landing=new NavalWalkPoint(1.65f,definition.WeatherDeck,1.1f);
+        if(definition.Destroyer)
+        {
+            float stair=escapeFeet.z<0?-20.5f:20.5f;
+            landing=new NavalWalkPoint((escapeFeet.x<0?-5.6f:5.6f)/definition.Scale,
+                definition.WeatherDeck,(stair+5f)/definition.Scale);
+        }
+        escapeRoute.AddRange(NavalSupplyRoutes.Plan(start,landing,definition));
     }
     private void EscapeHold(float dt)
     {

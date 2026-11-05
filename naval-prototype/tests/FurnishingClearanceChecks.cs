@@ -13,6 +13,7 @@ class FurnishingClearanceChecks {
  }
  static void Main(){try{Run();}catch(Exception e){Console.WriteLine(e.Message);Environment.ExitCode=1;}}
  static void Run(){int routes=0;var profiles=new List<NavalShipDefinition>(NavalShipDefinition.Choices);profiles.AddRange(NavalShipDefinition.SteamChoices);foreach(var ship in profiles){
+ if(ship.Destroyer)continue; // NovikChecks covers the separate centreline layout with actual work posts.
  var boxes=NavalFurnishingLayout.Build(ship);int cells=0;
  foreach(var box in boxes){
  Check(box.Width>0&&box.Height>0&&box.Depth>0&&box.Palette>=0&&box.Palette<6,"Valid destructible box");

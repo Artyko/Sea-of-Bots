@@ -6,6 +6,9 @@ using UnityEngine;
 public class NavalStructure : MonoBehaviour
 {
     private NavalHull hull;
+    private sealed class MovingPose {public Transform Parent;public Vector3 Position,Scale;public Quaternion Rotation;public bool Trigger,NonPhysical;}
+    private readonly Dictionary<NavalHullVoxel,MovingPose> movingPoses=new Dictionary<NavalHullVoxel,MovingPose>();
+
     private readonly List<NavalHullVoxel> cells=new List<NavalHullVoxel>();
     private readonly List<Transform> parents=new List<Transform>();
     private readonly List<Vector3> positions=new List<Vector3>(), sizes=new List<Vector3>();
@@ -16,12 +19,14 @@ public class NavalStructure : MonoBehaviour
     private List<int>[] edges;
     private bool dirty,initialCleanup=true;
     private bool[] absent,foundation;
+    private int[] originalSection, retainedComponent, retainedFoundationCount;
     private NavalConnectivityWorkspace connectivity;
     private readonly Dictionary<NavalHullVoxel,int> cellIndices=new Dictionary<NavalHullVoxel,int>();
     public void MarkDirty(){dirty=true;}
     public void Initialize(NavalHull owner)
     {
         hull=owner;
+        foreach(var cell in hull.Voxels)if(!cell.ManagedRig&&cell.MovableEquipment)movingPoses[cell]=new MovingPose{Parent=cell.transform.parent,Position=cell.transform.localPosition,Scale=cell.transform.localScale,Rotation=cell.transform.localRotation,Trigger=cell.PhysicsCollider.isTrigger,NonPhysical=cell.NonPhysicalDecoration};
         foreach(NavalHullVoxel cell in hull.Voxels)if(!cell.ManagedRig&&!cell.MovableEquipment)
         {
             cell.StructureOwner=this;cellIndices.Add(cell,cells.Count);
@@ -82,10 +87,33 @@ public class NavalStructure : MonoBehaviour
         dirty=false;
         for(int i=0;i<cells.Count;i++)absent[i]=cells[i].Missing||cells[i].Detached;
         List<List<int>> components=connectivity.Evaluate(edges,absent);
-        for(int i=0;i<components.Count;i++)if(!NavalStructuralSupport.HasFoundation(components[i],foundation)){
-            if(initialCleanup){Debug.Log("[NavalPrototype] Removed unsupported spawn detail: ship="+hull.Definition.Name+" cells="+components[i].Count+" at="+cells[components[i][0]].LocalCenter);foreach(int index in components[i])cells[index].SetMissing(true);}
-            else{Debug.Log("[NavalPrototype] Unsupported structure falling: ship="+hull.Definition.Name+" cells="+components[i].Count+" at="+cells[components[i][0]].LocalCenter);Drop(components[i],shipVelocity);}
+        if(initialCleanup)
+        {
+            originalSection=new int[cells.Count];
+            retainedComponent=new int[components.Count];
+            retainedFoundationCount=new int[components.Count];
+            for(int i=0;i<components.Count;i++)
+                foreach(int index in components[i])originalSection[index]=i;
         }
+        System.Array.Clear(retainedFoundationCount,0,retainedFoundationCount.Length);
+        for(int i=0;i<components.Count;i++)
+        {
+            int section=originalSection[components[i][0]],count=0;
+            foreach(int index in components[i])if(foundation[index])count++;
+            if(count<=retainedFoundationCount[section])continue;
+            retainedFoundationCount[section]=count;
+            retainedComponent[section]=i;
+        }
+        bool hullDetached=false;
+        for(int i=0;i<components.Count;i++)
+        {
+            int section=originalSection[components[i][0]];
+            if(retainedFoundationCount[section]>0&&retainedComponent[section]==i)continue;
+            if(initialCleanup){Debug.Log("[NavalPrototype] Removed unsupported spawn detail: ship="+hull.Definition.Name+" cells="+components[i].Count+" at="+cells[components[i][0]].LocalCenter);foreach(int index in components[i])cells[index].SetMissing(true);}
+            else{Debug.Log("[NavalPrototype] Unsupported structure falling: ship="+hull.Definition.Name+" cells="+components[i].Count+" at="+cells[components[i][0]].LocalCenter);hullDetached|=NavalStructuralSupport.HasFoundation(components[i],foundation);Drop(components[i],shipVelocity);}
+        }
+        if(initialCleanup){var guns=NavalStations.ForShip(hull.Root);if(guns!=null)Debug.Log("[NavalPrototype] Initial structure gun audit: ship="+hull.Root.name+" functional="+guns.WorkingGuns+"/"+guns.GunCount);}
+        if(hullDetached)hull.RefreshFloodSections();
         initialCleanup=false;
             }
     }
@@ -119,14 +147,20 @@ public class NavalStructure : MonoBehaviour
             cells[i].Detached=false;cells[i].NotifyVisualChanged();cells[i].PhysicsCollider.isTrigger=triggers[i];cells[i].SetNonPhysicalDecoration(nonPhysical[i]);
             if(cells[i].Stream!=null)cells[i].Stream.gameObject.SetActive(false);
         }
+        foreach(var entry in movingPoses)RestoreMoving(entry.Key,entry.Value);
         foreach(GameObject group in debris)Destroy(group);debris.Clear();
+        hull.RefreshFloodSections();
         hull.Revision++;dirty=true;
+    }
+    private void RestoreMoving(NavalHullVoxel voxel,MovingPose pose){if(voxel==null||pose.Parent==null)return;voxel.transform.SetParent(pose.Parent,false);voxel.transform.localPosition=pose.Position;voxel.transform.localRotation=pose.Rotation;voxel.transform.localScale=pose.Scale;voxel.Detached=false;voxel.SetNonPhysicalDecoration(pose.NonPhysical);voxel.PhysicsCollider.isTrigger=pose.Trigger;voxel.SetMissing(false);voxel.ScorchStrength=0;voxel.GetComponent<Renderer>().sharedMaterial=voxel.OriginalSurface;voxel.NotifyVisualChanged();hull.NoteCellMoved(voxel);hull.Revision++;}
+    public bool CanRestoreCell(NavalHullVoxel voxel){
+        return voxel!=null&&(cellIndices.ContainsKey(voxel)||movingPoses.ContainsKey(voxel))&&(voxel.RepairMechanism==null||voxel.RepairMechanism.CanRepair);
     }
     public void RestoreCell(NavalHullVoxel voxel)
     {
         if(voxel.RepairMechanism!=null&&(!voxel.RepairMechanism.CanRepair||
             voxel.RepairMechanism.IsCannon&&!voxel.RepairMechanism.RestoringCannon))return;
-        int i;if(!cellIndices.TryGetValue(voxel,out i))return;
+        int i;if(!cellIndices.TryGetValue(voxel,out i)){MovingPose pose;if(movingPoses.TryGetValue(voxel,out pose))RestoreMoving(voxel,pose);return;}
         Transform cell=voxel.transform;
         cell.SetParent(parents[i],false);cell.localPosition=positions[i];cell.localRotation=rotations[i];cell.localScale=sizes[i];
         voxel.Detached=false;voxel.NotifyVisualChanged();voxel.PhysicsCollider.isTrigger=triggers[i];voxel.SetNonPhysicalDecoration(nonPhysical[i]);

@@ -1,0 +1,5 @@
+﻿using System;
+class TorpedoReloadChecks {
+ static void Check(bool v,string why){if(!v)throw new Exception(why);}
+ static void Main(){var r=new NavalTorpedoReloadState();Check(r.Reserve==8,"Finite eight-round reserve");Check(r.Begin(0,0)&&r.Reserve==7,"Reserve committed at start");Check(!r.Begin(0,1)&&r.Reserve==7,"No duplicate loading on same mount");Check(!r.Step(0,100,false,true)&&r.Progress(0)==0,"No remote loading without operator");Check(!r.Step(0,34,true,true)&&r.Step(0,1,true,true),"Exactly 35 attended seconds");Check(r.Tube(0)<0,"Completed task releases loader");r.Begin(1,0);r.Step(1,5,true,true);r.Step(1,0,true,false);Check(r.Tube(1)<0&&r.Reserve==6,"Damage loses committed round, never refunds ammo");for(int n=0;n<6;n++){Check(r.Begin(2,0),"Remaining stock usable");Check(r.Step(2,35,true,true),"Round loads");}Check(r.Reserve==0&&!r.Begin(3,0),"No unlimited ammunition");r.Reset();Check(r.Reserve==8&&r.Tube(2)<0,"Restore resets stock and pending work");Console.WriteLine("PASS: finite stock, physical operator requirement, paused work, damage and exact reload duration.");}
+}

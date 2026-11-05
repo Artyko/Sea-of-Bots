@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 // Deterministic steam state used by both runtime code and local tests.
 public sealed class NavalSteamState
@@ -32,15 +32,16 @@ public sealed class NavalSteamState
     }
     public void Step(float dt,float command,bool engineer,float boilerIntegrity,float funnelIntegrity)
     {StepFlooded(dt,command,engineer,boilerIntegrity,funnelIntegrity,0f);}
-    public bool StepFlooded(float dt,float command,bool engineer,float boilerIntegrity,float funnelIntegrity,float flooding)
+    public bool StepFlooded(float dt,float command,bool engineer,float boilerIntegrity,float funnelIntegrity,float flooding,bool reserveSteam=false)
     {
         dt=Math.Max(0f,dt);float demand=Clamp01(Math.Abs(command));flooding=Clamp01(flooding);
-        Combustion=Ruptured?0f:1f-flooding;
+        Combustion=Ruptured||Coal<=0||boilerIntegrity<=0||funnelIntegrity<=0?0f:(1f-flooding)*Clamp01(boilerIntegrity)*Clamp01(funnelIntegrity);
         LastBurnRate=Coal>0?(IdleBurn+(FullBurn-IdleBurn)*demand)*Combustion:0f;
         Coal=Math.Max(0f,Coal-LastBurnRate*dt);
         float boiler=Clamp01(boilerIntegrity);
         float target=!Ruptured&&Coal>0&&boiler>0?Math.Min(RequestedPressure(command),PressureLimit(engineer,funnelIntegrity))*Combustion:0f;
         float rate=target>Pressure?PressureRise*boiler*Combustion:PressureFall+(FloodPressureFall-PressureFall)*flooding;
+        if(reserveSteam&&target<Pressure)rate=(.003f+.012f*demand)*(.7f+.3f*flooding);
         Pressure=Clamp01(Move(Pressure,target,rate*dt));
         if(Ruptured){Pressure=0f;RuptureStress=0f;return false;}
         float stressRate=NavalBoilerRuptureMath.StressRate(Pressure,boiler,flooding);
@@ -52,6 +53,7 @@ public sealed class NavalSteamState
     {float value=Math.Max(-1f,Math.Min(1f,command));return value<0?value*ReverseFactor:value;}
     public float Power(float engineIntegrity)
     {return Pressure*Clamp01(engineIntegrity);}
+    public void LoseFuel(float amount){Coal=Math.Max(0f,Coal-Math.Max(0f,amount));}
     public float ConsumePressure(float amount)
     {float used=Math.Min(Pressure,Math.Max(0f,amount));Pressure-=used;return used;}
     public bool NeedsEngineer(float command,float funnelIntegrity)

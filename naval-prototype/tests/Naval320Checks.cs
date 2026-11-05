@@ -1,0 +1,8 @@
+﻿using System;
+class Naval320Checks {
+ static void Check(bool ok,string why){if(!ok)throw new Exception(why);}
+ static void Main(){int[] expected={0,0,1,2,3,3};for(int i=0;i<6;i++)Check(NavalOilStackLayout.ForBoiler(i)==expected[i],"Boilers connect to correct funnel");Check(NavalOilStackLayout.Height==6.6f,"Shared raised funnel geometry");foreach(float axis in new[]{.42f,.92f,1.42f,1.92f}){float centre=NavalGunSupportGeometry.Centre(axis),height=NavalGunSupportGeometry.Height(axis);Check(Math.Abs(centre-height*.5f+.55f)<.0001f,"Pedestal reaches actual deck");Check(Math.Abs(centre+height*.5f-axis)<.0001f,"Pedestal reaches elevated trunnion");Check(centre+height*.5f>=axis-NavalGunDimensions.BreechDiameter(102)*.5f,"No disconnected barrel group at spawn");}
+ var running=new NavalSteamState();running.StepFlooded(1,1,true,1,1,0,true);Check(running.LastBurnRate>0,"Healthy boiler emits combustion products");foreach(int reason in new[]{0,1,2}){var off=new NavalSteamState();off.StepFlooded(1,1,true,reason==0?0:1,reason==1?0:1,reason==2?1:0,true);Check(off.LastBurnRate==0&&off.Combustion==0,"Disabled, disconnected or submerged boiler emits no new smoke");}
+ var dry=new NavalSteamState();dry.LoseFuel(1000);dry.StepFlooded(1,1,true,1,1,0,true);Check(dry.LastBurnRate==0,"Empty fuel stops smoke");var broken=new NavalSteamState();broken.StepFlooded(1,1,true,0,1,0,true);Check(broken.Pressure>0,"Stopping combustion retains finite steam reserve");
+ var s=NavalShipDefinition.Novik;Check(!NavalConningTowerLayout.DoorLane(new NavalWalkPoint(.5f,s.WeatherDeck,4),s),"Old ironclad door does not constrain destroyer");Console.WriteLine("PASS: continuous supports for raised guns, stopped combustion smoke and independent destroyer passage classification.");}
+}

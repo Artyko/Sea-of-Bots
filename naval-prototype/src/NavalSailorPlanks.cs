@@ -29,7 +29,7 @@ public partial class NavalRepairSailor
   }
   if(plankStock==null)return false;route.Clear();stuck=0;PlanTo(destination);return true;
  }
- private void FailedPlankTrip(){Debug.Log("[NavalPrototype] Plank trip failed: sailor="+robot.GetInstanceID()+" ship="+boat.name+" stage="+plankStage+" carried="+planks.Count);plankRetryAt=Time.time+8f;ContinueRepair();}
+ private void FailedPlankTrip(){if(leak!=null)retryAfter[leak]=Time.time+15f;Debug.Log("[NavalPrototype] Plank trip failed: sailor="+robot.GetInstanceID()+" ship="+boat.name+" stage="+plankStage+" carried="+planks.Count);plankRetryAt=Time.time+8f;ContinueRepair();}
  private bool TickPlanks(float dt)
  {
   if(!NeedsPlanks(leak))return false;
@@ -42,6 +42,7 @@ public partial class NavalRepairSailor
    var result=FollowRoute(dt,4f,planks.Count>0);
    if(result==RouteResult.Fell){stranded=true;ContinueRepair();return true;}
    if(result==RouteResult.Blocked){
+    if(planks.Count>0&&RepairNearbyAccessGap())return true;
     if(planks.Count==0&&plankStock!=null)blockedCargo[plankStock]=Time.time+10f;
     if(++plankReplans>2){FailedPlankTrip();return true;}
     if(planks.Count>0){if(!ReplanRepair())FailedPlankTrip();}

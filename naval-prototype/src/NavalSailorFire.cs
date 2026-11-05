@@ -3,6 +3,9 @@ public partial class NavalRepairSailor
 {
     private NavalFireTarget fireJob;
     private Vector3 fireStand,fireSource;
+    private readonly System.Collections.Generic.List<Vector3> rejectedFireStands=new System.Collections.Generic.List<Vector3>();
+    private bool FireStandRejected(Vector3 stand){foreach(var prior in rejectedFireStands)if(boat.TransformVector(prior-stand).sqrMagnitude<.6f*.6f)return true;return false;}
+
     private float fireTime,fireRetry,fireWater,fireElapsed;
     private int fireStage;
     private int fireCursor,fireReplans;
@@ -79,19 +82,19 @@ public partial class NavalRepairSailor
         {
             float side=target.Point.x<0?-1f:1f;
             stand=new Vector3(side*1.35f,hull.Definition.WeatherDeck,3.40f);
-            if(FireReach(stand,target)&&ClearBody(stand)&&Supported(stand))return true;
+            if(!FireStandRejected(stand)&&InsideWalkingDeck(stand)&&FireReach(stand,target)&&ClearBody(stand)&&Supported(stand))return true;
         }
-        float workDeck=NavalFireWorkDeck.ForTarget(target.Point.y,hull.Definition);
+
         for(int deck=0;deck<hull.Definition.DeckCount;deck++)
         {
             float floor=deck==0?hull.Definition.WeatherDeck:deck==1?hull.Floor:.825f;
-            if(Mathf.Abs(floor-workDeck)>.01f)continue;
+            // Other decks are legitimate only when FireReach confirms actual sight and reach.
             for(int sideIndex=0;sideIndex<2;sideIndex++)for(int corridor=0;corridor<fireWorkCorridors.Length;corridor++)for(int step=-1;step<=1;step++)
             {
                 float nearSide=target.Point.x<0?-1f:1f;float side=sideIndex==0?nearSide:-nearSide;
                 int offset=(step+1+fireReplans)%3-1;
                 stand=new Vector3(side*fireWorkCorridors[corridor],floor,Mathf.Clamp(target.Point.z+offset*.55f,-5.1f,5.1f));
-                if(FireReach(stand,target)&&ClearBody(stand)&&Supported(stand))return true;
+                if(!FireStandRejected(stand)&&InsideWalkingDeck(stand)&&FireReach(stand,target)&&ClearBody(stand)&&Supported(stand))return true;
             }
         }
         stand=Vector3.zero;return false;
@@ -100,7 +103,7 @@ public partial class NavalRepairSailor
     {
         if(fireJob!=null&&fireJob.Claim==this)fireJob.Claim=null;
         if(fireWater>0&&hull!=null&&feet.y<hull.Definition.WeatherDeck)hull.Flood.Add(hull.Flood.Index(feet.x,feet.z),fireWater);
-        fireWater=0;fireJob=null;fireStage=0;priorityAmmunitionFire=null;
+        fireWater=0;fireJob=null;fireStage=0;priorityAmmunitionFire=null;rejectedFireStands.Clear();
         if(bucket!=null)bucket.Hide();ShowHammer(true);
     }
     private bool TickFire(float dt,bool allowed)
@@ -183,6 +186,7 @@ public partial class NavalRepairSailor
                 if(++fireReplans<=3)
                 {
                     if(fireStage<=2){rejectedFireSources.Add(fireSource);if(PlanFireWater())return true;}
+                    if(fireStage>=3)rejectedFireStands.Add(fireStand);
                     Vector3 stand;if(fireStage>=3&&FireWorkPoint(fireJob,out stand))
                     {fireStand=stand;route.Clear();PlanTo(stand);return true;}
                 }

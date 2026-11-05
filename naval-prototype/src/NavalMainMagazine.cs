@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 public static class NavalMainMagazineLayout
@@ -22,22 +22,37 @@ public static class NavalMainMagazineBlastMath
 public sealed partial class NavalFireSystem
 {
     private NavalFireTarget mainBatteryMagazine;
+    private readonly List<NavalFireTarget> heavyMagazines=new List<NavalFireTarget>();
+    private int magazineRevision=-1;private bool[] magazineReady;
+    public bool MainBatteryMagazineFunctionalAt(int slot){
+        if(magazineRevision!=hull.Revision||magazineReady==null||magazineReady.Length!=heavyMagazines.Count){
+            magazineRevision=hull.Revision;magazineReady=new bool[heavyMagazines.Count];
+            for(int i=0;i<magazineReady.Length;i++)magazineReady[i]=MagazineFunctional(heavyMagazines[i]);
+        }
+        if(slot<0||slot>=heavyMagazines.Count)return false;
+        return !heavyMagazines[slot].Powder.Spent&&!heavyMagazines[slot].Collapsed&&magazineReady[slot];
+    }
+    private bool MagazineFunctional(NavalFireTarget target){if(target==null||target.Powder.Spent||target.Collapsed)return false;int count=0;foreach(var cell in target.PowderCells)if(cell!=null&&!cell.Missing&&!cell.Detached)count++;return count*2>=target.PowderCells.Count;}
     public bool MainBatteryMagazineFunctional
     {
         get
         {
-            if(mainBatteryMagazine==null||mainBatteryMagazine.Powder.Spent||mainBatteryMagazine.Collapsed)return false;
-            int intact=0;foreach(var cell in mainBatteryMagazine.PowderCells)if(cell!=null&&!cell.Missing&&!cell.Detached)intact++;
-            return intact*2>=mainBatteryMagazine.PowderCells.Count;
+            for(int slot=0;slot<heavyMagazines.Count;slot++)if(MainBatteryMagazineFunctionalAt(slot))return true;
+            return false;
         }
     }
     private void BuildMainBatteryMagazine()
     {
-        if(!hull.Definition.SteamPowered)return;
+        if(!hull.Definition.SteamPowered||hull.Definition.Destroyer)return;
+        for(int slot=0;slot<(hull.Definition.CapitalShip?NavalCapitalLayout.Turrets:1);slot++)BuildHeavyMagazine(slot);
+    }
+    private void BuildHeavyMagazine(int slot)
+    {
         Material armor=magazineMaterials[0],edge=magazineMaterials[1],brass=magazineMaterials[2];
         float scale=hull.WorldScale,w=NavalMainMagazineLayout.Width/scale,d=NavalMainMagazineLayout.Depth/scale;
         float floor=hull.Definition.HoldFloor,top=hull.Definition.WeatherDeck-.04f/scale,h=top-floor,t=.14f/scale;
-        Vector3 centre=new Vector3(0,floor+h*.5f,NavalMainMagazineLayout.Z);
+        Vector3 mount=hull.Definition.CapitalShip?NavalCapitalLayout.Mount(slot):new Vector3(0,0,NavalMainMagazineLayout.Z);
+        Vector3 centre=new Vector3(mount.x,floor+h*.5f,mount.z);
         int first=hull.Voxels.Count;
         // Continuous armoured hoist trunk: the magazine is visibly and
         // physically joined to the turret above instead of being a loose box.
@@ -45,15 +60,15 @@ public sealed partial class NavalFireSystem
         MagazineBox(armor,centre+new Vector3(w*.5f-t*.5f,0,0),new Vector3(t,h,d));
         MagazineBox(armor,centre+new Vector3(0,0,-d*.5f+t*.5f),new Vector3(w,h,t));
         MagazineBox(armor,centre+new Vector3(0,0,d*.5f-t*.5f),new Vector3(w,h,t));
-        MagazineBox(edge,new Vector3(0,floor+t*.5f,NavalMainMagazineLayout.Z),new Vector3(w,t,d));
-        MagazineBox(edge,new Vector3(0,top-t*.5f,NavalMainMagazineLayout.Z),new Vector3(w,t,d));
+        MagazineBox(edge,new Vector3(mount.x,floor+t*.5f,mount.z),new Vector3(w,t,d));
+        MagazineBox(edge,new Vector3(mount.x,top-t*.5f,mount.z),new Vector3(w,t,d));
         for(int level=0;level<3;level++)for(int side=-1;side<=1;side+=2)
-            ReadyAmmoBox(brass,new Vector3(side*w*.22f,floor+(level+.65f)*h/3f,NavalMainMagazineLayout.Z),new Vector3(.16f/scale,.55f/scale,.65f/scale),false,false);
+            ReadyAmmoBox(brass,new Vector3(mount.x+side*w*.22f,floor+(level+.65f)*h/3f,mount.z),new Vector3(.16f/scale,.55f/scale,.65f/scale),false,false);
         Vector3 point=centre;
         GameObject warning=new GameObject("Main battery magazine fuse sound");warning.transform.SetParent(transform,false);warning.transform.localPosition=point;
         AudioSource audio=warning.AddComponent<AudioSource>();audio.clip=hiss;audio.loop=true;audio.playOnAwake=false;audio.spatialBlend=1;audio.minDistance=3;audio.maxDistance=55;audio.volume=.48f;
         mainBatteryMagazine=new NavalFireTarget{Cell=hull.Voxels[first],Powder=new NavalMagazineState(),PowderPoint=point,FuseSound=audio,
-            ExplosiveHeight=h*scale,ExplosiveRadius=NavalMainMagazineLayout.HitRadius,PowderCells=hull.Voxels.GetRange(first,hull.Voxels.Count-first),MainMagazine=true};
-        powder.Add(mainBatteryMagazine);
+            ExplosiveHeight=h*scale,ExplosiveRadius=NavalMainMagazineLayout.HitRadius,PowderCells=hull.Voxels.GetRange(first,hull.Voxels.Count-first),MainMagazine=true,MainSlot=slot};
+        powder.Add(mainBatteryMagazine);heavyMagazines.Add(mainBatteryMagazine);
     }
 }

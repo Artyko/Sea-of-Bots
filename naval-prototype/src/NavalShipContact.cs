@@ -12,8 +12,10 @@ public static class NavalShipContact
         float minY=Mathf.Min(start.y,next.y)-other.position.y,maxY=Mathf.Max(start.y,next.y)-other.position.y;
         if(minY>=height||maxY<=-height)return false;
         float yaw=rotation.eulerAngles.y,turn=Mathf.DeltaAngle(yaw,nextRotation.eulerAngles.y);
+        NavalRamDamage ra=self!=null?self.GetComponent<NavalRamDamage>():null,rb=other.GetComponent<NavalRamDamage>();
+        float wa=ra!=null&&ra.Hull.Definition.Destroyer?(ra.Hull.Definition.HullBeam+.9f)/ra.Hull.WorldScale:NavalShipContactMath.HalfWidth,wb=rb!=null&&rb.Hull.Definition.Destroyer?(rb.Hull.Definition.HullBeam+.9f)/rb.Hull.WorldScale:NavalShipContactMath.HalfWidth;
         float fraction=NavalShipContactMath.SafeFraction(start.x,start.z,yaw,next.x,next.z,turn,
-            other.position.x,other.position.z,other.eulerAngles.y,scaleA,scaleB);
+            other.position.x,other.position.z,other.eulerAngles.y,scaleA,scaleB,wa,wb);
         if(fraction>=1f)return false;
         // Preserve buoyancy while blocking horizontal penetration and hull rotation.
         float y=next.y;next=Vector3.Lerp(start,next,fraction);next.y=y;

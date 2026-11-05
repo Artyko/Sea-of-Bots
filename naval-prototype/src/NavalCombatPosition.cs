@@ -42,7 +42,7 @@ public sealed class NavalCombatPosition
             return closeCourse.sqrMagnitude>.001f?closeCourse:enemyForward;
         }
         bool reachable=guns.CanReachShipRange(enemy);
-        rangePlan.Step(Mathf.Min(Time.deltaTime,.05f),distance,reachable,hull.WorldScale,other.ShipScale,guns.ProjectileSpeed);
+        rangePlan.Step(Mathf.Min(Time.deltaTime,.05f),distance,reachable,hull.WorldScale,other.ShipScale,guns.EngagementPlanningSpeed);
         float radius=rangePlan.Desired;
         if(Time.time>=reviewAt)
         {
@@ -82,7 +82,7 @@ public sealed class NavalCombatPosition
                 wanted=guns.MainBatteryHelmCourse(own.eulerAngles.y,bearing,workingSide);
             }
         }
-        else wanted=NavalEngagementRange.ApproachCourse(bearing,workingSide,distance,ownSpeed,Vector3.Dot(enemyVelocity,radial),rangePlan.CourseBias*.3f,NavalGunneryMath.LevelRangeFor(guns.ProjectileSpeed));
+        else wanted=NavalEngagementRange.ApproachCourse(bearing,workingSide,distance,ownSpeed,Vector3.Dot(enemyVelocity,radial),rangePlan.CourseBias*.3f,NavalGunneryMath.LevelRangeFor(guns.EngagementPlanningSpeed));
         Vector3 course=Quaternion.Euler(0f,wanted,0f)*Vector3.forward;
         if(hull.Definition.SteamPowered)
         {
@@ -101,6 +101,7 @@ public sealed class NavalCombatPosition
         // Keep enough headway to complete the turn against a moving target.
         bool aligning=Mathf.Abs(Mathf.DeltaAngle(own.eulerAngles.y,wanted))>20f;
         if(!reachable&&!rangePlan.KeepBroadside)throttle=1f;
+        else if(distance>rangePlan.Desired+40f)throttle=1f;
         else if(aligning||distance>rangePlan.Desired+8f)throttle=Mathf.Max(throttle,.8f);
         else throttle=Mathf.Min(throttle,rangePlan.CruiseThrottle);
         return course.sqrMagnitude>.001f?course:broadside;

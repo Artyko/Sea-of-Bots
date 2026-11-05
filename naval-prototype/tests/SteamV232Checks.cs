@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Reflection;
 using UnityEngine;
@@ -98,15 +98,15 @@ class SteamV232Checks
         Check(NavalConningTowerLayout.LowerWallTop<NavalConningTowerLayout.SlitTop&&NavalConningTowerLayout.SlitTop<NavalConningTowerLayout.RoofBottom,"Segmented vision ports lie between lower and upper armour");
         Near(NavalConningTowerLayout.RoofBottom-NavalConningTowerLayout.SlitTop,.42f,.0001f,"A substantial upper belt physically supports the higher roof");
         Check(NavalConningTowerLayout.HalfWidth>=1.3f&&NavalConningTowerLayout.HalfDepth>=.7f&&NavalConningTowerLayout.RoofBottom>=1.3f,"Conning tower is enlarged in width, depth and height");
-        Near(NavalConningTowerLayout.PlatformY(ship)-ship.WeatherDeck,NavalConningTowerLayout.PlatformRise,.0001f,"Command post feet and physical platform top share one source of truth");
+        Near(NavalConningTowerLayout.PlatformY(ship)-ship.WeatherDeck,NavalRaisedBridge.Rise/ship.Scale,.0001f,"Command post feet and physical platform top share one source of truth");
         Check(NavalConningTowerLayout.FireproofDeckCell(0,ship.WeatherDeck-.125f,NavalConningTowerLayout.CenterZ,.25f,ship.WeatherDeck),"Timber hidden beneath the armoured command platform is fireproofed");
         Check(!NavalConningTowerLayout.FireproofDeckCell(1.8f,ship.WeatherDeck-.125f,NavalConningTowerLayout.CenterZ,.25f,ship.WeatherDeck),"Exposed weather deck beside the tower remains ordinary timber");
         Check(NavalConningTowerLayout.SideDoorHalfDepth*2f*ship.Scale>2f,"Port and starboard side entrances clear a standing sailor");
         var helmRoute=NavalShipRoutes.Plan(new NavalWalkPoint(1.5f,ship.WeatherDeck,-2.8f),NavalConningTowerLayout.HelmPost(ship),ship);
-        Check(helmRoute.Count>=4,"Raised conning tower route contains an exterior approach and entrance steps");
+        Check(helmRoute.Count>=4,"Raised conning tower route contains the internal access flight");
         bool usedOffsetDoor=false,reachedBehindWheel=false;
-        foreach(var point in helmRoute){if(Math.Abs(Math.Abs(point.X)-NavalConningTowerLayout.EntryX)<.001f)usedOffsetDoor=true;if(Math.Abs(point.X)>.5f&&point.Z<NavalConningTowerLayout.CenterZ)reachedBehindWheel=true;}
-        Check(usedOffsetDoor&&reachedBehindWheel,"Helm route uses one of the offset doors and rounds the wheel before crossing the tower");
+        foreach(var point in helmRoute){if(NavalRaisedBridge.Flight(point,ship))usedOffsetDoor=true;if(Math.Abs(point.X)>.5f&&point.Z<NavalConningTowerLayout.CenterZ)reachedBehindWheel=true;}
+        Check(usedOffsetDoor&&reachedBehindWheel,"Helm route uses the internal stair and reaches the rear command landing");
         var helmEnd=helmRoute[helmRoute.Count-1];Near(helmEnd.X,0,.0001f,"Conning route reaches helm X");Near(helmEnd.Y,ship.HelmDeck,.0001f,"Conning route reaches raised platform");Near(helmEnd.Z,NavalConningTowerLayout.CenterZ,.0001f,"Conning route reaches helm Z");
         Check(ship.SteamPowered&&ship.Armored&&ship.Era==NavalEra.Steam,"Ironclad selects armoured steam propulsion");
         float shellWear=0;Check(!NavalArmorMath.Penetrates(shellWear,ship.ProjectilePower),"First real rifled-shell hit cannot reach the magazine through intact armour");
@@ -195,22 +195,19 @@ class SteamV232Checks
         float closeResidual=NavalArmorMath.ResidualPower(NavalMainBatteryMath.ProjectilePower,25f,NavalPenetrationMaterial.Armor);
         float longResidual=NavalArmorMath.ResidualPower(NavalMainBatteryMath.ProjectilePower,250f,NavalPenetrationMaterial.Armor);
         Check(closeResidual>longResidual&&longResidual>0f,"Heavy AP residual penetration falls with distance but still perforates at battle range");
-        Check(NavalArmorMath.InternalFuseDepth(closeResidual)>NavalArmorMath.InternalFuseDepth(longResidual),"Higher residual energy carries the shell deeper before detonation");
-        Check(NavalArmorMath.ArmsInternalFuse(NavalPenetrationMaterial.Armor,longResidual)&&NavalArmorMath.ArmsInternalFuse(NavalPenetrationMaterial.Wood,longResidual),"Every perforating AP shell arms after passing armour, iron, machinery or a wooden repair patch");
+        Check(NavalArmorMath.ArmsInternalFuse(NavalPenetrationMaterial.Armor,longResidual)&&!NavalArmorMath.ArmsInternalFuse(NavalPenetrationMaterial.Wood,longResidual),"AP arms on armour but not wooden repair patches");
         Check(NavalArmorMath.ExitVelocityFactor(3f,1f,NavalPenetrationMaterial.Armor)<NavalArmorMath.ExitVelocityFactor(3f,1f,NavalPenetrationMaterial.Wood),"Denser material removes more post-penetration velocity");
         Check(NavalRepairMaterials.NeedsPlanks(true,false,false,false)&&NavalRepairMaterials.NeedsPlanks(false,true,false,false)&&NavalRepairMaterials.NeedsPlanks(false,false,true,false),"Hull, barrier and non-gun machinery repairs consume planks");
         Check(!NavalRepairMaterials.NeedsPlanks(false,false,true,true),"Gun restoration keeps its dedicated spare-parts workflow");
-        Check(NavalArmorMath.InternalFuseDepth(closeResidual,NavalPenetrationMaterial.Armor)>NavalArmorMath.InternalFuseDepth(closeResidual,NavalPenetrationMaterial.Iron),"Armour resistance gives the base fuze a deeper deliberate delay than thin iron");
         Check(NavalArmorMath.MechanismArmorPower(2f,true)>NavalArmorMath.MechanismArmorPower(2f,false),"A direct main-mount hit transfers extra shock into the compact mechanism");
         Check(NavalArmorMath.InternalBlastPower(NavalMainBatteryMath.ProjectilePower,closeResidual)>NavalArmorMath.InternalBlastPower(NavalMainBatteryMath.ProjectilePower,longResidual),"Internal blast strength follows residual penetration energy");
         Check(NavalArmorMath.InternalBlastRadiusMultiplier(NavalMainBatteryMath.ProjectilePower,closeResidual)>NavalArmorMath.InternalBlastRadiusMultiplier(ship.ProjectilePower,.1f),"Main-caliber internal burst wrecks a larger compartment than a low-residual casemate shell");
         Check(Math.Abs(NavalArmorMath.InternalEncounterDistance(0f,.72f,.22f)-.50f)<.001f,"Entry sweep counts only travel behind the perforated surface");
         Check(Math.Abs(NavalArmorMath.InternalEncounterDistance(.8f,.35f,0f)-1.15f)<.001f,"Later obstruction sweeps accumulate internal travel");
-        Check(NavalArmorMath.InternalFuseDepth(.05f,NavalPenetrationMaterial.Wood)>=1.80f,"A wooden-deck perforation carries every AP shell substantially deeper before detonation");
         Check(NavalArmorMath.IsEntryPlateSeam(.02f,true,false)&&NavalArmorMath.IsEntryPlateSeam(1.25f,true,false),"Neighbouring exterior belt cells through the full entry tolerance are not false internal armour");
         Check(!NavalArmorMath.IsEntryPlateSeam(.02f,true,true)&&!NavalArmorMath.IsEntryPlateSeam(1.26f,true,false),"Internal barriers and genuinely separated armour remain real obstructions");
         Check(NavalMainMagazineBlastMath.HullRadius>NavalPowderBlastMath.HullRadius*2f&&NavalMainMagazineBlastMath.Power>NavalPowderBlastMath.Power*2f,"Main magazine detonation is catastrophic");
-        Check(ship.Compartments&&ship.Partitions,"Ironclad retains compartment and partition systems");
+        Check(ship.Compartments&&!ship.Partitions,"Ironclad retains bilge systems without obsolete partition walls");
         Near(ship.ArmorDamageScale,.65f,.0001f,"Ironclad collateral damage scale");
         Check(Math.Abs(ship.PropulsionPost.x)<BoatDimensions.HalfWidth&&Math.Abs(ship.PropulsionPost.z)<BoatDimensions.HalfLength,"Engine station is inside the hull");
         Near(ship.PropulsionPost.y,ship.HelmDeck,.0001f,"Engine telegraph shares the raised protected command platform");
@@ -234,11 +231,11 @@ class SteamV232Checks
         Check(holdWatch==4&&middleWatch==4,"Universal steam hands are split evenly between lower and middle deck watches");
         float funnelHalf=.26f,bodyRadius=.8f/ship.Scale;
         Check(Math.Abs(NavalSteamLayout.FunnelX)-funnelHalf-bodyRadius>ship.StairWidth*.5f,"Offset funnel clears the central maintenance staircase");
-        Near(NavalSteamLayout.FunnelX,NavalSteamLayout.BoilerX,.0001f,"Funnel uptake is vertically aligned with boiler room");Near(NavalSteamLayout.FunnelZ,NavalSteamLayout.BoilerZ,.0001f,"Funnel uptake reaches boiler longitudinally");
+        Check(Math.Abs(NavalSteamLayout.FunnelX-NavalSteamLayout.BoilerX)<.5f,"Short overhead uptake joins offset funnel without blocking lower service lane");Near(NavalSteamLayout.FunnelZ,NavalSteamLayout.BoilerZ,.0001f,"Funnel uptake reaches boiler longitudinally");
         Check(ship.HullHalfWidth(0)<2.5f&&ship.HullHalfWidth(0)/BoatDimensions.HalfLength<.42f,"Ironclad has a slender corvette beam instead of a box hull");
         Check(ship.WeatherDeck<2.1f,"Steam corvette uses lower freeboard");Near(ship.UpperStairFloor+ship.UpperDeckOffset,.825f,.0001f,"Lower freeboard retains the original middle-to-weather-deck stair flight");
         Check(ship.HullHalfWidth(ship.LadderZ)-.35f>0,"Steam sea ladder attaches to the tapered hull instead of the old sloop beam");
-        Check(NavalCargoLayout.Boxes(ship,0)+NavalCargoLayout.Boxes(ship,1)+NavalCargoLayout.Boxes(ship,2)==22,"Steam hold uses 22 spaced stores instead of the former 38-crate wall");
+        Check(NavalCargoLayout.Boxes(ship,0)+NavalCargoLayout.Boxes(ship,1)+NavalCargoLayout.Boxes(ship,2)==11,"Steam hold uses 11 paired racks with the original stock capacity");
         Check(NavalCargoLayout.IntegratedReadyUse(ship),"Steam guns use integrated ready-use lockers with no loose deck crates");
         Check(NavalFurnishingLayout.Build(ship).Count==0,"Steam holds omit solid decorative clutter from crew corridors");
         Check(NavalPowderLayout.Count(ship)==0&&NavalMagazineLayout.Count(ship)==2,"Steam ship replaces exposed powder barrels with two enclosed magazines");
@@ -251,7 +248,7 @@ class SteamV232Checks
             Check(Math.Abs(z-NavalShipDefinition.GunZ(ship,gun))*ship.Scale<3f,"Ready ammunition remains beside its assigned gun");
         }
         var ballast=NavalBallastLayout.For(ship);
-        Check(ballast.Height<1f&&ballast.Width<.4f,"Steam ballast is a low double-bottom wing tank rather than a wooden deck chest");
+        Check(ballast.Height<1.5f&&ballast.Width<=.4f,"Enlarged iron wing cisterns remain below robot height");
         foreach(float z in new[]{ballast.InnerZ,ballast.Z,ballast.Z+ballast.Length*.5f})
             Check(ballast.X+ballast.Width*.5f<ship.HullHalfWidth(z),"Steam ballast remains inside the tapered armour shell");
         for(int store=0;store<NavalMagazineLayout.Count(ship);store++)
@@ -300,8 +297,8 @@ class SteamV232Checks
         Check(NavalGunneryMath.FlightTime(100f,10f,ship.ProjectileSpeed)<NavalGunneryMath.FlightTime(100f,10f),"Rifled shell lead uses its actual velocity");
         for(int gun=0;gun<ship.GunCount;gun+=2)Check(NavalShipDefinition.GunSide(gun)<0&&NavalShipDefinition.GunSide(gun+1)>0,"Each casemate position has a port/starboard pair");
         NavalSessionSettings.Configure(NavalEra.Steam);
-        Check(NavalSessionSettings.PlayerShip==ship&&NavalSessionSettings.EnemyShip==ship&&NavalSessionSettings.Choices.Length==1,"Steam map selects mirrored ironclads");
-        Near(NavalSessionSettings.EnemySpawnDistance,800f,.0001f,"Steam ironclads start about eight hundred metres apart");
+        Check(NavalSessionSettings.PlayerShip==ship&&NavalSessionSettings.EnemyShip==ship&&NavalSessionSettings.Choices.Length==2,"Steam map defaults to mirrored ironclads and offers the new capital ship");
+        Near(NavalSessionSettings.EnemySpawnDistance,1200f,.0001f,"Steam ships start 1.2 kilometres apart");
         Check(NavalSessionSettings.EnemySpawnDistance>NavalMainBatteryMath.MaximumRange,
             "Steam start requires an approach before either main battery can fire");
         NavalSessionSettings.Configure(NavalEra.Sail);

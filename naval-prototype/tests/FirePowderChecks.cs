@@ -16,7 +16,7 @@ class FirePowderChecks
   var submerged=new NavalFireState(false);submerged.Ignite(0);Check(!submerged.Step(.25f,true,.25f)&&!submerged.Burning,"Submergence extinguishes before burn damage");
   Check(NavalArmorMath.InternalFireChance(5.2f,2f)>NavalArmorMath.InternalFireChance(1.55f,.2f),"Heavy internal burst has greater fire risk");
   Check(NavalArmorMath.InternalFireChance(5.2f,2f)<.25f&&NavalArmorMath.InternalFireChance(1.55f,.2f)<.08f,"v251 internal ignition remains exceptional rather than ship-wide");
-  Check(NavalFireSystem.FireLimit==12,"Per-ship fire simulation is bounded before collider rebuilds and crew routing dominate frame time");
+  Check(NavalFireSystem.FireLimit==int.MaxValue,"No arbitrary limit on simultaneous fire sites");
   Check(NavalArmorMath.InternalFireLimit(5.2f,4f)==3&&NavalArmorMath.InternalFireLimit(1.55f,.2f)==1,"Internal burst fire count is caliber and residual-energy bounded");
   var directReady=new NavalPowderState();Check(!NavalExplosiveImpact.DirectHit(directReady,.5f)&&directReady.Lit,"Direct shell hit always lights surviving ready ammunition");
   var directInstant=new NavalPowderState();Check(NavalExplosiveImpact.DirectHit(directInstant,.05f)&&directInstant.Spent,"Direct ready-ammunition hit preserves immediate detonation chance");

@@ -4,6 +4,10 @@ class StairTrafficChecks {
  static void Main(){int routes=0;
  var profiles=new System.Collections.Generic.List<NavalShipDefinition>(NavalShipDefinition.Choices);profiles.AddRange(NavalShipDefinition.SteamChoices);
  foreach(var ship in profiles){
+ if(ship.Destroyer){foreach(float side in new[]{-1f,1f})foreach(float z in new[]{-20.5f,20.5f})foreach(bool up in new[]{true,false}){
+  var lower=new NavalWalkPoint(side*5.2f/ship.Scale,ship.HoldFloor,(z-5)/ship.Scale);var upper=new NavalWalkPoint(side*5.2f/ship.Scale,ship.WeatherDeck,(z+5)/ship.Scale);var start=up?lower:upper;var goal=up?upper:lower;var path=NavalShipRoutes.Plan(start,goal,ship);int treads=0;foreach(var point in path)if(NavalStairTraffic.InPassage(point,ship))treads++;Check(treads>20,"Destroyer route traverses actual side stair geometry");var last=path[path.Count-1];Check(last.X==goal.X&&last.Y==goal.Y&&last.Z==goal.Z,"Destroyer stair route preserves duty destination");routes++;
+ }continue;}
+
  float lane=NavalStairTraffic.Lane(ship.Scale,ship.StairWidth);
  Check(lane>0,"Each flight has a directional lane");
  Check(NavalStairTraffic.FriendlyPass(true,true,true,1),"Overlapping full-size friendly capsules can pass on narrow stairs");
@@ -25,7 +29,7 @@ class StairTrafficChecks {
   var middleLanding=new NavalWalkPoint(-.14f,.83f,.80f);
   Check(NavalStairTraffic.PassageLevel(upperLanding,ship)==1&&NavalStairTraffic.PassageLevel(middleLanding,ship)==0,"Each logged landing belongs to its own flight");
   Check(!NavalStairTraffic.SamePassage(upperLanding,middleLanding,ship),"Separate flights cannot suppress a vertical-route rebuild");
-  if(ship.SteamPowered){
+  if(ship.SteamPowered&&!ship.CapitalShip){
    var downEntry=NavalWalkRoutes.Down(ship.UpperStairFloor);
    Check(downEntry.Count>2&&Math.Abs(downEntry[1].Z-NavalWalkRoutes.UpperTreadEntryZ)<.001f&&NavalWalkRoutes.UpperTreadEntryZ<.85f,
     "Upper flight first enters just inside the open coaming before descending");

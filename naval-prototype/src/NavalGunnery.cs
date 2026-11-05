@@ -60,21 +60,23 @@ public partial class NavalStations
         wantedYaw=angle=0f;
         Vector3 muzzle=barrels[gun].TransformPoint(new Vector3(0f,0f,hull.Definition.GunMuzzleZ));
         Vector3 delta=target-muzzle,flat=delta;flat.y=0f;float elevation;
+        if(flat.magnitude>hull.Definition.GunRange)return false;
         if(!NavalBattleMath.FiringAngle(flat.magnitude,delta.y,hull.Definition.ProjectileSpeed,out elevation))return false;
         // Gravity is world vertical even when this ship rolls or pitches.
         Vector3 launch=flat.normalized*Mathf.Cos(elevation*Mathf.Deg2Rad)+Vector3.up*Mathf.Sin(elevation*Mathf.Deg2Rad);
         Vector3 local=boat.InverseTransformDirection(launch);
-        wantedYaw=Mathf.DeltaAngle(gun%2==0?-90f:90f,Mathf.Atan2(local.x,local.z)*Mathf.Rad2Deg);
+        wantedYaw=Mathf.DeltaAngle(hull.Definition.GunBaseYaw(gun),Mathf.Atan2(local.x,local.z)*Mathf.Rad2Deg);
         angle=Mathf.Atan2(local.y,new Vector2(local.x,local.z).magnitude)*Mathf.Rad2Deg;
-        return NavalGunneryMath.WithinTraverse(wantedYaw,angle);
+        return Mathf.Abs(wantedYaw)<=hull.Definition.GunTraverse&&angle>=NavalGunneryMath.MinimumPitch&&angle<=NavalGunneryMath.MaximumPitch;
     }
     // Range feasibility only; yaw acquisition is the helmsman's separate responsibility.
     public bool CanReachRange(Vector3 point)
     {
+        if(hull.Definition.CapitalShip&&MainBatteryCombatAvailable){Vector3 d=point-boat.position;float flat=new Vector2(d.x,d.z).magnitude;if(flat<=NavalCapitalLayout.Range&&NavalEngagementRange.BallisticReach(flat,d.y,NavalCapitalLayout.Speed))return true;}
         for(int gun=0;gun<GunCount;gun++)if(Functional(gun+1))
         {
             Vector3 delta=point-barrels[gun].TransformPoint(new Vector3(0f,0f,hull.Definition.GunMuzzleZ));
-            if(NavalEngagementRange.BallisticReach(new Vector2(delta.x,delta.z).magnitude,delta.y,hull.Definition.ProjectileSpeed))return true;
+            if(new Vector2(delta.x,delta.z).magnitude<=hull.Definition.GunRange&&NavalEngagementRange.BallisticReach(new Vector2(delta.x,delta.z).magnitude,delta.y,hull.Definition.ProjectileSpeed))return true;
         }
         return false;
     }
@@ -199,7 +201,7 @@ public partial class NavalStations
         if(!AboveWater(cell))return false;
         Vector3 muzzle=barrels[gun].TransformPoint(new Vector3(0f,0f,hull.Definition.GunMuzzleZ));
         Vector3 view=victim.boat.InverseTransformPoint(muzzle);
-        if(!NavalTargetVisibility.Broadside(view.x,view.z))return false;
+        if(!victim.hull.Definition.Destroyer&&!NavalTargetVisibility.Broadside(view.x,view.z))return false;
         Vector3 offset=cell.transform.position-muzzle;
         int count;
         while(true)
@@ -239,7 +241,12 @@ public partial class NavalStations
     private bool ComputeLockedTargetVisible(int gun,Transform target)
     {
         NavalStations victim;if(!ships.TryGet(target,out victim)||victim==null||aimCell[gun]==null)return false;
-        if(aimKind[gun]==0)return HullPointVisible(gun,victim,aimCell[gun]);
+        if(aimKind[gun]==0){
+            Vector3 point=aimCell[gun].transform.position;float depth=point.y-ocean.Height(point.x,point.z);
+            if(depth<(aimBelowWaterline[gun]?-.95f:-.08f))return false;
+            if(aimCell[gun].HydraulicShell&&victim.ArmorAimIncidence(aimCell[gun],barrels[gun].position,false)<.34f)return false;
+            return HullPointVisible(gun,victim,aimCell[gun]);
+        }
         if(aimKind[gun]!=1&&aimKind[gun]!=3&&aimKind[gun]!=2)return true;
         if(aimKind[gun]==2)
         {
@@ -259,9 +266,9 @@ public partial class NavalStations
         if(kind==1||kind==3)
         {
             int targetSide=victim.TargetSide(boat.position),preferred=targetSide+(victim.GunCount>2&&Random.value>.5f?2:0);
-            int first=kind==3?0:targetSide,last=kind==3?0:victim.GunCount;
+            int first=kind==3?0:victim.hull.Definition.Destroyer?1:targetSide,last=kind==3?0:victim.GunCount;
             featureCandidates.Clear();
-            for(int station=first;station<=last;station+=2)
+            for(int station=first;station<=last;station+=victim.hull.Definition.Destroyer?1:2)
             {
                 if(!victim.Functional(station))continue;
                 foreach(NavalHullVoxel cell in victim.mechanisms[station])
@@ -322,16 +329,24 @@ public partial class NavalStations
         shotError[gun]=Random.insideUnitCircle*(Mathf.Atan2(NavalGunneryMath.Spread(distance),Mathf.Max(1f,distance))*Mathf.Rad2Deg);
         return true;
     }
+    private readonly string[] gunStatus=new string[32];
+    public string GunAttackDiagnostics {get{var s=new System.Text.StringBuilder();for(int i=0;i<GunCount;i++)s.Append(" gun=").Append(i+1).Append(" status=").Append(gunStatus[i]??"no operator at post").Append(" yaw=").Append(yaw[i].ToString("F1")).Append(" pitch=").Append(pitch[i].ToString("F1"));return s.ToString();}}
     public bool AimAtShipAndFire(int gun,Transform target,Vector3 velocity,float dt,Character sailor)
     {
         using(NavalPerformance.Measure(NavalPerfArea.Gunnery))
         {
-        if(target==null||!Functional(gun+1)||PlayerStation==gun+1)return false;
+        gunStatus[gun]="operator present";
+        if(target==null||!Functional(gun+1)||PlayerStation==gun+1){gunStatus[gun]="no target / disabled / player control";return false;}
         if(aimShip[gun]!=target||aimCell[gun]==null||aimCell[gun].Missing||aimCell[gun].Detached||!LockedTargetVisible(gun,target))
         {
             aimShip[gun]=null;
-            if(Time.time<aimRetry[gun]||!SelectAim(gun,target,velocity))
-            {if(Time.time>=aimRetry[gun])aimRetry[gun]=Time.time+.35f;return false;}
+            if(Time.time<aimRetry[gun])return false;
+            if(!SelectAim(gun,target,velocity))
+            {
+                gunStatus[gun]="no visible reachable target";
+                aimRetry[gun]=Time.time+.35f;
+                return false;
+            }
         }
         Vector3 point;
         if(Time.time>=leadAt[gun]||!leadValid[gun])
@@ -343,9 +358,11 @@ public partial class NavalStations
         if(!leadValid[gun])
         {
             // A target can move out of the gun arc. Reconsider reachable parts.
-            aimShip[gun]=null;aimRetry[gun]=Time.time;leadAt[gun]=0f;return false;
+            aimShip[gun]=null;aimRetry[gun]=Time.time+.18f;leadAt[gun]=0f;return false;
         }
+        gunStatus[gun]="aiming / reloading / obstructed";
         if(!AimAndFire(gun,point,dt,sailor))return false;
+        gunStatus[gun]="fire attempt";
         lastKind[gun]=aimKind[gun];aimShip[gun]=null;aimRetry[gun]=0f;leadAt[gun]=0f;leadValid[gun]=false;
         Debug.Log("[NavalPrototype] AI target: "+(lastKind[gun]==0&&aimBelowWaterline[gun]?"below waterline":targetNames[lastKind[gun]]));
         return true;

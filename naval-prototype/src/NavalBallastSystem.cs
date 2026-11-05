@@ -78,15 +78,15 @@ public partial class NavalBilgeSystem
     public int BallastCount {get{return ballast.Count;}}
     public NavalBallastTank BallastAt(int index){return ballast[index].Tank;}
     public float BallastFloor(int index){return ballast[index].Floor;}
-    public float BallastVolume {get{float total=0;foreach(NavalBallastUnit u in ballast)total+=u.Tank.Total;return total;}}
+    public float BallastVolume {get{float total=0;foreach(NavalBallastUnit u in ballast)if(!hull.Flood.RowDetached(hull.Flood.RowAt(u.Tank.Z)))total+=u.Tank.Total;return total;}}
     public float BallastSide(bool port)
     {float total=0;foreach(NavalBallastUnit u in ballast){if((u.Tank.X<0)==port)total+=u.Tank.Water;total+=u.Tank.SpillPending*.5f;}return total;}
-    public float BallastLongitudinalMoment {get{float total=0;foreach(NavalBallastUnit u in ballast)total+=u.Tank.Total*u.Tank.Z/(BoatDimensions.HoldLength*.5f);return total;}}
+    public float BallastLongitudinalMoment {get{float total=0;foreach(NavalBallastUnit u in ballast)if(!hull.Flood.RowDetached(hull.Flood.RowAt(u.Tank.Z)))total+=u.Tank.Total*u.Tank.Z/(BoatDimensions.HoldLength*.5f);return total;}}
     private void BuildBallast(Material wood,Material trim,Material metal)
     {
         int decks=hull.Definition.SteamPowered?1:hull.Definition.MaintenanceDeckCount;
         transferTanks=new NavalBallastTank[4*decks];
-        for(int deck=0;deck<decks;deck++)BuildBallastDeck(hull.Definition.SteamPowered?metal:wood,trim,hull.Definition.MaintenanceFloor(deck));
+        for(int deck=0;deck<decks;deck++)BuildBallastDeck(hull.Definition.SteamPowered?metal:wood,trim,hull.Definition.MaintenanceFloor(deck)-(hull.Definition.Destroyer?1.4f/hull.WorldScale:0));
     }
     private void BuildBallastDeck(Material wood,Material trim,float floor)
     {

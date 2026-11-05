@@ -28,9 +28,16 @@ public partial class NavalSailorRescue : MonoBehaviour
         var world=NavalTestWorld.Active;if(world==null)return false;
         Vector3 foot=robot.transform.position-Vector3.up*worker.FootOffset;
         Vector3 local=home.Root.InverseTransformPoint(foot);
-        float exit=NavalHoldSafety.ExitSeconds(local.x,local.y,local.z,home.Floor,home.WorldScale,worker.DeckWalkSpeed,false);
+        float exit=HoldExitSeconds(home,local,false);
         if(home.Definition.DeckCount>2&&local.y<.825f)exit+=6f;
         return AirRemaining(world)>Mathf.Min(22f,exit)+Mathf.Max(0,travelSeconds)+workSeconds+2f;
+    }
+    private float HoldExitSeconds(NavalHull ship,Vector3 local,bool stairs)
+    {
+        if(ship.Definition.Destroyer)
+            return NavalHoldSafety.DestroyerExitSeconds(local.x,local.z,ship.WorldScale,
+                (ship.Definition.WeatherDeck-ship.Floor)*ship.WorldScale,worker.DeckWalkSpeed);
+        return NavalHoldSafety.ExitSeconds(local.x,local.y,local.z,ship.Floor,ship.WorldScale,worker.DeckWalkSpeed,stairs);
     }
     public void CheckForWater()
     {
@@ -43,7 +50,7 @@ public partial class NavalSailorRescue : MonoBehaviour
         {
             Vector3 local=interior.Root.InverseTransformPoint(foot);
             bool stairs=NavalWalkRoutes.InStairwell(local.x,local.y,local.z,interior.Definition.StairWidth*.5f+.175f,interior.Floor);
-            float exitSeconds=NavalHoldSafety.ExitSeconds(local.x,local.y,local.z,interior.Floor,interior.WorldScale,worker.DeckWalkSpeed,stairs);
+            float exitSeconds=HoldExitSeconds(interior,local,stairs);
             if(interior.Definition.DeckCount>2&&local.y<.825f)exitSeconds+=interior.Definition.UpperDeckOffset*interior.WorldScale/Mathf.Max(1f,worker.DeckWalkSpeed*.8f)+6f;
             if(!NavalHoldSafety.MustEscape(HeadUnder(world),interior.Sunk,AirRemaining(world),exitSeconds))return;
         }

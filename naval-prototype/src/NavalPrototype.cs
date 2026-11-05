@@ -187,13 +187,13 @@ public partial class NavalTestWorld : MonoBehaviour
         ocean.Initialize();
         seaMap.SetOcean(ocean);
         ocean.Amplitude = 0.65f;
-        boat = new GameObject(NavalSessionSettings.PlayerShip.SteamPowered?"PlayerIroncladCorvette":"WoodenBoat").transform;
+        boat = new GameObject(NavalSessionSettings.PlayerShip.SteamPowered?"Player"+NavalSessionSettings.PlayerShip.Name.Replace(" ",""):"WoodenBoat").transform;
         boat.SetParent(transform, false);
         boat.localScale = Vector3.one * NavalSessionSettings.PlayerShip.Scale;
         boat.position = waterCenter;
         boat.rotation = Quaternion.Euler(0f, player.transform.eulerAngles.y, 0f);
         heading = boat.eulerAngles.y;
-        hull = new NavalHull(NavalSessionSettings.PlayerShip); hull.Build(boat, hull.Definition.Armored?armorIron:wood, MakeMaterial(new Color(0.15f, 0.65f, 0.85f)), deckWood,wood);
+        hull = new NavalHull(NavalSessionSettings.PlayerShip); hull.Build(boat, hull.Definition.SteamPowered?armorIron:wood, MakeMaterial(new Color(0.15f, 0.65f, 0.85f)), deckWood,wood);
         boat.gameObject.AddComponent<NavalFloodAppearance>().Initialize(ocean,hull);
         rig = boat.gameObject.AddComponent<NavalShipVisuals>();
         rig.Initialize(hull,wood,lightWood,hull.Definition.SteamPowered?armorIron:blackMast,MakeMaterial(new Color(.91f,.90f,.84f)),
@@ -224,7 +224,7 @@ public partial class NavalTestWorld : MonoBehaviour
         if(GetComponent<NavalBattleTelemetry>()==null)gameObject.AddComponent<NavalBattleTelemetry>();
         ToggleEnemy();
         rough=era==NavalEra.Sail;
-        Debug.Log("[NavalPrototype] v270 "+era+" ships and waves started on native editor map.");
+        Debug.Log("[NavalPrototype] v343 "+era+" ships and waves started on native editor map.");
     }
 
     private Material MakeMaterial(Color color)
@@ -257,7 +257,7 @@ public partial class NavalTestWorld : MonoBehaviour
     public void ReturnToDeck()
     {
         if (player == null || boat == null || (hull != null && hull.Sunk)) return;
-        MovePlayer(boat.TransformPoint(new Vector3(0f, hull.Definition.WeatherDeck, -5f)) + Vector3.up * (footOffset + 0.08f));
+        MovePlayer(boat.TransformPoint(hull.Definition.Destroyer?new Vector3(5.2f/hull.WorldScale,hull.Definition.WeatherDeck,0):hull.Definition.CapitalShip?NavalCapitalLayout.PlayerStart(hull.Definition):new Vector3(0f, hull.Definition.WeatherDeck, -5f)) + Vector3.up * (footOffset + 0.08f));
     }
     public void ReturnToStart()
     {
@@ -278,12 +278,16 @@ public partial class NavalTestWorld : MonoBehaviour
         if (enabled) controller.enabled = true;
         NavalPerformance.SyncTransforms();
     }
+    private float slowFrameLogAt;
     private void LateUpdate()
     {
+        RestoreHelmCamera();
         if (!GameModeManager.IsSinglePlayer() || scene != SceneManager.GetActiveScene().handle) { Destroy(gameObject); return; }
         if(!Spectating&&(player==null||!player.IsAlive()))BeginSpectating();
         if(boat==null||!SimulationActive)return;
         if(Spectating)UpdateSpectator();else RememberLiveCamera();
+        if(Time.unscaledDeltaTime>.15f&&Time.unscaledTime>=slowFrameLogAt){slowFrameLogAt=Time.unscaledTime+2f;Debug.Log("[NavalPrototype] Long frame v343: milliseconds="+(Time.unscaledDeltaTime*1000f).ToString("F1"));}
+        UpdateBinoculars();ApplyBinocularZoom();
         UpdateHudInput();
         if(replaceEnemy){replaceEnemy=false;if(enemy==null)ToggleEnemy();}
         float dt = Mathf.Min(Time.deltaTime, 0.05f);
@@ -294,15 +298,15 @@ public partial class NavalTestWorld : MonoBehaviour
         if(ShipMenuOpen)stations.PauseInput();
         if (Input.GetKeyDown(KeyCode.F7)) rough = !rough;
         ocean.Amplitude = rough ? 0.65f : NavalSessionSettings.Era==NavalEra.Steam?0.35f:0.20f;
-        if (Input.GetKeyDown(KeyCode.F9)) hull.Damage(new Vector3(-BoatDimensions.HalfWidth, -0.225f, 0f), 0.75f);
-        if (Input.GetKeyDown(KeyCode.F11)) hull.Damage(new Vector3(BoatDimensions.HalfWidth, -0.225f, 0f), 0.75f);
+        if (Input.GetKeyDown(KeyCode.F9)) hull.Damage(new Vector3(-BoatDimensions.HalfWidth, -0.225f, 0f), 1.5f);
+        if (Input.GetKeyDown(KeyCode.F11)) hull.Damage(new Vector3(BoatDimensions.HalfWidth, -0.225f, 0f), 1.5f);
         if(Input.GetKeyDown(KeyCode.F12))ToggleEnemy();
         if (!Spectating && Input.GetKeyDown(KeyCode.R) && (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))) { structure.Restore(); hull.Repair(); rig.RestoreRig(); }
         if (!Spectating && Input.GetKeyDown(KeyCode.G))
             DamageAimedPart();
         structure.Refresh(boat.forward*speed+Vector3.up*verticalVelocity);
         hull.Step(boat, ocean, dt, Input.GetKey(KeyCode.F10));
-        float depth = hull.Volume / (HoldArea * hull.AreaScale);
+        float depth = hull.Volume / (HoldArea * hull.AreaScale * Mathf.Max(.01f,hull.Flood.AttachedFraction));
         retreat.Step(dt,allies!=null&&allies.NeedsRetreat,NavalCrewPriorities.ShouldWithdraw(hull.RepairRetreat,stations.AllGunsBroken,hull.HasActiveLeaks||hull.Bilge!=null&&(hull.Bilge.WantsOperator||!hull.Bilge.Functional)),EnemyBoat!=null&&!hull.Sunk&&!stations.AtHelm);
         float throttle = 0f;
         float turn = stations.AtHelm ? stations.TurnInput : 0f;
@@ -354,6 +358,7 @@ public partial class NavalTestWorld : MonoBehaviour
         SpeedThroughWater=NavalShipSpeedMath.Measure(next.x-oldPosition.x,next.z-oldPosition.z,dt);
         motionVelocity=(next-oldPosition)/Mathf.Max(dt,.001f);
         hull.PhysicsBody.SetPose(next,nextRotation);
+        UpdateHelmCamera();
         ocean.Focus = ViewCamera!=null?ViewCamera.transform.position:boat.position;
         ocean.RenderWaves(boat, speed);
         if (aboard)
@@ -449,12 +454,12 @@ public partial class NavalTestWorld : MonoBehaviour
             {
                 NavalHull aimedHull=voxel.Owner;
                 Vector3 aimed = aimedHull.Root.InverseTransformPoint(hit.point);
-                int removed = aimedHull.Damage(aimed, 0.42f);
+                int removed = aimedHull.Damage(aimed, 0.84f);
                 // The billowing cloth sits in front of the black mast. A cut
                 // through its centre must also reach the spar behind it.
                 if(!voxel.HydraulicShell&&Mathf.Abs(aimed.x)<.45f&&aimed.y>3.7f&&aimed.y<7.8f)
                     foreach(float mastZ in aimedHull.Definition.MastZ)
-                        if(aimed.z>mastZ-.1f&&aimed.z<mastZ+.7f)removed+=aimedHull.Damage(new Vector3(aimed.x,aimed.y,mastZ),.42f);
+                        if(aimed.z>mastZ-.1f&&aimed.z<mastZ+.7f)removed+=aimedHull.Damage(new Vector3(aimed.x,aimed.y,mastZ),.84f);
                 // Always remove the selected cell, even at a distant corner of a long thin voxel.
                 if (!voxel.Missing) { voxel.SetMissing(true); removed++; }
                 NavalPerformance.SyncTransforms();
@@ -615,12 +620,15 @@ public partial class NavalTestWorld : MonoBehaviour
     {
         if(boarding!=null&&player!=null&&player.IsAlive()&&player.IsPlayerInputEnabled())boarding.Draw();
         if(boat==null)return;
+        if(binocularHeld){DrawBinoculars();return;}
         DrawStructuredHud();
         GUI.Label(new Rect(Screen.width*.5f-5f,Screen.height*.5f-10f,20f,20f),"+");
         if(Time.time<damageMessageUntil)GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,500f),Screen.height-285f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,500f),28f),damageMessage);
     }
     private void OnDestroy()
     {
+        RestoreHelmCamera();
+        ReleaseBinoculars();
         CloseShipMenu();
         EndSpectating();
         if (Active == this){Active = null;NavalCharacters.Reset();NavalWorldProgressBar.Reset();}
