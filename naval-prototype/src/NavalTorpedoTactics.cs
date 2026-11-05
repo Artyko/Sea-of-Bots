@@ -1,16 +1,24 @@
-﻿using UnityEngine;
+using UnityEngine;
 public sealed class NavalTorpedoTactics {
  public string Phase="inactive";
- private float withdrawUntil;private int side=1;private bool attackSideChosen;private float seenLaunch;
+ private float withdrawUntil;private int side=1;private bool attackSideChosen;private float seenLaunch;private float finishSalvoAt;
+ public bool HoldingLaunchCourse {get{return Phase=="launch window";}}
  public bool Course(Transform own,NavalHull h,NavalStations stations,Transform target,Vector3 velocity,bool retreat,ref float throttle,out Vector3 course){Phase="inactive";course=own.forward;var battery=stations.Torpedoes;if(battery==null||!battery.HasCombatPotential||retreat||h.CombatCritical||stations.RescueStop)return false;Vector3 delta=target.position-own.position;delta.y=0;float distance=delta.magnitude;
-  if(battery.LastLaunch>seenLaunch){seenLaunch=battery.LastLaunch;withdrawUntil=Time.time+22;attackSideChosen=false;}
-  if(Time.time<withdrawUntil&&Time.time-battery.LastLaunch>1.2f){Phase="withdraw after launch";throttle=1;course=Quaternion.Euler(0,side*35,0)*(-delta);return true;}
-  if(!attackSideChosen&&Time.time>=withdrawUntil){attackSideChosen=true;side=Vector3.Cross(own.forward,delta).y<0?-1:1;battery.SalvoStyle=NavalTorpedoSalvoMath.Style(Random.value,battery.Rounds);battery.PreferredLaunchDistance=NavalTorpedoSalvoMath.LaunchDistance(battery.SalvoStyle,Random.value);Debug.Log("[NavalPrototype] Torpedo attack plan: ship="+own.name+" style="+battery.SalvoStyle+" distance="+battery.PreferredLaunchDistance.ToString("F0")+" side="+side);}
+  if(battery.LastLaunch>seenLaunch){
+   seenLaunch=battery.LastLaunch;
+   if(finishSalvoAt<=0)finishSalvoAt=Time.time+(battery.SalvoStyle==NavalTorpedoSalvoMath.SequentialFan?5f:3f);
+   if(battery.SalvoStyle==NavalTorpedoSalvoMath.LongSingle)finishSalvoAt=Time.time;
+  }
+  if(finishSalvoAt>0&&(Time.time>=finishSalvoAt||battery.SalvoStyle==NavalTorpedoSalvoMath.SequentialFan&&battery.AttackShots>=4)){
+   finishSalvoAt=0;withdrawUntil=Time.time+22;attackSideChosen=false;battery.LaunchWindowUntil=0;
+  }
+  if(Time.time<withdrawUntil){Phase="withdraw after launch";throttle=1;course=Quaternion.Euler(0,side*35,0)*(-delta);return true;}
+  if(!attackSideChosen&&Time.time>=withdrawUntil){attackSideChosen=true;battery.StartAttack();side=Vector3.Cross(own.forward,delta).y<0?-1:1;battery.SalvoStyle=NavalTorpedoSalvoMath.AttackStyle(Random.value,battery.Rounds,distance);battery.PreferredLaunchDistance=NavalTorpedoSalvoMath.LaunchDistance(battery.SalvoStyle,Random.value);Debug.Log("[NavalPrototype] Torpedo attack plan: ship="+own.name+" style="+battery.SalvoStyle+" distance="+battery.PreferredLaunchDistance.ToString("F0")+" side="+side);}
   float lead;if(!NavalTorpedoMath.Lead(delta.x,delta.z,velocity.x,velocity.z,out lead))lead=distance/NavalTorpedoMath.Speed;
   Vector3 intercept=delta+velocity*lead;intercept.y=0;
-  if(distance>battery.PreferredLaunchDistance+70){Phase="approach";throttle=1;course=Quaternion.Euler(0,side*22,0)*intercept;return true;}
+  if(distance>battery.PreferredLaunchDistance+180){Phase="approach";throttle=1;course=Quaternion.Euler(0,side*22,0)*intercept;return true;}
   if(distance<150){Phase="too close";throttle=1;course=-delta;withdrawUntil=Time.time+12;return true;}
-  Phase="launch window";throttle=1f;course=Quaternion.Euler(0,side*85,0)*intercept;float yaw=Mathf.Abs(Mathf.DeltaAngle(own.eulerAngles.y,Mathf.Atan2(intercept.x,intercept.z)*Mathf.Rad2Deg));if(yaw>=55&&yaw<=125)battery.LaunchWindowUntil=Time.time+.5f;return true;
+  Phase="launch window";throttle=battery.SalvoStyle==NavalTorpedoSalvoMath.LongSingle?.72f:.85f;course=Quaternion.Euler(0,side*85,0)*intercept;float yaw=Mathf.Abs(Mathf.DeltaAngle(own.eulerAngles.y,Mathf.Atan2(intercept.x,intercept.z)*Mathf.Rad2Deg));if(distance<=battery.PreferredLaunchDistance+40&&yaw>=55&&yaw<=125)battery.LaunchWindowUntil=Time.time+.5f;return true;
  }
 }
 // Only visible wakes enter memory, with a reaction delay. Shore avoidance retains final authority.
@@ -21,7 +29,7 @@ public sealed class NavalTorpedoAvoidance {
  private NavalTorpedo observed;private float noticedAt,reviewAt,holdUntil;private Vector3 held;private float heldThrottle=1;
  public bool Course(Transform own,NavalHull hull,float speed,ref float throttle,out Vector3 course){course=own.forward;if(Time.time<reviewAt){if(Time.time<holdUntil){course=held;throttle=heldThrottle;return true;}return false;}reviewAt=Time.time+.25f;
   NavalTorpedo threat=null;float soon=float.PositiveInfinity;
-  foreach(var torpedo in NavalTorpedo.Active){if(torpedo==null||torpedo.Source==own)continue;Vector3 offset=torpedo.transform.position-own.position;offset.y=0;if(offset.sqrMagnitude>500*500||Vector3.Angle(own.forward,offset)>150)continue;
+  foreach(var torpedo in NavalTorpedo.Active){if(torpedo==null||torpedo.Source==own)continue;Vector3 offset=torpedo.transform.position-own.position;offset.y=0;if(offset.sqrMagnitude>torpedo.DetectionRange*torpedo.DetectionRange||Vector3.Angle(own.forward,offset)>150)continue;
    Vector3 observer=own.position+Vector3.up*6,trace=new Vector3(torpedo.transform.position.x,torpedo.transform.position.y+NavalTorpedoMath.Depth+.1f,torpedo.transform.position.z);
    if(!Visible(observer,trace,own))continue;
    Vector3 relative=torpedo.Velocity-own.forward*speed;float t;if(NavalTorpedoMath.Threat(offset.x,offset.z,relative.x,relative.z,hull.Definition.HullBeam*.5f+8,out t)&&t<soon){threat=torpedo;soon=t;}

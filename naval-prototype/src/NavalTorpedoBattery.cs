@@ -9,6 +9,9 @@ public sealed class NavalTorpedoBattery:MonoBehaviour {
  public void OperatorAt(int mount,Character actor){mounts[mount].ReloadOperator=actor;mounts[mount].OperatorSeen=Time.time;}
  private bool CanReload(int i){var m=mounts[i];return m!=null&&Intact(m.Base)&&(reload.Reserve>0||reload.Tube(i)>=0)&&((!m.Loaded[0]&&!m.Charges[0].Lit&&Intact(m.Tubes[0]))||(!m.Loaded[1]&&!m.Charges[1].Lit&&Intact(m.Tubes[1])));}
  public int SalvoStyle;public float PreferredLaunchDistance=700;
+ public int AttackShots {get;private set;}
+ private float nextAttackShot;
+ public void StartAttack(){AttackShots=0;nextAttackShot=0;LaunchWindowUntil=0;}
  public float LaunchWindowUntil;public float LastLaunch {get;private set;}public bool PlayerOperating {get{return active>=0;}}public Vector3 PlayerPosition {get{return hull.Root.TransformPoint(Post(active));}}
  public int Rounds {get{int n=0;for(int i=0;i<4;i++)for(int tube=0;tube<2;tube++)if(Ready(i,tube))n++;return n;}}
  private static readonly float[] mountZ={18,6,-3,-16};
@@ -55,18 +58,23 @@ public sealed class NavalTorpedoBattery:MonoBehaviour {
   if(distance<150||distance>1450){m.Status="distance outside launch limits";return;}
   var targetBody=target.GetComponent<NavalRamDamage>();float targetBeam=targetBody!=null?targetBody.Hull.Definition.HullBeam:20;
   float lane=NavalTorpedoSalvoMath.MountOffset(i)*Mathf.Sign(hull.Root.InverseTransformDirection(direction).x);
+  if(SalvoStyle==NavalTorpedoSalvoMath.LongSingle)lane=0;
+  if(SalvoStyle==NavalTorpedoSalvoMath.SequentialFan)lane=(Mathf.Min(AttackShots,3)-1.5f)*3f;
   float halfSpread=SalvoStyle==2&&Ready(i,0)&&Ready(i,1)?NavalTorpedoSalvoMath.FanHalfAngle(distance,targetBeam):0;
   direction=Quaternion.Euler(0,lane-halfSpread,0)*direction;
   Vector3 local=hull.Root.InverseTransformDirection(direction);float yaw=Mathf.Atan2(local.x,local.z)*Mathf.Rad2Deg;
   if(!NavalTorpedoMountGeometry.InSector(yaw)){m.Status="outside traverse sector";return;}
   m.Status="turning";if(!Turn(i,yaw,dt))return;
   if(!stations.AtHelm&&Time.time>LaunchWindowUntil){m.Status="waiting tactical window";return;}
+  if(!stations.AtHelm&&SalvoStyle==NavalTorpedoSalvoMath.LongSingle&&AttackShots>0)return;
+  if(!stations.AtHelm&&SalvoStyle==NavalTorpedoSalvoMath.SequentialFan&&(AttackShots>=4||Time.time<nextAttackShot))return;
   if(Time.time<m.NextShot){m.Status="launch interval";return;}
   Vector3 entry=LaunchEntry(i,direction);predicted.y=entry.y;
   if(!Corridor(entry,entry+direction.normalized*distance)){m.Status="corridor blocked";return;}
   launchActor=actor;if(!Fire(i,direction.normalized))return;
   Debug.Log("[NavalPrototype] Torpedo salvo: ship="+hull.Root.name+" style="+SalvoStyle+" intercept_seconds="+t.ToString("F1")+" distance="+distance.ToString("F0")+" fan_half_deg="+halfSpread.ToString("F1"));
-  if(SalvoStyle!=0&&Ready(i,1)){m.PairAt=Time.time+.9f;m.PairDeadline=Time.time+3;m.PairTarget=target;m.PairVelocity=targetVelocity;m.PairSpread=lane+halfSpread;m.PairOperator=actor;}
+  AttackShots++;nextAttackShot=Time.time+.65f;
+  if((SalvoStyle==1||SalvoStyle==2)&&Ready(i,1)){m.PairAt=Time.time+.9f;m.PairDeadline=Time.time+3;m.PairTarget=target;m.PairVelocity=targetVelocity;m.PairSpread=lane+halfSpread;m.PairOperator=actor;}
 
  }
  public string Diagnostics {get{var report=new System.Text.StringBuilder();report.Append("ready=").Append(Rounds).Append(" reserve=").Append(reload.Reserve).Append(" salvo_style=").Append(SalvoStyle).Append(" preferred_distance=").Append(PreferredLaunchDistance.ToString("F0")).Append(" active_projectiles=").Append(NavalTorpedo.Active.Count);for(int i=0;i<4;i++){var m=mounts[i];if(m==null)continue;report.Append(" mount=").Append(i).Append(" loaded=").Append(m.Loaded[0]?1:0).Append(m.Loaded[1]?1:0).Append(" ready=").Append(Ready(i,0)?1:0).Append(Ready(i,1)?1:0).Append(" reload=").Append(reload.Progress(i).ToString("F2")).Append(" yaw=").Append(m.Yaw.ToString("F1")).Append(" status=").Append(Time.time-m.LastAim>2?"no operator at post":m.Status);}return report.ToString();}}

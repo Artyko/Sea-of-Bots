@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 // One tactical owner per tick. Shore/collision recovery remains the final authority.
 public sealed class NavalHelmDecision
 {
@@ -58,8 +58,8 @@ public sealed class NavalHelmDecision
   }
   Vector3 torpedoCourse;
   if(mode!=3&&torpedoAttack.Course(own,hull,guns,enemy,enemyVelocity,mode==1,ref throttle,out torpedoCourse))desired=torpedoCourse;
-  if(mode!=3)desired=shellEvasion.Course(own,hull,guns,speed,desired);
-  if(mode!=3&&torpedoAvoid.Course(own,hull,speed,ref throttle,out torpedoCourse))desired=torpedoCourse;
+  if(mode!=3&&!torpedoAttack.HoldingLaunchCourse)desired=shellEvasion.Course(own,hull,guns,speed,desired);
+  if(mode!=3&&torpedoAvoid.Course(own,hull,speed,ref throttle,out torpedoCourse)){desired=torpedoCourse;if(guns.Torpedoes!=null)guns.Torpedoes.LaunchWindowUntil=0;}
   if(!initialized){initialized=true;heading=own.eulerAngles.y;}
   float wanted=Mathf.Atan2(desired.x,desired.z)*Mathf.Rad2Deg;
   bool mainAssist=mode==0&&guns.MainBatteryHelmPriority;
