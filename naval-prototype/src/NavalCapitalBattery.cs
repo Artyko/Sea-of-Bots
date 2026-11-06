@@ -1,11 +1,12 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 
 public partial class NavalStations
 {
     private sealed class CapitalMount
     {
-        public Transform Root,Barrels,DoorHinge;
+        public Transform Root,Barrels,DoorHinge,Target;
+        public NavalHullVoxel AimCell;
         public bool AccessRequested;public float DoorAngle,AutoDoorUntil,NextDoorScan;
         public NavalRepairableMechanism Mechanism;
         public float Yaw,Pitch,Reload,SecondShot;
@@ -32,7 +33,7 @@ public partial class NavalStations
             int first=hull.Voxels.Count;
             float rise=NavalCapitalLayout.TurretRise(slot);
             ArmoredDecoration(boat,armor,p+Vector3.up*(rise+NavalTurretAccessLayout.RootLift)*.5f,new Vector3(.74f,rise+NavalTurretAccessLayout.RootLift,.74f),true);
-            var t=new CapitalMount();capitalTurrets[slot]=t;t.Yaw=NavalCapitalLayout.BaseYaw(slot);t.Reload=5f+slot*1.7f;
+            var t=new CapitalMount();capitalTurrets[slot]=t;t.Yaw=NavalCapitalLayout.BaseYaw(slot);t.Sequence=slot;t.Reload=5f+slot*1.7f;
             t.Root=Root("305mm twin turret "+NavalCapitalLayout.Name(slot),p+Vector3.up*(rise+NavalTurretAccessLayout.RootLift));t.Root.localRotation=Quaternion.Euler(0,t.Yaw,0);
             ArmoredDecoration(t.Root,armor,new Vector3(0,.02f,0),new Vector3(.84f,.04f,.72f),true);
             for(int side=-1;side<=1;side+=2){
@@ -85,6 +86,7 @@ public partial class NavalStations
         float error=Mathf.DeltaAngle(mount.Yaw,goal),step=speed*Mathf.Min(dt,.02f);
         if(Mathf.Abs(error)<.1f){
             mount.TraverseDirection=0;
+            if(mount.Pitch==pitch)return true;
             if(!CapitalBarrelsClear(mount,mount.Yaw,pitch))return false;
             mount.Pitch=pitch;mount.Barrels.localRotation=Quaternion.Euler(-pitch,0,0);return true;
         }
@@ -109,10 +111,22 @@ public partial class NavalStations
         mount.TraverseDirection=direction;mount.Yaw=Mathf.Repeat(next,360);mount.Pitch=pitch;
         mount.Root.localRotation=Quaternion.Euler(0,mount.Yaw,0);mount.Barrels.localRotation=Quaternion.Euler(-pitch,0,0);return true;
     }
+    private RaycastHit[] capitalMuzzleHits=new RaycastHit[32];
     private bool CapitalMuzzleClear(Vector3 muzzle,Vector3 direction,float distance)
     {
-        foreach(var hit in Physics.RaycastAll(muzzle,direction,Mathf.Min(distance,24f),PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore))
-            if(hit.collider!=null&&hit.collider.transform.IsChildOf(boat))return false;
+        float length=Mathf.Min(distance,24f);
+        int count=NavalRayQueries.Ray(muzzle,direction,length,PhysicsManager.GetEnvironmentLayerMask(),ref capitalMuzzleHits);
+        if(count<0)
+        {
+            foreach(var hit in Physics.RaycastAll(muzzle,direction,length,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore))
+                if(hit.collider!=null&&hit.collider.transform.IsChildOf(boat))return false;
+            return true;
+        }
+        for(int i=0;i<count;i++)
+        {
+            var collider=capitalMuzzleHits[i].collider;
+            if(collider!=null&&collider.transform.IsChildOf(boat))return false;
+        }
         return true;
     }
     private void CapitalState(CapitalMount mount,int slot,string reason){
@@ -122,14 +136,26 @@ public partial class NavalStations
     private void TickCapitalBattery(Transform target,Vector3 targetVelocity,float dt)
     {
         TickCapitalDoors(dt);
-        if(target==null)return;var victim=ForShip(target);Vector3 relative=targetVelocity-FiringPlatformVelocity();
+        var victim=ForShip(target);Vector3 relative=targetVelocity-FiringPlatformVelocity();
+        bool withinSearch=target!=null&&TargetInsideSearchRange(target,targetVelocity,NavalCapitalLayout.Range);
         for(int slot=0;slot<capitalTurrets.Length;slot++){
             if(slot==playerCapitalSlot)continue;
             var t=capitalTurrets[slot];if(t.AccessRequested||Time.time<t.AutoDoorUntil||t.DoorAngle>.1f||!t.Ready||!MainBatterySlotFunctional(slot)||t.Ammo<=0){CapitalState(t,slot,t.AccessRequested||t.DoorAngle>.1f?"crew access":!t.Ready?"no seated operator":t.Ammo<=0?"empty":"damaged or automatic access");continue;}
             float hoist=SteamPlant!=null?SteamPlant.AuxiliaryFactor:1f;t.Reload=Mathf.Max(0,t.Reload-dt*hoist);
-            if(t.SecondShot>0){t.SecondShot-=dt;if(t.SecondShot<=0&&t.Ammo>0)FireCapitalTube(t,slot,1);continue;}
+            if(t.Target!=target){t.Target=target;t.AimCell=null;t.SecondShot=0;}
+            bool secondPending=t.SecondShot>0f;
+            if(secondPending)t.SecondShot=Mathf.Max(.0001f,t.SecondShot-dt);
+            // A second tube can wait briefly for alignment, then yields to the reload cycle.
+            if(secondPending&&t.Reload<NavalCapitalLayout.Reload-2f){t.SecondShot=0;secondPending=false;}
+            if(!withinSearch)continue;
             Vector3 muzzle=t.Barrels.TransformPoint(new Vector3(-.18f,0,CapitalMuzzleZ));
-            Vector3 point=victim!=null?target.TransformPoint(victim.CurrentMainAim(t.Sequence,muzzle)):target.position;
+            Vector3 point=target.position;
+            if(victim!=null)
+            {
+                if(!victim.TrackedHeavyAimValid(t.AimCell))
+                    point=target.TransformPoint(victim.CurrentMainAim(t.Sequence,muzzle,out t.AimCell));
+                else point=t.AimCell.transform.position;
+            }
             if(victim!=null&&point.y<ocean.Height(point.x,point.z)+.03f)continue;
             Vector3 predicted=point;for(int iteration=0;iteration<3;iteration++)predicted=point+relative*(Vector3.Distance(muzzle,predicted)/NavalCapitalLayout.Speed);
             Vector3 delta=predicted-muzzle,flat=delta;flat.y=0;float distance=flat.magnitude,elevation;
@@ -140,9 +166,15 @@ public partial class NavalStations
             if(pitch<NavalCapitalLayout.MinimumPitch(slot)||pitch>NavalTurretAccessLayout.MaximumPitch)continue;
             float nextPitch=Mathf.MoveTowards(t.Pitch,pitch,6f*Mathf.Min(dt,.05f));
             if(!TraverseCapital(t,yaw,nextPitch,8f,dt))continue;
-            if(t.Reload>0||Mathf.Abs(Mathf.DeltaAngle(t.Yaw,yaw))>.6f||Mathf.Abs(t.Pitch-pitch)>.5f)continue;
+            if(Mathf.Abs(Mathf.DeltaAngle(t.Yaw,yaw))>.6f||Mathf.Abs(t.Pitch-pitch)>.5f)continue;
+            if(secondPending)
+            {
+                if(t.SecondShot<=.0001f){FireCapitalTube(t,slot,1);t.SecondShot=0;}
+                continue;
+            }
+            if(t.Reload>0)continue;
             if(!CapitalMuzzleClear(muzzle,t.Barrels.forward,distance)){CapitalState(t,slot,"own ship blocks muzzle");continue;}
-            FireCapitalTube(t,slot,-1);t.SecondShot=.35f;t.Reload=NavalCapitalLayout.Reload;t.Sequence++;
+            FireCapitalTube(t,slot,-1);t.SecondShot=.35f;t.Reload=NavalCapitalLayout.Reload;
         }
     }
     private void FireCapitalTube(CapitalMount mount,int slot,int tube)
@@ -152,7 +184,7 @@ public partial class NavalStations
         if(!CapitalMuzzleClear(muzzle,direction,24f))return;
         GameObject shell=NavalProjectileVisual.CreateRifledShell();shell.name="NavalPrototype_305mmShell";shell.transform.SetParent(NavalTestWorld.Active!=null?NavalTestWorld.Active.transform:null,false);shell.transform.position=muzzle;shell.transform.rotation=Quaternion.LookRotation(direction);shell.transform.localScale=Vector3.one*2.2f;
         var collider=shell.GetComponent<Collider>();if(collider!=null){collider.enabled=false;Destroy(collider);}shell.GetComponent<Renderer>().sharedMaterial=shellMaterial;
-        shell.AddComponent<NavalCannonball>().Initialize(direction*NavalCapitalLayout.Speed+FiringPlatformVelocity(),boat,hull,player,ocean,smoke,impactSpark,Time.time+18f,EnemyControlled,null,NavalCapitalLayout.Power,2.25f,true);
+        shell.AddComponent<NavalCannonball>().Initialize(direction*NavalCapitalLayout.Speed+FiringPlatformVelocity(),boat,hull,player,ocean,smoke,impactSpark,Time.time+18f,HostileToPlayer,null,NavalCapitalLayout.Power,2.25f,true);
         mount.Ammo--;LastCrewShotAt=Time.time;AudioSource.PlayClipAtPoint(sound,muzzle,1f);
         NavalShotPuff.Create(transform,muzzle,direction*4f,flash,.12f,.8f);
         for(int i=0;i<32;i++)NavalShotPuff.Create(transform,muzzle+Random.insideUnitSphere*.15f,direction*Random.Range(2f,5f)+Vector3.up+Random.insideUnitSphere,smoke,Random.Range(1.5f,2.8f),Random.Range(.2f,.4f));

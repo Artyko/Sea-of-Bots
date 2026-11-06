@@ -16,6 +16,36 @@ public sealed class NavalShipPhysics : MonoBehaviour
     private bool fullAudit=true;
     public void MarkDirty(NavalHullVoxel cell){NavalPhysicsQueries.Invalidate();pending.Add(cell);}
     public void RequestAudit(){fullAudit=true;}
+    private Matrix4x4 waterToHull;
+    private Vector3 waterBoundsCenter,waterBoundsExtent;
+    private bool waterBoundsReady;
+
+    public bool TryWaterLocalPoint(Vector3 point,out Vector3 local)
+    {
+        if(!waterBoundsReady)RefreshWaterBounds();
+        Vector3 delta=point-waterBoundsCenter;
+        if(Mathf.Abs(delta.x)>waterBoundsExtent.x||Mathf.Abs(delta.y)>waterBoundsExtent.y||
+            Mathf.Abs(delta.z)>waterBoundsExtent.z)
+        {local=Vector3.zero;return false;}
+        local=waterToHull.MultiplyPoint3x4(point);
+        return true;
+    }
+    public float WaterVerticalLocal {get{return waterToHull.m11;}}
+    private void RefreshWaterBounds()
+    {
+        Matrix4x4 pose=transform.localToWorldMatrix;
+        waterToHull=transform.worldToLocalMatrix;
+        float low=hull.Floor-.3f,high=hull.Definition.RimY;
+        // The broad phase encloses the tapered footprint and the complete hold height.
+        float width=Mathf.Max(BoatDimensions.HalfWidth,hull.Definition.HullHalfWidth(0f));
+        Vector3 x=pose.MultiplyVector(Vector3.right*width);
+        Vector3 y=pose.MultiplyVector(Vector3.up*((high-low)*.5f));
+        Vector3 z=pose.MultiplyVector(Vector3.forward*BoatDimensions.HalfLength);
+        waterBoundsCenter=pose.MultiplyPoint3x4(Vector3.up*((low+high)*.5f));
+        waterBoundsExtent=new Vector3(Mathf.Abs(x.x)+Mathf.Abs(y.x)+Mathf.Abs(z.x),
+            Mathf.Abs(x.y)+Mathf.Abs(y.y)+Mathf.Abs(z.y),Mathf.Abs(x.z)+Mathf.Abs(y.z)+Mathf.Abs(z.z))+Vector3.one*.01f;
+        waterBoundsReady=true;
+    }
     public Rigidbody Body {get{return body;}}
     public void Initialize(NavalHull owner)
     {
@@ -40,8 +70,8 @@ public sealed class NavalShipPhysics : MonoBehaviour
                 bool changed=false;
                 if(!body.position.Equals(position)){body.position=position;changed=true;}
                 if(!body.rotation.Equals(rotation)){body.rotation=rotation;changed=true;}
-                if(changed){body.PublishTransform();NavalPhysicsQueries.Invalidate();}
-            }else {transform.SetPositionAndRotation(position,rotation);NavalPhysicsQueries.Invalidate();}
+                if(changed){body.PublishTransform();waterBoundsReady=false;NavalPhysicsQueries.Invalidate();}
+            }else {transform.SetPositionAndRotation(position,rotation);waterBoundsReady=false;NavalPhysicsQueries.Invalidate();}
         }
     }
     public void FinishConstruction()

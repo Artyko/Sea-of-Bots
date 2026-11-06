@@ -10,6 +10,12 @@ public partial class NavalRepairSailor
     // The caller owns the job-specific response to an obstruction.
     private RouteResult FollowRoute(float dt,float timeout,bool finishAtRepairReach=false)
     {
+        using(NavalPerformance.Measure(NavalPerfArea.CrewRoute))
+            return FollowRouteCore(dt,timeout,finishAtRepairReach);
+    }
+
+    private RouteResult FollowRouteCore(float dt,float timeout,bool finishAtRepairReach)
+    {
         if(TickTrafficWait(dt))return RouteResult.Moving;
         if(route.Count==0){escapePending=false;stairExitWaypoints=0;return RouteResult.Arrived;}
         if(escapePending){

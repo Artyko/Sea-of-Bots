@@ -21,7 +21,7 @@ class DreadnoughtChecks
   float lowerRoof=NavalTurretAccessLayout.RootLift+NavalTurretAccessLayout.RoofTop;
   Check(raisedBore+(float)Math.Sin(NavalCapitalLayout.MinimumPitch(3)*Math.PI/180)*1.6f>lowerRoof+.09f,"Raised stern tubes clear the lower roof at their depression limit");
   var spawn=NavalCapitalLayout.PlayerStart(ship);Check(Math.Abs(spawn.z)<1&&Math.Abs(spawn.x)>.75f&&NavalCapitalLayout.WeatherClear(new NavalWalkPoint(spawn.x,spawn.y,spawn.z),new NavalWalkPoint(spawn.x,spawn.y,spawn.z),ship),"Midship player start has support outside the open stairs");
-  foreach(float side in new[]{-1f,1f})Check(ship.IsOpening(side*ship.HullHalfWidth(ship.LadderZ),ship.WeatherDeck+.1f,ship.LadderZ,.1f,.1f,.1f),"Real boarding opening through the narrow steam hull");
+  foreach(float side in new[]{-1f,1f})Check(!ship.IsOpening(side*ship.HullHalfWidth(ship.LadderZ),ship.WeatherDeck+.1f,ship.LadderZ,.1f,.1f,.1f),"Sea ladder leaves weather-deck armor closed");
   var helm=new NavalWalkPoint(0,ship.WeatherDeck,NavalCapitalLayout.BridgeZ);
   var landing=new NavalWalkPoint(0,ship.WeatherDeck,.8f);
   int routes=0;

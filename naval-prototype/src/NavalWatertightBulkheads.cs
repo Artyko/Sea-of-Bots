@@ -18,7 +18,7 @@ public sealed class NavalWatertightBulkheads:MonoBehaviour {
   }
  }
  private bool Broken(Door door){foreach(var c in door.Cells)if(c.Missing||c.Detached)return true;return false;}
- private void Update(){if(hull==null)return;float dt=Mathf.Min(Time.deltaTime,.05f);var world=NavalTestWorld.Active;if(world==null||!world.SimulationActive)return;
+ private void Update(){if(hull==null||hull.SimulationRetired)return;float dt=Mathf.Min(Time.deltaTime,.05f);var world=NavalTestWorld.Active;if(world==null||!world.SimulationActive)return;
   nearest=null;float best=2f;
   foreach(var door in doors){bool near=false;foreach(var worker in hull.RepairWorkers)if(worker!=null&&!worker.Stranded&&hull.Root.TransformVector(worker.CarriedPosition-door.Post).sqrMagnitude<16){near=true;break;}
    if(!world.Spectating&&world.PlayerHull!=null){Vector3 player=world.PlayerFootPoint;float d=Vector3.Distance(hull.Root.TransformPoint(door.Post),player);if(d<4)near=true;if(d<best&&!Broken(door)){nearest=door;best=d;}}

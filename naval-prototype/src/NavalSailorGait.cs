@@ -47,6 +47,10 @@ public class NavalSailorGait : MonoBehaviour
     public void InvalidatePose(){idleApplied=false;weight=0f;}
     private void LateUpdate()
     {
+        using(NavalPerformance.Measure(NavalPerfArea.CrewGait)) TickLate();
+    }
+    private void TickLate()
+    {
         if(robot==null||!robot.IsAlive()){Restore();enabled=false;return;}
         bool rightDamaged=robot.IsDamaged(MechBodyPartType.RightLeg),leftDamaged=robot.IsDamaged(MechBodyPartType.LeftLeg);
         if((rightDamaged||leftDamaged)&&model!=null&&model.LegsAnimator!=null)
@@ -74,6 +78,7 @@ public class NavalSailorGait : MonoBehaviour
         model.SetManualLegsAnimationEnabled(true);
         Vector3 position=root.localPosition;Quaternion rotation=root.localRotation;
         walk.SampleAnimation(root.gameObject,clock.Phase*walk.length);
+        if(weight<1f)
         for(int i=0;i<bones.Length;i++)if(bones[i]!=null&&bones[i]!=root&&bones[i].IsChildOf(root))
         {
             bones[i].localPosition=Vector3.Lerp(idlePosition[i],bones[i].localPosition,weight);

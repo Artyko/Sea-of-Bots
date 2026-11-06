@@ -5,33 +5,37 @@ public class NavalSeaLadder : MonoBehaviour
     public static readonly List<NavalSeaLadder> All=new List<NavalSeaLadder>();
     private readonly List<NavalHullVoxel>[] cells={new List<NavalHullVoxel>(),new List<NavalHullVoxel>()};
     public NavalHull Hull;
-    public float OuterX(int side){return (side==0?-1f:1f)*(Hull.Definition.HullHalfWidth(Hull.Definition.LadderZ)+(Hull.Definition.Destroyer?.65f/Hull.WorldScale:.35f));}
-    public float DeckX(int side){return (side==0?-1f:1f)*(Hull.Definition.HullHalfWidth(Hull.Definition.LadderZ)-(Hull.Definition.Destroyer?1f/Hull.WorldScale:.35f));}
+    public float OuterX(int side){return (side==0?-1f:1f)*(Hull.Definition.HullHalfWidth(Hull.Definition.LadderZ)+StandOff/Hull.WorldScale);}
+    private float StandOff {get{return Hull.Definition.CapitalShip?1.05f:.65f;}}
+    public float DeckX(int side){return (side==0?-1f:1f)*(Hull.Definition.HullHalfWidth(Hull.Definition.LadderZ)-1.15f/Hull.WorldScale);}
     private int usableRevision=-1;
     private readonly bool[] usable=new bool[2];
     public void Initialize(NavalHull hull,Material material)
     {
         Hull=hull;All.Add(this);
-        if(hull.Definition.Destroyer){float q=hull.WorldScale;for(int side=0;side<2;side++){int first=hull.Voxels.Count;float x=OuterX(side);for(int rail=-1;rail<=1;rail+=2)hull.AddDecorationBox(transform,material,new Vector3(x,hull.Definition.WeatherDeck-2.5f/q,rail*.55f/q),new Vector3(.12f,6f,.12f)/q,true);for(int step=0;step<20;step++)hull.AddDecorationBox(transform,material,new Vector3(x,hull.Definition.WeatherDeck+(.5f-step*.3f)/q,0),new Vector3(.18f,.12f,1.1f)/q,true);for(int n=first;n<hull.Voxels.Count;n++)cells[side].Add(hull.Voxels[n]);}return;}
-
+        var ship=hull.Definition;
+        float scale=hull.WorldScale;
+        float bottom=Mathf.Min(ship.DesignWaterline-.85f/scale,ship.WeatherDeck-1.4f/scale);
+        float top=ship.BoardingY;
+        float height=(top-bottom)*scale;
+        int steps=Mathf.CeilToInt(height/.30f);
         for(int side=0;side<2;side++)
         {
-            float sign=side==0?-1f:1f,edge=hull.Definition.HullHalfWidth(hull.Definition.LadderZ);
-            float x=sign*(edge+.35f);int first=hull.Voxels.Count;
+            int first=hull.Voxels.Count;
+            float x=OuterX(side),sign=side==0?-1f:1f;
             for(int rail=-1;rail<=1;rail+=2)
-                LadderBox(hull,material,new Vector3(sign*(edge+.10f),0.6f,hull.Definition.LadderZ+rail*0.37f),new Vector3(0.65f,0.16f,0.16f),true);
-            for(int rail=-1;rail<=1;rail+=2)
-                LadderBox(hull,material,new Vector3(x,0.45f,hull.Definition.LadderZ+rail*0.37f),new Vector3(0.14f,4.1f,0.14f),true);
-            for(int step=0;step<14;step++)
-                LadderBox(hull,material,new Vector3(x,-1.5f+step*0.3f,hull.Definition.LadderZ),new Vector3(0.18f,0.12f,0.75f),true);
+            {
+                float z=ship.LadderZ+rail*.48f/scale;
+                hull.AddDecorationBox(transform,material,new Vector3(x,(bottom+top)*.5f,z),
+                    new Vector3(.12f,height,.12f)/scale,true);
+                hull.AddDecorationBox(transform,material,new Vector3(x-sign*(StandOff-.25f)/scale,ship.WeatherDeck-.22f/scale,z),
+                    new Vector3(.95f+(StandOff-.65f)*2f,.16f,.16f)/scale,true);
+            }
+            for(int rung=0;rung<=steps;rung++)
+                hull.AddDecorationBox(transform,material,new Vector3(x,Mathf.Lerp(bottom,top,rung/(float)steps),ship.LadderZ),
+                    new Vector3(.18f,.12f,1.02f)/scale,true);
             for(int i=first;i<hull.Voxels.Count;i++)cells[side].Add(hull.Voxels[i]);
         }
-    }
-    private void LadderBox(NavalHull hull,Material material,Vector3 point,Vector3 size,bool solid)
-    {
-        float low=hull.Definition.AboveDeckY(point.y-size.y*.5f),high=hull.Definition.AboveDeckY(point.y+size.y*.5f);
-        point.y=(low+high)*.5f+hull.Definition.UpperDeckOffset;size.y=high-low;
-        hull.AddDecorationBox(transform,material,point,size,solid);
     }
     public bool Usable(int side)
     {
@@ -89,10 +93,10 @@ public class NavalBoarding
     {
         if(!Climbing)return;
         float sign=side==0?-1f:1f;
-        float outside=Mathf.Abs(selected.OuterX(side))+.35f,deck=Mathf.Abs(selected.DeckX(side));
+        float outside=Mathf.Abs(selected.OuterX(side))+.35f/selected.Hull.WorldScale,deck=Mathf.Abs(selected.DeckX(side));
         Vector3 target=stage==0?new Vector3(sign*outside,feet.y,selected.Hull.Definition.LadderZ):stage==1?
             new Vector3(sign*outside,selected.Hull.Definition.BoardingY,selected.Hull.Definition.LadderZ):stage==2?new Vector3(sign*deck,selected.Hull.Definition.BoardingY,selected.Hull.Definition.LadderZ):new Vector3(sign*deck,selected.Hull.Definition.WeatherDeck+.035f,selected.Hull.Definition.LadderZ);
-        feet=Vector3.MoveTowards(feet,target,1.5f*dt);
+        feet=Vector3.MoveTowards(feet,target,3.8f*dt/selected.Hull.WorldScale);
         CharacterController controller=player.GetComponentInChildren<CharacterController>();
         bool enabled=controller!=null&&controller.enabled;if(enabled)controller.enabled=false;
         player.transform.position=selected.transform.TransformPoint(feet)+selected.transform.up*footOffset;

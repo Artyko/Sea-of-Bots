@@ -65,7 +65,7 @@ public sealed class NavalShipDefinition
     public float GunMountX {get{return Destroyer?0:SteamPowered?2.05f:DeckCount>2?3f-.75f*FixtureScale:2.25f;}}
     public float GunPostX {get{return Destroyer?1.8f/Scale:SteamPowered?.92f:DeckCount>2?GunMountX-.9f*FixtureScale:1.35f;}}
     public float GunMountY {get{return Destroyer?WeatherDeck+.55f/Scale:RifledWeapons?RimY-.18f:DeckCount>2?AboveDeckY(1f)+GunDeckOffset:1f;}}
-    public float BoardingY {get{return DeckCount>2?WeatherDeck+.875f:AboveDeckY(2.55f);}}
+    public float BoardingY {get{return System.Math.Max(WeatherDeck,RimAt(LadderZ))+.70f/Scale;}}
     public float HelmDeck {get{return SteamPowered?NavalRaisedBridge.Top(this):WeatherDeck;}}
     public float PropulsionDeck {get{return SteamPowered?HelmDeck:WeatherDeck;}}
     public Vector3 PropulsionPost {get{return SteamPowered?NavalSteamLayout.OperatorPost(this):new Vector3(NavalSailWorkLayout.PostX,WeatherDeck,NavalSailWorkLayout.PostZ);}}
@@ -115,8 +115,6 @@ public sealed class NavalShipDefinition
     {
         if(DeckCount>2)
         {
-            if(SteamPowered&&System.Math.Abs(x)+hx>HullHalfWidth(z)-.18f&&System.Math.Abs(z-LadderZ)<.55f+hz&&y+hy>WeatherDeck&&y-hy<WeatherDeck+1.4f)return true;
-            if(System.Math.Abs(x)+hx>2.7f&&System.Math.Abs(z-LadderZ)<.65f+hz&&y+hy>WeatherDeck&&y-hy<WeatherDeck+1.4f)return true;
             if(y-hy>GunPortTop||y+hy<=GunPortSill||System.Math.Abs(x)+hx<=2.7f)return false;
             if(RifledWeapons)return false;
             float portHalf=1.1f;

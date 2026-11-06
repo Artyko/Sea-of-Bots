@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 
 public static class NavalMainBatteryMath
@@ -139,6 +139,7 @@ public partial class NavalStations
     private int mainAmmunition,mainCrewReady;
     private Transform mainAimTarget;
     private Vector3 mainAimLocal;
+    private NavalHullVoxel mainAimCell;
     private int mainAimSequence,mainAimZone=-1;
     private readonly float[] mainAimYaws=new float[NavalMainBatteryMath.AimZoneCount];
     private float mainAimReviewAt;
@@ -241,7 +242,7 @@ public partial class NavalStations
         Vector3 relativeVelocity=targetVelocity-FiringPlatformVelocity();
         if(victim!=null&&(mainAimTarget!=target||mainAimZone<0||Time.time>=mainAimReviewAt))
             ReviewMainAim(target,victim,relativeVelocity,muzzle);
-        Vector3 point=victim!=null?target.TransformPoint(victim.CurrentMainAim(mainAimZone,boat.position)):target.position;
+        Vector3 point=victim==null?target.position:victim.TrackedHeavyAimValid(mainAimCell)?mainAimCell.transform.position:target.TransformPoint(mainAimLocal);
         Vector3 predicted=point;
         for(int i=0;i<3;i++)predicted=point+relativeVelocity*(Vector3.Distance(muzzle,predicted)/NavalMainBatteryMath.ProjectileSpeed);
         Vector3 delta=predicted-muzzle,flat=delta;flat.y=0;
@@ -279,7 +280,8 @@ public partial class NavalStations
         }
         int previous=mainAimZone;
         mainAimZone=NavalMainBatteryMath.SelectAvailableAimZone(mainAimYaws,mainAimSequence,mainAimTarget==target?mainAimZone:-1);
-        if(mainAimZone>=0)mainAimLocal=victim.CurrentMainAim(mainAimZone,muzzle);
+        if(mainAimZone!=previous||mainAimTarget!=target||!victim.TrackedHeavyAimValid(mainAimCell))
+            mainAimLocal=victim.CurrentMainAim(mainAimZone,muzzle,out mainAimCell);
         mainAimTarget=target;mainAimReviewAt=Time.time+(mainAimAvailable>0?.65f:.20f);
         if(previous>=0&&mainAimZone!=previous)
             Debug.Log("[NavalPrototype] Main battery aim retarget: ship="+boat.name+" from="+NavalMainBatteryMath.AimZoneName(previous)+" to="+NavalMainBatteryMath.AimZoneName(mainAimZone)+" available="+mainAimAvailable);
@@ -295,9 +297,9 @@ public partial class NavalStations
         Collider collider=shell.GetComponent<Collider>();if(collider!=null){collider.enabled=false;Destroy(collider);}
         shell.GetComponent<Renderer>().sharedMaterial=shellMaterial;
         shell.AddComponent<NavalCannonball>().Initialize(direction*NavalMainBatteryMath.ProjectileSpeed+FiringPlatformVelocity(),boat,hull,player,ocean,smoke,impactSpark,
-            Time.time+14f,EnemyControlled,null,NavalMainBatteryMath.ProjectilePower,2f,true);
+            Time.time+14f,HostileToPlayer,null,NavalMainBatteryMath.ProjectilePower,2f,true);
         mainAmmunition--;mainReloadRemaining=NavalMainBatteryMath.ReloadSeconds;
-        int firedZone=mainAimZone;mainAimSequence++;mainAimZone=-1;mainAimReviewAt=0f;
+        int firedZone=mainAimZone;mainAimSequence++;
         LastCrewShotAt=Time.time;
         AudioSource.PlayClipAtPoint(sound,muzzle,1f);
         NavalShotPuff.Create(transform,muzzle,direction*3.5f,flash,.09f,.58f);

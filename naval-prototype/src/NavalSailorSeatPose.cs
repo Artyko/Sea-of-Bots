@@ -47,6 +47,10 @@ public sealed class NavalSailorSeatPose:MonoBehaviour
     }
     private void LateUpdate()
     {
+        using(NavalPerformance.Measure(NavalPerfArea.CrewSeatAnimation)) TickLate();
+    }
+    private void TickLate()
+    {
         if(!Seated||sitting==null||root==null||sailor==null||!sailor.IsAlive())return;
         Vector3 position=root.localPosition;Quaternion rotation=root.localRotation;
         sitting.SampleAnimation(root.gameObject,Mathf.Min(.15f,sitting.length*.25f));

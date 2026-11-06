@@ -21,6 +21,11 @@ public static class NavalHoldSafety
     {return Math.Max(8f,Math.Min(22f,exitSeconds+4f));}
     public static bool MustEscape(bool headUnder,bool sinking,float air,float exitSeconds)
     {return sinking||headUnder&&air<=AirReserve(exitSeconds);}
+    public static bool CanFinishPatch(float air,float exitSeconds,float remaining)
+    {
+        // Spend only the contingency buffer once hands are already on the patch.
+        return remaining>0f&&remaining<=4f&&air>Math.Max(8f,AirReserve(exitSeconds)-4f)+remaining;
+    }
     public static bool CanResume(bool headUnder,bool sinking,float air,float drySeconds,bool stableFloor)
     {return !headUnder&&!sinking&&air>=NavalBreathClock.Capacity-1f&&drySeconds>=.75f&&stableFloor;}
 }

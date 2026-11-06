@@ -225,11 +225,30 @@ public sealed partial class NavalSteamPlant : MonoBehaviour
         // the visible hull as an exterior beam.
         PropellerPart("Ironclad propeller shaft",propeller,new Vector3(0,0,.22f),new Vector3(.16f,.16f,.42f),Quaternion.identity,iron);
     }
-    private static float Integrity(List<NavalHullVoxel> cells)
+    private struct IntegritySample
     {
-        if(cells.Count==0)return 0f;int intact=0;
+        public int Count;
+        public float Value;
+    }
+    private readonly Dictionary<List<NavalHullVoxel>,IntegritySample> integrityCache =
+        new Dictionary<List<NavalHullVoxel>,IntegritySample>();
+    private int integrityRevision = -1;
+
+    private float Integrity(List<NavalHullVoxel> cells)
+    {
+        if(cells.Count==0)return 0f;
+        if(integrityRevision!=hull.Revision)
+        {
+            integrityCache.Clear();
+            integrityRevision=hull.Revision;
+        }
+        IntegritySample sample;
+        if(integrityCache.TryGetValue(cells,out sample)&&sample.Count==cells.Count)return sample.Value;
+        int intact=0;
         foreach(NavalHullVoxel cell in cells)if(cell!=null&&!cell.Missing&&!cell.Detached)intact++;
-        return intact/(float)cells.Count;
+        sample=new IntegritySample{Count=cells.Count,Value=intact/(float)cells.Count};
+        integrityCache[cells]=sample;
+        return sample.Value;
     }
     public float Step(float dt,float command,bool engineer,Vector3 shipVelocity)
     {

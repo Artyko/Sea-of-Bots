@@ -461,6 +461,10 @@ public class NavalShipVisuals : MonoBehaviour,INavalPropulsion
     public void MarkRigDirty(){rigDirty=true;}
     public void RefreshRig()
     {
+        using(NavalPerformance.Measure(NavalPerfArea.RigRefresh)) RefreshRigMeasured();
+    }
+    private void RefreshRigMeasured()
+    {
         foreach(NavalShipVisuals rig in secondaryRigs)rig.RefreshRig();
         if(!rigDirty||supportGraph==null)return;
         using(NavalPerformance.Measure(NavalPerfArea.RigSupport))

@@ -9,6 +9,7 @@ public partial class NavalCrewController
     private int[] roles,assigned;
     private NavalBoarder[] boarders;
     private NavalDeckDefense defense;
+    private NavalCrewPassage passage;
     private Transform cachedTarget;
     private NavalRamDamage cachedTargetDamage;
     private int emergencyGunner=-1;
@@ -33,10 +34,6 @@ public partial class NavalCrewController
     private int MainBatteryCrewSlot(int i)
     {
         if(hull==null||!hull.Definition.SteamPowered||crew.Length<2)return -1;
-        // A disabled mounting is a maintenance job, not a chair assignment.
-        // Releasing both tracked hands lets one fetch parts and repair the gun;
-        // they are recalled automatically once it is functional again.
-        if(stations!=null&&stations.HasMainBattery&&!NavalMainBatteryCrewPolicy.MansMount(stations.MainBatteryFunctional))return -1;
         for(int slot=0;slot<mainBatteryCrew.Length;slot++)if(mainBatteryCrew[slot]==i)
         {if(slot>=mainBatteryCrew.Length-mainBatteryHandsReleased||!stations.MainBatterySlotFunctional(slot))return -1;return slot;}
         return -1;
@@ -80,27 +77,69 @@ public partial class NavalCrewController
         }
     }
     public string Role(int i)
-    {if(roles[i]>=300&&roles[i]<302)return "Машинист"+(workers[i].Busy?": "+workers[i].Status:"");if(roles[i]>=200&&roles[i]<204)return "Торпедист "+(roles[i]-199)+(workers[i].Busy?": "+workers[i].Status:"");int main=MainBatteryCrewSlot(i);return main>=0?(hull.Definition.CapitalShip?"Turret "+NavalCapitalLayout.Name(main)+": "+workers[i].CapitalAccessStatus:main==0?"Main battery: breech":"Main battery: trainer"):workers[i]!=null&&workers[i].Rescuing?workers[i].RescueStatus:boarders[i]!=null&&boarders[i].Busy?boarders[i].Status:defense!=null&&defense.Guard==i?"Defending deck":workers[i]!=null&&workers[i].DeliveringAmmo?(workers[i].CarriedAmmo>0?(hull.Definition.RifledWeapons?"Carrying shells":"Carrying cannonballs"):(hull.Definition.RifledWeapons?"Going to shell stock":"Going to cannonball stock")):workers[i]!=null&&workers[i].Busy?workers[i].Status:reliefHelmsman==i?"Helmsman: relief gunner":roles[i]==0?(workers[i].FinalAttackDuty?"Last attack: ramming":"Helmsman"):roles[i]>0&&roles[i]<=stations.GunCount?"Gunner "+roles[i]:workers[i]!=null&&workers[i].FinalAttackDuty?"Last attack: boarding":"Standby";}
+    {if(roles[i]>=400&&roles[i]<404)return "Зенитчик "+(roles[i]-399)+(workers[i].Busy?": "+workers[i].Status:"");if(roles[i]>=300&&roles[i]<302)return "Машинист"+(workers[i].Busy?": "+workers[i].Status:"");if(roles[i]>=200&&roles[i]<204)return "Торпедист "+(roles[i]-199)+(workers[i].Busy?": "+workers[i].Status:"");int main=MainBatteryCrewSlot(i);return main>=0?(hull.Definition.CapitalShip?"Turret "+NavalCapitalLayout.Name(main)+": "+workers[i].CapitalAccessStatus:main==0?"Main battery: breech":"Main battery: trainer"):workers[i]!=null&&workers[i].Rescuing?workers[i].RescueStatus:boarders[i]!=null&&boarders[i].Busy?boarders[i].Status:defense!=null&&defense.Guard==i?"Defending deck":workers[i]!=null&&workers[i].DeliveringAmmo?(workers[i].CarriedAmmo>0?(hull.Definition.RifledWeapons?"Carrying shells":"Carrying cannonballs"):(hull.Definition.RifledWeapons?"Going to shell stock":"Going to cannonball stock")):workers[i]!=null&&workers[i].Busy?workers[i].Status:reliefHelmsman==i?"Helmsman: relief gunner":roles[i]==0?(workers[i].FinalAttackDuty?"Last attack: ramming":"Helmsman"):roles[i]>0&&roles[i]<=stations.GunCount?"Gunner "+roles[i]:workers[i]!=null&&workers[i].FinalAttackDuty?"Last attack: boarding":"Standby";}
     public void Initialize(NavalHull ship,NavalStations controls,Character[] sailors,NavalRepairSailor[] repair)
     {
-        hull=ship;stations=controls;crew=sailors;workers=repair;
+        hull=ship;hull.CrewController=this;stations=controls;crew=sailors;workers=repair;
         hull.Root.gameObject.AddComponent<NavalCrewAccessAudit>().Initialize(hull,stations);
         roles=new int[crew.Length];assigned=new int[crew.Length];boarders=new NavalBoarder[crew.Length];
         for(int i=0;i<roles.Length;i++)roles[i]=-1;
         mainBatteryCrew=new int[hull.Definition.HeavyCrewCount];for(int slot=0;slot<mainBatteryCrew.Length;slot++)mainBatteryCrew[slot]=crew.Length-mainBatteryCrew.Length+slot;
         defense=new NavalDeckDefense(hull,crew,workers);
-        hull.Root.gameObject.AddComponent<NavalCrewPassage>().Initialize(hull,crew,workers);
+        passage=hull.Root.gameObject.AddComponent<NavalCrewPassage>();
+        passage.Initialize(hull,crew,workers);
     }
+    public bool ReceiveSurvivor(NavalHull origin,Character sailor,NavalRepairSailor worker,Transform parent,
+        out Character[] sailors,out NavalRepairSailor[] repairers)
+    {
+        sailors=crew;repairers=workers;
+        var old=origin!=null?origin.CrewController:null;
+        var frame=hull.Root.GetComponent<NavalStructure>();
+        if(old==null||old==this||hull.Sunk||frame==null)return false;
+        int oldSlot=System.Array.IndexOf(old.crew,sailor);
+        if(oldSlot<0)return false;
+        old.passage.RemoveSailor(oldSlot);
+        old.crew[oldSlot]=null;
+        old.workers[oldSlot]=null;
+        old.roles[oldSlot]=old.assigned[oldSlot]=-1;
+        old.boarders[oldSlot]=null;
+
+        int slot=crew.Length;
+        System.Array.Resize(ref crew,slot+1);
+        System.Array.Resize(ref workers,slot+1);
+        System.Array.Resize(ref roles,slot+1);
+        System.Array.Resize(ref assigned,slot+1);
+        System.Array.Resize(ref boarders,slot+1);
+        crew[slot]=sailor;workers[slot]=worker;
+        roles[slot]=assigned[slot]=-1;
+        boarders[slot]=sailor.GetComponent<NavalBoarder>();
+        if(boarders[slot]!=null)boarders[slot].JoinCrew(hull);
+        sailor.transform.SetParent(parent,true);
+        worker.JoinCrew(hull,frame);
+        defense.SetRoster(crew,workers);
+        passage.ResizeRoster(crew,workers);
+        sailors=crew;repairers=workers;
+        Debug.Log("[NavalPrototype] Survivor joined crew: ship="+hull.Root.name+" sailor="+sailor.GetInstanceID());
+        return true;
+    }
+
     private bool Free(int i)
     {return i>=0&&i<crew.Length&&MainBatteryCrewSlot(i)<0&&crew[i]!=null&&crew[i].IsAlive()&&workers[i]!=null&&!workers[i].CapitalReserved&&(!workers[i].RepairDuty||workers[i].ReturningWithoutWork)&&!workers[i].Stranded&&!workers[i].Defending&&!workers[i].Rescuing&&(boarders[i]==null||!boarders[i].Busy);}
     public void Tick(float dt,Transform enemy,Vector3 enemyVelocity,bool helmAllowed,float feetOffset)
     {
         using(NavalPerformance.Measure(NavalPerfArea.Crew))
         {
-        for(int i=0;i<workers.Length;i++)if(workers[i]!=null){workers[i].StationDutyProtected=false;workers[i].CarrySupportedDeck();}
+        using(NavalPerformance.Measure(NavalPerfArea.CrewCarry))
+        {
+            Matrix4x4 toLocal=hull.Root.worldToLocalMatrix;
+            for(int i=0;i<workers.Length;i++)if(workers[i]!=null)
+            {workers[i].StationDutyProtected=false;workers[i].CarrySupportedDeck(toLocal);}
+        }
+        using(NavalPerformance.Measure(NavalPerfArea.CrewRescue))
         for(int i=0;i<crew.Length;i++)if(crew[i]!=null){NavalSailorRescue rescue=workers[i]!=null?workers[i].RescueComponent:crew[i].GetComponent<NavalSailorRescue>();if(rescue!=null)rescue.CheckForWater();}
         RecoveringOverboard=false;
         for(int i=0;i<workers.Length;i++)if(workers[i]!=null&&workers[i].RescueComponent!=null&&workers[i].RescueComponent.AwaitingHomeRescue)RecoveringOverboard=true;
+        RecoveringOverboard|=hull.RescuePickupUntil>Time.time;
         stations.RescueStop=RecoveringOverboard&&!hull.Sunk&&!hull.CombatCritical&&!hull.UrgentTrim;
         HasHelmsman=false;MannedGuns=0;Repairing=false;if(hull.Sunk){if(hull.Definition.CapitalShip){foreach(var worker in workers)if(worker!=null&&worker.CapitalReserved)worker.TickCapitalExit(stations,dt);stations.UpdateCapitalAccess(dt);}cannonBattle.Reset();stations.CrewRepairRetreat=false;return;}
         for(int i=0;i<crew.Length;i++)if(crew[i]!=null&&workers[i]!=null)
@@ -110,8 +149,12 @@ public partial class NavalCrewController
         if(enemy==null){cachedTarget=null;cachedTargetDamage=null;}
         else if(cachedTarget!=enemy||cachedTargetDamage==null){cachedTarget=enemy;cachedTargetDamage=enemy.GetComponent<NavalRamDamage>();}
         NavalRamDamage targetShip=cachedTargetDamage;
-        bool combatThreat=enemy!=null&&(targetShip==null||!targetShip.Hull.Sunk);
-        bool fireOpportunity=combatThreat&&stations.FiringSideAtShip(enemy)>0;
+
+        if(targetShip!=null&&targetShip.Hull.Sunk)
+        {enemy=null;targetShip=null;}
+        bool combatThreat=enemy!=null;
+        int observedFiringSide=combatThreat?stations.FiringSideAtShip(enemy):0;
+        bool fireOpportunity=observedFiringSide>0;
         if(hull.Bilge!=null)hull.Bilge.UpdateCrewDemand(dt);
         cannonBattle.ObserveFire(dt,fireOpportunity);
         bool survivalFire=hull.Fire!=null&&hull.Fire.HasFire;
@@ -137,6 +180,8 @@ public partial class NavalCrewController
         stations.LastAttackApproach=lastAttack&&!boarding;
         for(int i=0;i<workers.Length;i++)if(workers[i]!=null)workers[i].SetFinalAttack(boarding);
         if(lastAttack){cannonBattle.Reset();stations.CrewRepairRetreat=false;skeleton.Reset();reliefHelmsman=-1;defense.Stop();FinalAttackTick(dt,enemy,helmAllowed,boarding);return;}
+        using(NavalPerformance.Measure(NavalPerfArea.CrewDispatch))
+        {
         bool urgentPump=hull.Bilge!=null&&(hull.UrgentTrim||hull.Bilge.BoilerEmergency);
         bool fireUrgent=hull.Fire!=null&&hull.Fire.Urgent;
         bool fireActive=hull.Fire!=null&&hull.Fire.HasFire;
@@ -164,12 +209,12 @@ public partial class NavalCrewController
         // dedicated branch below cannot clear their seated animation itself.
         for(int i=0;i<workers.Length;i++)if(workers[i]!=null&&MainBatteryCrewSlot(i)<0)workers[i].SetMainBatterySeated(false);
         RefreshMainBatteryCrew();
-        defense.Tick(roles,helmAllowed);
+        using(NavalPerformance.Measure(NavalPerfArea.CrewDefense))defense.Tick(roles,helmAllowed);
         if(emergencyGunner>=0&&(crew[emergencyGunner]==null||!crew[emergencyGunner].IsAlive()))emergencyGunner=-1;
         // Recall safely once critical danger clears; finish any already-loaded bucket.
         if(!hull.CombatCritical&&!urgentPump&&!fireActive&&emergencyGunner>=0&&enemy!=null)
         {
-            int sideToUse=(stations.FiringSideAtShip(enemy)!=0?stations.FiringSideAtShip(enemy):stations.CombatSideToward(enemy.position)),gun=-1;
+            int sideToUse=(observedFiringSide!=0?observedFiringSide:stations.CombatSideToward(enemy.position)),gun=-1;
             if(sideToUse>0)for(int station=sideToUse;station<=stations.GunCount;station+=2)
                 if(stations.IsFunctional(station)&&stations.PlayerStation!=station){gun=station;break;}
             if(gun>0&&workers[emergencyGunner]!=null&&workers[emergencyGunner].ReturnToGun(stations.Post(gun)))
@@ -201,13 +246,22 @@ public partial class NavalCrewController
         }
         AssignPlantHands(hull.CombatCritical||hull.Fire!=null&&hull.Fire.CriticalFire,fireUrgent||urgentPump);
         AssignTorpedoHands(hull.CombatCritical||hull.UrgentTrim||hull.Fire!=null&&hull.Fire.CriticalFire,enemy);
-        for(int i=0;i<workers.Length;i++)if(workers[i]!=null)workers[i].StationDutyProtected=assigned[i]>=200&&assigned[i]<204;
-        int firingSide=enemy!=null?stations.FiringSideAtShip(enemy):0;
+        AssignAirDefense(hull.CombatCritical||fireUrgent||urgentPump);
+        for(int i=0;i<workers.Length;i++)if(workers[i]!=null)workers[i].StationDutyProtected=
+            assigned[i]>=200&&assigned[i]<204||assigned[i]>=400&&assigned[i]<404;
+        int firingSide=combatThreat?observedFiringSide:(enemy!=null?stations.FiringSideAtShip(enemy):0);
         int side=enemy!=null?(firingSide!=0?firingSide:stations.CombatSideToward(enemy.position)):-1;
+        uint bearingKnown=0,bearingMask=0;
         if(!soloMaintenance&&side>0)for(int pass=0;pass<2;pass++)for(int station=hull.Definition.Destroyer?1:side;station<=stations.GunCount;station+=hull.Definition.Destroyer?1:2)
         {
             if(!stations.CrewGunAssignable(station))continue;
-            bool canFire=enemy!=null&&stations.CanBearOnShip(station,enemy);
+            uint bit=1u<<(station-1);
+            if((bearingKnown&bit)==0)
+            {
+                bearingKnown|=bit;
+                if(enemy!=null&&stations.CanBearOnShip(station,enemy))bearingMask|=bit;
+            }
+            bool canFire=(bearingMask&bit)!=0;
             if((pass==0)!=canFire)continue;
             int selected=-1;
             for(int i=0;i<crew.Length;i++)if(Free(i)&&assigned[i]<0&&roles[i]==station){selected=i;break;}
@@ -260,9 +314,10 @@ public partial class NavalCrewController
                 assigned[i]=-1;spare++;assignedGuns--;
             }
         CoordinateSupport();CoordinateSails();
+        }
         for(int i=0;i<crew.Length;i++)if(workers[i]!=null)
         {
-            if(TickPlantHand(i,dt)||TickTorpedoHand(i,dt,enemy,enemyVelocity))continue;
+            if(TickPlantHand(i,dt)||TickTorpedoHand(i,dt,enemy,enemyVelocity)||TickAirDefenseHand(i,dt))continue;
             int mainSlot=MainBatteryCrewSlot(i);
             if(mainSlot>=0)
             {
@@ -279,11 +334,12 @@ public partial class NavalCrewController
             if(workers[i].CapitalReserved){workers[i].TickCapitalExit(stations,dt);continue;}
             // An unassigned hand costs no gun or helm station: allow useful parallel work.
             if(assigned[i]>=0){
-                workers[i].AssignFreeCombatPost(stations.Post(assigned[i]));
+                Vector3 assignedPost=stations.Post(assigned[i]);
+                workers[i].AssignFreeCombatPost(assignedPost);
                 // Retarget the existing helmsman before walking this tick, in both directions.
                 if(hull.Definition.Destroyer&&assigned[i]>0&&roles[i]==assigned[i])
-                    workers[i].FollowDestroyerGunPost(stations.Post(assigned[i]));
-                workers[i].SetPost(stations.Post(assigned[i]));
+                    workers[i].FollowDestroyerGunPost(assignedPost);
+                workers[i].SetPost(assignedPost);
             }
             workers[i].SpareMaintenance=assigned[i]<0&&!workers[i].Rescuing&&!workers[i].Assaulting&&!workers[i].Defending;
             workers[i].Tick(dt,Free(i)&&assigned[i]<0);
@@ -308,7 +364,7 @@ public partial class NavalCrewController
                 if(mainFacing.sqrMagnitude>.01f)crew[i].transform.rotation=Quaternion.LookRotation(mainFacing);
                 stations.SetHeavyCrewReady(mainSlot);mainCrewReady++;if(hull.Definition.CapitalShip)MannedGuns++;continue;
             }
-            if(assigned[i]>=200&&assigned[i]<204||assigned[i]>=300&&assigned[i]<302)continue;
+            if(assigned[i]>=200&&assigned[i]<204||assigned[i]>=300&&assigned[i]<302||assigned[i]>=400&&assigned[i]<404)continue;
             if(!Free(i))continue;
             roles[i]=assigned[i];
             Vector3 post=roles[i]>=0?stations.Post(roles[i]):NavalShipDefinition.StandbyPost(hull.Definition,i);

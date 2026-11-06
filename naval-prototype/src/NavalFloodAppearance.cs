@@ -85,7 +85,21 @@ public class NavalFloodAppearance : MonoBehaviour
     }
     private void LateUpdate()
     {
+        using(NavalPerformance.Measure(NavalPerfArea.FloodVisualLate)) LateUpdateMeasured();
+    }
+    private void LateUpdateMeasured()
+    {
         if(ocean==null||material==null)return;
+        if(hull.SimulationRetired)
+        {
+            renderer.enabled=false;
+            hull.FloodEffectsHidden=true;
+            if(!hidden)foreach(var cell in hull.GetDamagedVoxels())
+                if(cell.Stream!=null)cell.Stream.gameObject.SetActive(false);
+            hidden=true;
+            enabled=false;
+            return;
+        }
         float clearance=Clearance(transform,ocean);
         float visibility=NavalFloodVisibilityMath.Visibility(clearance);
         if(Mathf.Abs(previous-visibility)>0.001f)

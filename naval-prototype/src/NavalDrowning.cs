@@ -25,6 +25,10 @@ public class NavalDrowning : MonoBehaviour
     {player=owner;waterLevel=level;}
     private void LateUpdate()
     {
+        using(NavalPerformance.Measure(NavalPerfArea.BreathLate)) LateUpdateMeasured();
+    }
+    private void LateUpdateMeasured()
+    {
         if(NavalTestWorld.Active==null||!NavalTestWorld.Active.SimulationActive)return;
         if(Time.time>=scanAt)
         {
@@ -39,7 +43,6 @@ public class NavalDrowning : MonoBehaviour
             if(robot==null||!robot.IsAlive()){removed.Add(robot);continue;}
             FirstPersonMover mover=robot as FirstPersonMover;
             Transform head=mover!=null?mover.GetHeadTransform():null;
-            if(head==null)continue;
             // Measure the top of the robot's head, independently of third-person camera position.
             Vector3 top=HeadTop(robot,head);
             if(entry.Value.Step(waterLevel(top)-top.y,Time.deltaTime))

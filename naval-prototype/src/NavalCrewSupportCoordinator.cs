@@ -8,7 +8,7 @@ public partial class NavalCrewController
     {
         bool changed=false;foreach(var worker in workers)if(worker!=null&&worker.ChoosingNextTask)changed=true;
         if(Time.time<supportReview&&!changed)return;supportReview=Time.time+.3f;
-        if(supportEligible==null){supportEligible=new bool[workers.Length];supportCosts=new float[workers.Length];}
+        if(supportEligible==null||supportEligible.Length!=workers.Length){supportEligible=new bool[workers.Length];supportCosts=new float[workers.Length];}
         foreach(var worker in workers)if(worker!=null){worker.PumpAssignment=false;worker.FireAssignment=false;worker.ClearAmmunitionFireAssignment();}
         var bilge=hull.Bilge;
         // Mark incumbent before allocating other work. Never borrow an operator mid-route.

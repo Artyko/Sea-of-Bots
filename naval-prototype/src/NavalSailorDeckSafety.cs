@@ -2,23 +2,26 @@
 public partial class NavalRepairSailor
 {
     private float nativeStepOffset=-1;
-    private Matrix4x4 lastDeckPose;
+    private Matrix4x4 lastDeckToLocal;
     private bool deckCarryReady;
-    private void InitializeDeckCarry(){lastDeckPose=boat.localToWorldMatrix;deckCarryReady=true;}
-    public void CarrySupportedDeck()
+    private void InitializeDeckCarry(){lastDeckToLocal=boat.worldToLocalMatrix;deckCarryReady=true;}
+    public void CarrySupportedDeck(Matrix4x4 current)
     {
-        Matrix4x4 current=boat.localToWorldMatrix;
         if(deckCarryReady&&!stranded&&!Rescuing&&!Defending&&!Assaulting&&robot!=null&&robot.IsAlive())
         {
+            bool correctedFootOffset=false;
             var body=Controller();
-            if(body!=null&&body.enabled&&body.bounds.size.y>.5f){
-                float actual=robot.transform.position.y-body.bounds.min.y;
+            Bounds bounds=body!=null&&body.enabled?body.bounds:default(Bounds);
+            if(bounds.size.y>.5f){
+                float actual=robot.transform.position.y-bounds.min.y;
                 if(actual>=0&&actual<4f&&Mathf.Abs(actual-footOffset)>.05f){
                     if(Mathf.Abs(actual-footOffset)>.15f)Debug.Log("[NavalPrototype] Crew foot offset corrected: sailor="+robot.GetInstanceID()+" old="+footOffset.ToString("F2")+" actual="+actual.ToString("F2"));
-                    footOffset=actual;feet=lastDeckPose.inverse.MultiplyPoint3x4(robot.transform.position-Vector3.up*footOffset);
+                    footOffset=actual;
+                    correctedFootOffset=true;
                 }
             }
-            Vector3 previousLocal=lastDeckPose.inverse.MultiplyPoint3x4(robot.transform.position-Vector3.up*footOffset);
+            Vector3 previousLocal=lastDeckToLocal.MultiplyPoint3x4(robot.transform.position-Vector3.up*footOffset);
+            if(correctedFootOffset)feet=previousLocal;
             // A CharacterController can be held for one frame by a rail while
             // the ship advances beneath it. Keep carrying a planned inboard
             // footing through that small contact error; genuine knockback and
@@ -29,7 +32,7 @@ public partial class NavalRepairSailor
             if((InsideWalkingDeck(previousLocal)||InsideWalkingDeck(feet)&&near&&heightClose)&&boat.TransformVector(previousLocal-feet).sqrMagnitude<1.44f)
             {feet=previousLocal;HoldPosition();}
         }
-        lastDeckPose=current;deckCarryReady=true;
+        lastDeckToLocal=current;deckCarryReady=true;
     }
     private bool InsideWalkingDeck(Vector3 point)
     {

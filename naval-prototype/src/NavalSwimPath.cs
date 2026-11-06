@@ -12,6 +12,21 @@ public static class NavalSwimPath
         if(workspace==null)workspace=new NavalSwimWorkspace();
         return workspace.Route(start,goal,out next);
     }
+    public static float RouteToLadder(NavalSwimPoint start,NavalSwimPoint ladder,float hullHalfWidth,float approachTolerance,out NavalSwimPoint next)
+    {
+        float sign=ladder.X<0f?-1f:1f;
+        // The rectangular detour is wider than some tapered hulls. Reach its
+        // exterior first, then close laterally at the actual ladder station.
+        float scale=Math.Max(.01f,hullHalfWidth)/3.45f;
+        float gateX=sign*Math.Max(Math.Abs(ladder.X),3.7f*scale);
+        if(start.X*sign>=Math.Abs(ladder.X)-approachTolerance&&Math.Abs(start.Z-ladder.Z)<=approachTolerance)
+        {next=ladder;return Distance(start,ladder);}
+        NavalSwimPoint gate=new NavalSwimPoint(gateX/scale,ladder.Z);
+        float distance=Route(new NavalSwimPoint(start.X/scale,start.Z),gate,out next);
+        next.X*=scale;
+        if(Distance(start,new NavalSwimPoint(gateX,ladder.Z))<=approachTolerance)next=ladder;
+        return distance*Math.Max(1f,scale)+Math.Abs(gateX-ladder.X);
+    }
     private static bool Clip(float p,float d,float min,float max,ref float first,ref float last)
     {
         if(Math.Abs(d)<0.00001f)return p>min&&p<max;

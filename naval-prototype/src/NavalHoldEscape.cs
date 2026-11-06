@@ -1,24 +1,27 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 
 public partial class NavalSailorRescue
 {
-    public string Status {get{return escapeShip!=null?"Escaping flooded hold":"Swimming to ladder";}}
-    private NavalHull escapeShip;
+    public string Status {get{return escapeShip!=null?"Escaping flooded hold":climbing?"Climbing rescue ladder":"Swimming to ladder";}}
+    private NavalHull escapeShip,exitedWreck;
     private Vector3 escapeFeet;
     private float escapeStuck,escapeRetry,escapeDrySince=-1f;
     private readonly List<NavalWalkPoint> escapeRoute=new List<NavalWalkPoint>();
     private NavalHull InteriorShip(Vector3 point)
     {
-        if(Inside(home,point))return home;
+        if(home!=exitedWreck&&Inside(home,point))return home;
         foreach(NavalSeaLadder ladder in NavalSeaLadder.All)
-            if(ladder!=null&&Inside(ladder.Hull,point))return ladder.Hull;
+            if(ladder!=null&&ladder.Hull!=exitedWreck&&Inside(ladder.Hull,point))return ladder.Hull;
         return null;
     }
     private bool Inside(NavalHull ship,Vector3 point)
     {
         if(ship==null||ship.Root==null)return false;
-        Vector3 local=ship.Root.InverseTransformPoint(point);
+        Vector3 local;
+        NavalShipPhysics physics=ship.PhysicsBody;
+        if(physics==null)local=ship.Root.InverseTransformPoint(point);
+        else if(!physics.TryWaterLocalPoint(point,out local))return false;
         return NavalHoldEscapeRules.InHold(local.x,local.y,local.z,ship.Floor,ship.Definition.WeatherDeck);
     }
     private void BeginHoldEscape(NavalHull ship)
@@ -83,14 +86,27 @@ public partial class NavalSailorRescue
             if(escapeStuck>3f){escapeStuck=0f;escapeRetry=Time.time+1f;PlanHoldEscape();}
             // A genuine fall through the hull switches back to sea rescue.
             if(!NavalHoldEscapeRules.InHold(escapeFeet.x,Mathf.Min(escapeFeet.y,0.59f),escapeFeet.z,escapeShip.Floor))
-            {escapeShip=null;escapeRoute.Clear();worker.BoardingWalk(false);scanAt=0f;}
+            {if(escapeShip.Sunk)exitedWreck=escapeShip;escapeShip=null;escapeRoute.Clear();worker.BoardingWalk(false);scanAt=0f;}
         }
     }
     private void FinishHoldEscape()
     {
-        NavalHull landed=escapeShip;escapeShip=null;escapeRoute.Clear();worker.BoardingWalk(false);worker.EndRescue();
+        NavalHull landed=escapeShip;escapeShip=null;escapeRoute.Clear();worker.BoardingWalk(false);
+        if(landed.Sunk)
+        {
+            exitedWreck=landed;scanAt=0f;escapeDrySince=-1f;
+            Debug.Log("[NavalPrototype] Sailor escaped wreck: sailor="+robot.GetInstanceID()+" ship="+landed.Root.name);
+            return;
+        }
+        worker.EndRescue();
         if(landed!=home)
         {
+            var world=NavalTestWorld.Active;
+            if(world!=null&&world.AcceptConvoySurvivor(home,landed,robot,worker))
+            {
+                home=landed;scanAt=0f;escapeDrySince=-1f;
+                return;
+            }
             NavalBoarder boarder=GetComponent<NavalBoarder>();
             if(boarder==null){boarder=gameObject.AddComponent<NavalBoarder>();boarder.Initialize(robot,worker,home);}
             boarder.AdoptShip(landed);

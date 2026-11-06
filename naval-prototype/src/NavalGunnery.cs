@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.Collections.Generic;
 
 public partial class NavalStations
@@ -39,7 +39,13 @@ public partial class NavalStations
         targetIndexCount=hull.Voxels.Count;deckTargets.Clear();shellTargets.Clear();mastTargets.Clear();rigTargets.Clear();
         foreach(NavalHullVoxel cell in hull.Voxels)
         {
-            if(cell.HydraulicShell)shellTargets.Add(cell);
+            cell.AimRootCell=cell.transform.parent==boat&&!cell.MovableEquipment&&!cell.ManagedRig;
+            if(cell.HydraulicShell)
+            {
+                shellTargets.Add(cell);
+                float z=cell.LocalCenter.z;
+                cell.AimWidthSlope=(hull.Definition.HullHalfWidth(z+.04f)-hull.Definition.HullHalfWidth(z-.04f))/.08f;
+            }
             if(!cell.ManagedRig&&!cell.RepairableEquipment&&!cell.MovableEquipment&&cell.transform.parent==boat&&
                 Mathf.Abs(cell.LocalCenter.y-hull.Definition.WeatherDeck)<.2f)deckTargets.Add(cell);
             if(cell.ManagedRig)rigTargets.Add(cell);
@@ -105,7 +111,7 @@ public partial class NavalStations
     private Vector3 FiringPlatformVelocity()
     {
         NavalTestWorld world=NavalTestWorld.Active;
-        return world==null?Vector3.zero:(EnemyControlled?world.EnemyVelocity:world.ShipVelocity);
+        return world==null?Vector3.zero:(world.ConvoyMission?world.FleetVelocity(boat):EnemyControlled?world.EnemyVelocity:world.ShipVelocity);
     }
     private bool ReachableLead(int gun,Vector3 point,Vector3 velocity,out Vector3 predicted)
     {
@@ -305,6 +311,58 @@ public partial class NavalStations
         }
         return selected!=null;
     }
+    private bool TargetInsideSearchRange(Transform target,Vector3 targetVelocity,float range)
+    {
+        var victim=ForShip(target);
+        if(victim==null)return true;
+        Vector3 delta=target.position-boat.position;
+        delta.y=0;
+        // The margin covers both hulls, fittings and relative movement
+        // during a shell's entire lifetime.
+        float margin=hull.Definition.HullLength+victim.hull.Definition.HullLength+30f;
+        margin+=(targetVelocity-FiringPlatformVelocity()).magnitude*18f;
+        float bound=range+margin;
+        return delta.sqrMagnitude<=bound*bound;
+    }
+
+    private sealed class AimRequest
+    {
+        public int LastFrame;
+        public bool Queued;
+    }
+    private readonly AimRequest[] aimRequests=new AimRequest[32];
+    private static readonly System.Collections.Generic.Queue<AimRequest> aimSearchQueue=
+        new System.Collections.Generic.Queue<AimRequest>();
+    private static NavalTestWorld aimSearchWorld;
+    private static int aimSearchFrame=-1,aimSearchCount;
+    private static long aimSearchTicks;
+    private static readonly long aimSearchBudget=System.Diagnostics.Stopwatch.Frequency*2/1000;
+
+    private bool AdmitAimSearch(int gun)
+    {
+        var world=NavalTestWorld.Active;
+        if(world==null||!world.ConvoyMission)return true;
+        if(!object.ReferenceEquals(aimSearchWorld,world))
+        {
+            while(aimSearchQueue.Count>0)aimSearchQueue.Dequeue().Queued=false;
+            aimSearchWorld=world;
+            aimSearchFrame=-1;
+        }
+        int frame=Time.frameCount;
+        if(aimSearchFrame!=frame){aimSearchFrame=frame;aimSearchCount=0;aimSearchTicks=0;}
+        var request=aimRequests[gun];
+        if(request==null)aimRequests[gun]=request=new AimRequest();
+        request.LastFrame=frame;
+        if(!request.Queued){request.Queued=true;aimSearchQueue.Enqueue(request);}
+        // Dead operators and abandoned targets must not block other ships.
+        while(aimSearchQueue.Peek().LastFrame<frame-1)aimSearchQueue.Dequeue().Queued=false;
+        if(aimSearchQueue.Peek()!=request||aimSearchCount>=4||
+            aimSearchCount>0&&aimSearchTicks>=aimSearchBudget)return false;
+        aimSearchQueue.Dequeue().Queued=false;
+        aimSearchCount++;
+        return true;
+    }
+
     private bool SelectAim(int gun,Transform target,Vector3 velocity)
     {
         NavalStations victim;if(!ships.TryGet(target,out victim)||victim==null)return false;
@@ -312,22 +370,28 @@ public partial class NavalStations
         System.Array.Clear(available,0,available.Length);System.Array.Clear(cells,0,cells.Length);
         bool hullVisible=HullVisible(gun,victim);
         bool belowWaterline=NavalGunneryMath.AimBelowWaterline(Random.value,hull.Definition.RifledWeapons);
+        bool exposedMechanism=false;
         for(int kind=0;kind<4;kind++)
         {
             if(kind==2||kind==0&&!hullVisible)continue;
             if(kind==0?!HullZone(gun,victim,velocity,false,belowWaterline,out cells[kind]):!Feature(gun,victim,kind,out cells[kind]))continue;
+            if(kind==1||kind==3)exposedMechanism=true;
             Vector3 predicted;
             available[kind]=ReachableLead(gun,cells[kind].transform.position,velocity,out predicted);
         }
         int chosen=NavalGunneryMath.Choose(Random.value,lastKind[gun],available);
         if(chosen<0&&HullZone(gun,victim,velocity,true,false,out cells[0])){chosen=0;belowWaterline=false;}
-        if(chosen<0&&!hullVisible&&OnlyRigVisible(gun,victim)&&RigFeature(gun,victim,velocity,out cells[2]))chosen=2;
+        if(chosen<0&&!hullVisible&&!exposedMechanism&&RigFeature(gun,victim,velocity,out cells[2]))chosen=2;
         if(chosen<0)return false;
         aimKind[gun]=chosen;aimBelowWaterline[gun]=chosen==0&&belowWaterline;aimCell[gun]=cells[chosen];aimShip[gun]=target;visibilityAt[gun]=0f;leadAt[gun]=0f;leadValid[gun]=false;
         // Draw once per shot, so aiming stays stable while the cannon reloads.
+        RefreshShotError(gun,target);
+        return true;
+    }
+    private void RefreshShotError(int gun,Transform target)
+    {
         float distance=Vector3.Distance(boat.position,target.position);
         shotError[gun]=Random.insideUnitCircle*(Mathf.Atan2(NavalGunneryMath.Spread(distance),Mathf.Max(1f,distance))*Mathf.Rad2Deg);
-        return true;
     }
     private readonly string[] gunStatus=new string[32];
     public string GunAttackDiagnostics {get{var s=new System.Text.StringBuilder();for(int i=0;i<GunCount;i++)s.Append(" gun=").Append(i+1).Append(" status=").Append(gunStatus[i]??"no operator at post").Append(" yaw=").Append(yaw[i].ToString("F1")).Append(" pitch=").Append(pitch[i].ToString("F1"));return s.ToString();}}
@@ -341,7 +405,18 @@ public partial class NavalStations
         {
             aimShip[gun]=null;
             if(Time.time<aimRetry[gun])return false;
-            if(!SelectAim(gun,target,velocity))
+            if(!TargetInsideSearchRange(target,velocity,hull.Definition.GunRange))
+            {
+                gunStatus[gun]="target outside search range";
+                aimRetry[gun]=Time.time+.35f;
+                return false;
+            }
+            if(!AdmitAimSearch(gun)){gunStatus[gun]="waiting for aim search";return false;}
+            long started=System.Diagnostics.Stopwatch.GetTimestamp();
+            bool found;
+            using(NavalPerformance.Measure(NavalPerfArea.GunTargetSearch))found=SelectAim(gun,target,velocity);
+            aimSearchTicks+=System.Diagnostics.Stopwatch.GetTimestamp()-started;
+            if(!found)
             {
                 gunStatus[gun]="no visible reachable target";
                 aimRetry[gun]=Time.time+.35f;
@@ -363,7 +438,7 @@ public partial class NavalStations
         gunStatus[gun]="aiming / reloading / obstructed";
         if(!AimAndFire(gun,point,dt,sailor))return false;
         gunStatus[gun]="fire attempt";
-        lastKind[gun]=aimKind[gun];aimShip[gun]=null;aimRetry[gun]=0f;leadAt[gun]=0f;leadValid[gun]=false;
+        lastKind[gun]=aimKind[gun];RefreshShotError(gun,target);
         Debug.Log("[NavalPrototype] AI target: "+(lastKind[gun]==0&&aimBelowWaterline[gun]?"below waterline":targetNames[lastKind[gun]]));
         return true;
             }

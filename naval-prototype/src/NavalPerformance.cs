@@ -1,7 +1,7 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using UnityEngine;
 
-public enum NavalPerfArea {Sail,RigSupport,Ocean,HullDamage,Chunks,Structure,Crew,Gunnery,PhysicsSync,Flood,Effects,RigRendering,RigContact,HullPose,SupportQuery,ColliderChunks,Shore,ShoreNavigation,ShoreMotion,Count}
+public enum NavalPerfArea {Sail,RigSupport,Ocean,HullDamage,Chunks,Structure,Crew,Gunnery,PhysicsSync,Flood,Effects,RigRendering,RigContact,HullPose,SupportQuery,ColliderChunks,Shore,ShoreNavigation,ShoreMotion,CrewCarry,CrewRescue,CrewDispatch,CrewPlan,CrewRoute,CrewMotion,CrewAnchor,CrewPassage,CrewWorkerTick,CrewFooting,WaterQuery,GunTargetSearch,CrewGait,CrewSeatAnimation,EnemyLateTick,WorldLateTick,ConvoyCoordinator,RigRefresh,FloodVisualLate,FireLate,BreathLate,RescueLate,BoarderLate,PassageLate,FleetTarget,CrewRecruit,FleetHelm,FleetContact,GunRecoil,CharacterDiscovery,CrewDefense,CrewLeakSearch,CrewNextTask,AirRaid,AirDefense,Count}
 // Opt-in CPU sampling. Inclusive scopes may overlap; these numbers must not be summed.
 public static class NavalPerformance
 {
@@ -23,14 +23,26 @@ public static class NavalPerformance
     private static bool autoSample;
     private static int autoFrames;
     private static readonly long[] autoTotals=new long[(int)NavalPerfArea.Count],autoMaxima=new long[(int)NavalPerfArea.Count];
-    public static void AutoFrame(bool active){autoSample=active&&!Enabled&&Time.frameCount%60==0;if(autoSample)autoFrames++;}
+    private static readonly long[] frameTotals=new long[(int)NavalPerfArea.Count],framePeaks=new long[(int)NavalPerfArea.Count];
+    private static void FinishSample()
+    {
+        if(!autoSample)return;
+        for(int i=0;i<frameTotals.Length;i++)
+        {
+            if(frameTotals[i]>framePeaks[i])framePeaks[i]=frameTotals[i];
+            frameTotals[i]=0;
+        }
+        autoSample=false;
+    }
+    public static void AutoFrame(bool active){FinishSample();autoSample=active&&!Enabled&&Time.frameCount%(NavalTestWorld.Active!=null&&NavalTestWorld.Active.ConvoyMission?10:60)==0;if(autoSample)autoFrames++;}
     public static string AutoReport()
     {
+        FinishSample();
         var report=new System.Text.StringBuilder();report.Append("sampled=").Append(autoFrames);
         if(autoFrames>0){double factor=1000.0/Stopwatch.Frequency;
-            for(int i=0;i<autoTotals.Length;i++)if(autoTotals[i]>0)report.Append(" | ").Append((NavalPerfArea)i).Append("=").Append((autoTotals[i]*factor/autoFrames).ToString("F2")).Append("/").Append((autoMaxima[i]*factor).ToString("F2"));
+            for(int i=0;i<autoTotals.Length;i++)if(autoTotals[i]>0)report.Append(" | ").Append((NavalPerfArea)i).Append("=").Append((autoTotals[i]*factor/autoFrames).ToString("F2")).Append("/").Append((autoMaxima[i]*factor).ToString("F2")).Append("/").Append((framePeaks[i]*factor).ToString("F2"));
         }
-        autoFrames=0;System.Array.Clear(autoTotals,0,autoTotals.Length);System.Array.Clear(autoMaxima,0,autoMaxima.Length);return report.ToString();
+        autoFrames=0;System.Array.Clear(framePeaks,0,framePeaks.Length);System.Array.Clear(autoTotals,0,autoTotals.Length);System.Array.Clear(autoMaxima,0,autoMaxima.Length);return report.ToString();
     }
     private static readonly long[] totals=new long[(int)NavalPerfArea.Count],maxima=new long[(int)NavalPerfArea.Count];
     private static readonly int[] calls=new int[(int)NavalPerfArea.Count];
@@ -45,7 +57,7 @@ public static class NavalPerformance
         private readonly bool automatic;
         public Scope(NavalPerfArea value){area=(int)value;automatic=!Enabled&&autoSample;start=Enabled||automatic?Stopwatch.GetTimestamp():0;}
         public void Dispose(){if(start==0)return;long ticks=Stopwatch.GetTimestamp()-start;
-            if(automatic){autoTotals[area]+=ticks;if(ticks>autoMaxima[area])autoMaxima[area]=ticks;}
+            if(automatic){frameTotals[area]+=ticks;autoTotals[area]+=ticks;if(ticks>autoMaxima[area])autoMaxima[area]=ticks;}
             else{totals[area]+=ticks;calls[area]++;if(ticks>maxima[area])maxima[area]=ticks;}
         }
     }

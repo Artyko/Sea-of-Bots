@@ -8,8 +8,8 @@ public static class NavalPhysicsQueries
     private struct LocalMemo {public NavalHull Hull;public int X,Y,Z,Revision;}
     private struct MovingMemo {public NavalHull Hull;public int X,Y,Z,DX,DY,DZ,Radius,Distance,Revision;}
     private struct RegisteredHull {public Transform Root;public NavalHull Hull;}
-    private static readonly LocalMemo[] localMemo=new LocalMemo[512];
-    private static readonly MovingMemo[] movingMemo=new MovingMemo[256];
+    private static readonly LocalMemo[] localMemo=new LocalMemo[4096];
+    private static readonly MovingMemo[] movingMemo=new MovingMemo[1024];
     private static readonly RegisteredHull[] hulls=new RegisteredHull[8];
     private static int localHits,localLive,riderHits,riderLive;
     private static int Q(float value,float scale){return Mathf.RoundToInt(value*scale);}
@@ -17,6 +17,8 @@ public static class NavalPhysicsQueries
     {unchecked{return (hull.GetHashCode()*486187739^x*73856093^y*19349663^z*83492791)&(localMemo.Length-1);}}
     private static int MovingSlot(NavalHull hull,int x,int y,int z,int dx,int dy,int dz,int radius,int distance)
     {unchecked{return (hull.GetHashCode()*486187739^x*73856093^y*19349663^z*83492791^dx*31^dy*131^dz*521^radius*2053^distance*8191)&(movingMemo.Length-1);}}
+    public static int HullSlotCount {get{return hulls.Length;}}
+    public static NavalHull HullAtSlot(int slot){return hulls[slot].Hull;}
     public static void Register(NavalHull hull)
     {
         if(hull==null||hull.Root==null)return;
@@ -33,22 +35,32 @@ public static class NavalPhysicsQueries
     {for(int i=0;i<hulls.Length;i++)if(hulls[i].Root==root)return hulls[i].Hull;return null;}
     private static bool StaticDeckHit(RaycastHit hit,NavalHull hull)
     {
-        NavalHullVoxel cell=hit.collider!=null?NavalVoxelHit.Resolve(hit.collider,hit.point):null;
+        if(hit.collider==null)return false;
+        NavalMergedCollider merged;
+        if(hit.collider.TryGetComponent<NavalMergedCollider>(out merged))return merged.IsFixedSupportFor(hull);
+        NavalHullVoxel cell=NavalVoxelHit.Resolve(hit.collider,hit.point);
         return cell!=null&&cell.Owner==hull&&!cell.MovableEquipment&&!cell.ManagedRig&&!cell.Detached&&!cell.Missing;
     }
     public static bool HasLocalSupport(NavalHull hull,Vector3 point)
     {
+        bool stable;
+        return HasLocalSupport(hull,point,out stable);
+    }
+    public static bool HasLocalSupport(NavalHull hull,Vector3 point,out bool stable)
+    {
+        stable=false;
         if(hull==null||hull.Root==null)return false;
         int x=Q(point.x,50f),y=Q(point.y,50f),z=Q(point.z,50f);
         int slot=LocalSlot(hull,x,y,z);LocalMemo cached=localMemo[slot];
-        if(cached.Hull==hull&&cached.Revision==hull.Revision&&cached.X==x&&cached.Y==y&&cached.Z==z){localHits++;return true;}
+        if(cached.Hull==hull&&cached.Revision==hull.Revision&&cached.X==x&&cached.Y==y&&cached.Z==z){localHits++;stable=true;return true;}
         localLive++;
         Transform ship=hull.Root;RaycastHit ray;Vector3 world=ship.TransformPoint(point);
         bool found=Physics.Raycast(world+ship.up*.25f,-ship.up,out ray,.55f,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore)&&
             ray.collider.transform.IsChildOf(ship)&&Mathf.Abs(ship.InverseTransformPoint(ray.point).y-point.y)*hull.WorldScale<.3f;
         // Cache only stable positive deck hits. Misses and moving equipment
         // remain live queries; hull damage invalidates via Revision.
-        if(found&&StaticDeckHit(ray,hull))
+        stable=found&&StaticDeckHit(ray,hull);
+        if(stable)
         localMemo[slot]=new LocalMemo{Hull=hull,X=x,Y=y,Z=z,Revision=hull.Revision};
         return found;
     }

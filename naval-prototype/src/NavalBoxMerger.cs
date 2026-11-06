@@ -43,7 +43,7 @@ public sealed class NavalBoxMerger
     private static readonly Order[] orders={new Order(0),new Order(1),new Order(2)};
     private readonly List<NavalMergedBox> pool=new List<NavalMergedBox>();
     private List<NavalMergedBox> working=new List<NavalMergedBox>(),scratch=new List<NavalMergedBox>();
-    public List<NavalMergedBox> Build(List<NavalSolidBox> source)
+    public List<NavalMergedBox> Build(List<NavalSolidBox> source,int firstAxis=0)
     {
         working.Clear();scratch.Clear();
         for(int i=0;i<source.Count;i++)
@@ -57,8 +57,9 @@ public sealed class NavalBoxMerger
         do
         {
             changed=false;
-            for(int axis=0;axis<3;axis++)
+            for(int pass=0;pass<3;pass++)
             {
+                int axis=(firstAxis+pass)%3;
                 working.Sort(orders[axis]);scratch.Clear();NavalMergedBox current=null;
                 foreach(NavalMergedBox next in working)
                 {

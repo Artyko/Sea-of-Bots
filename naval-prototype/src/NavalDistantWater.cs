@@ -19,15 +19,18 @@ public sealed class NavalDistantWater:MonoBehaviour {
  }
  public void Refresh(Vector3 focus,float time,float amplitude){
   if(mesh==null||Time.time<nextAt)return;nextAt=Time.time+1f/(NavalPerformance.LaptopMode?4f:8f);
-  float cx=Mathf.Floor((focus.x-water.transform.position.x)/40f)*40f,cz=Mathf.Floor((focus.z-water.transform.position.z)/40f)*40f;
-  for(int ring=0;ring<radii.Length;ring++)for(int i=0;i<Perimeter;i++){
-   int side=i/Edge;float t=(i%Edge)/(float)Edge*2f-1f,r=radii[ring];
+  Vector3 origin=water.transform.position;
+  float cx=Mathf.Floor((focus.x-origin.x)/40f)*40f,cz=Mathf.Floor((focus.z-origin.z)/40f)*40f;
+  for(int ring=0;ring<radii.Length;ring++){
+   float r=radii[ring],blend=Mathf.Clamp01((r-180f)/520f);
+   for(int i=0;i<Perimeter;i++){
+   int side=i/Edge;float t=(i%Edge)/(float)Edge*2f-1f;
    float x=side==0?t:side==1?1:side==2?-t:-1,z=side==0?-1:side==1?t:side==2?1:-t;
    x=cx+x*r;z=cz+z*r;
-   float detailed=NavalWaveField.Sample(x,z,amplitude,time);
-   float swell=amplitude*(Mathf.Sin(x*.012f+z*.008f-time*.65f)+.4f*Mathf.Sin(z*.018f-time*.8f));
-   float blend=Mathf.Clamp01((r-180f)/520f);
+   float detailed=blend<1f?NavalWaveField.Sample(x,z,amplitude,time):0f;
+   float swell=blend>0f?amplitude*(Mathf.Sin(x*.012f+z*.008f-time*.65f)+.4f*Mathf.Sin(z*.018f-time*.8f)):0f;
    points[ring*Perimeter+i]=new Vector3(x,Mathf.Lerp(detailed,swell,blend)-.04f,z);
+  }
   }
   mesh.vertices=points;mesh.bounds=new Bounds(new Vector3(cx,0,cz),new Vector3(8100,100+amplitude*8,8100));
  }

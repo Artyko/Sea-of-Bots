@@ -330,6 +330,10 @@ public sealed partial class NavalFireSystem : MonoBehaviour
     {if(shipFlames!=null)shipFlames.Clear(false);instantBlasts.Clear();foreach(var target in flames){target.Flame.Douse(Time.time);target.Claim=null;}flames.Clear();history.Clear();foreach(var target in powder){target.Powder.Reset();target.Claim=null;target.Collapsed=false;if(target.FuseSound!=null)target.FuseSound.Stop();}exposure.Clear();}
     private void LateUpdate()
     {
+        using(NavalPerformance.Measure(NavalPerfArea.FireLate)) LateUpdateMeasured();
+    }
+    private void LateUpdateMeasured()
+    {
         var world=NavalTestWorld.Active;if(world==null||!world.SimulationActive)return;
         // Never recurse into Hull.Damage while its shared hit buffers are being iterated.
         while(instantBlasts.Count>0){var target=instantBlasts.Dequeue();Explode(hull.Root.TransformPoint(target.PowderPoint),target);}
@@ -337,6 +341,7 @@ public sealed partial class NavalFireSystem : MonoBehaviour
     private void Update()
     {
         var world=NavalTestWorld.Active;if(world==null||!world.SimulationActive)return;
+        if(hull.SimulationRetired){HideUnderwaterFlames();enabled=false;return;}
         TickSmokeMotion();
         TickFireWater();
         HideUnderwaterFlames();

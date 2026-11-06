@@ -18,6 +18,15 @@ class SwimPathChecks
         Check(NavalSwimPath.Distance(current,goal)<0.01f,"Route reaches ladder");
         float close=NavalSwimPath.Route(new NavalSwimPoint(3.3f,3.8f),goal,out next);
         Check(close<float.MaxValue&&next.X>3.45f,"Swimmer near hull first clears safety margin");
+        var narrowLadder=new NavalSwimPoint(1.6f,3.8f);
+        current=new NavalSwimPoint(-5f,0f);
+        for(int i=0;i<12&&NavalSwimPath.Distance(current,narrowLadder)>.01f;i++)
+        {
+            float length=NavalSwimPath.RouteToLadder(current,narrowLadder,2.4f,.1f,out next);
+            Check(length<float.MaxValue,"Tapered hull ladder has a finite approach");
+            current=next;
+        }
+        Check(NavalSwimPath.Distance(current,narrowLadder)<.01f,"Swimmer reaches a ladder inside the detour rectangle");
         Check(!NavalSwimPath.Clear(new NavalSwimPoint(-5f,0f),new NavalSwimPoint(5f,0f)),"No swimming straight through ship");
         Console.WriteLine("PASS: nearest-side approach, hull detour, route completion and safety margin escape.");
     }

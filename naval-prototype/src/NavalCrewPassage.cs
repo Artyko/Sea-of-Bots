@@ -33,10 +33,18 @@ public sealed class NavalCrewPassage : MonoBehaviour
  }
  private void Pair(int a,int b,bool reviewTraffic)
  {
+  using(NavalPerformance.Measure(NavalPerfArea.CrewPassage))ReviewPair(a,b,reviewTraffic);
+ }
+
+ private void ReviewPair(int a,int b,bool reviewTraffic)
+ {
   var first=bodies[a];var second=bodies[b];if(first==null||second==null)return;
   bool valid=crew[a]!=null&&crew[b]!=null&&crew[a].IsAlive()&&crew[b].IsAlive();
   bool pass=false;
-  if(valid){float distance=Vector3.Distance(crew[a].transform.position,crew[b].transform.position);
+  if(valid){
+   float separation=(crew[a].transform.position-crew[b].transform.position).sqrMagnitude;
+   if(separation>=20.25f&&!ignored[a,b])return;
+   float distance=Mathf.Sqrt(separation);
    bool sameTeam=crew[a].IsPlayerTeam==crew[b].IsPlayerTeam;
    bool navigating=workers[a]!=null&&workers[a].Navigating||workers[b]!=null&&workers[b].Navigating;
    // In the destroyer's lower side aisles two full capsules cannot pass.
@@ -69,9 +77,17 @@ public sealed class NavalCrewPassage : MonoBehaviour
  private void ApplyPass(int a,int b,bool pass){
   if(crew[a]!=null&&(shapes[a]==null||Time.time>=shapeRefreshAt[a])){shapes[a]=crew[a].GetComponentsInChildren<Collider>(true);shapeRefreshAt[a]=Time.time+1f;}
   if(crew[b]!=null&&(shapes[b]==null||Time.time>=shapeRefreshAt[b])){shapes[b]=crew[b].GetComponentsInChildren<Collider>(true);shapeRefreshAt[b]=Time.time+1f;}
-  if(bodies[a]!=null&&bodies[b]!=null)Physics.IgnoreCollision(bodies[a],bodies[b],pass);
-  if(bodies[a]!=null&&shapes[b]!=null)foreach(var c in shapes[b])if(c!=null&&c!=bodies[a])Physics.IgnoreCollision(bodies[a],c,pass);
-  if(bodies[b]!=null&&shapes[a]!=null)foreach(var c in shapes[a])if(c!=null&&c!=bodies[b])Physics.IgnoreCollision(bodies[b],c,pass);
+  var first=bodies[a];var second=bodies[b];
+  SetPass(first,second,pass);
+  if(first!=null&&shapes[b]!=null)foreach(var c in shapes[b])if(c!=second)SetPass(first,c,pass);
+  if(second!=null&&shapes[a]!=null)foreach(var c in shapes[a])if(c!=first)SetPass(second,c,pass);
+ }
+ private static void SetPass(Collider first,Collider second,bool pass)
+ {
+  // Re-enabling a controller can clear the native flag. Check it rather than
+  // trusting the crew's desired state or rewriting a flag that already matches.
+  if(first!=null&&second!=null&&first!=second&&Physics.GetIgnoreCollision(first,second)!=pass)
+   Physics.IgnoreCollision(first,second,pass);
  }
  private void PrepareBody(CharacterController body)
  {
@@ -86,11 +102,35 @@ public sealed class NavalCrewPassage : MonoBehaviour
   }
  }
  private void LateUpdate()
+    {
+        using(NavalPerformance.Measure(NavalPerfArea.PassageLate)) LateUpdateMeasured();
+    }
+    private void LateUpdateMeasured()
  {
   if(crew==null)return;
   for(int i=0;i<bodies.Length;i++)if(bodies[i]==null&&workers[i]!=null){if(!object.ReferenceEquals(bodies[i],null))owners.Remove(bodies[i]);bodies[i]=workers[i].BodyController;if(bodies[i]!=null)owners[bodies[i]]=this;}
   if(Time.unscaledTime<reviewAt)return;reviewAt=Time.unscaledTime+.1f;
   for(int i=0;i<bodies.Length;i++)for(int j=i+1;j<bodies.Length;j++)Pair(i,j,true);
+ }
+ public void RemoveSailor(int index)
+ {
+  var body=bodies[index];
+  if(!object.ReferenceEquals(body,null))owners.Remove(body);
+  if(body!=null)for(int i=0;i<bodies.Length;i++)
+   if(i!=index&&ignored[index,i]&&bodies[i]!=null)ApplyPass(index,i,false);
+  for(int i=0;i<bodies.Length;i++)ignored[index,i]=ignored[i,index]=false;
+  bodies[index]=null;shapes[index]=null;shapeRefreshAt[index]=0f;
+ }
+ public void ResizeRoster(Character[] sailors,NavalRepairSailor[] repair)
+ {
+  int old=bodies.Length;
+  crew=sailors;workers=repair;
+  System.Array.Resize(ref bodies,sailors.Length);
+  System.Array.Resize(ref shapes,sailors.Length);
+  System.Array.Resize(ref shapeRefreshAt,sailors.Length);
+  var expanded=new bool[sailors.Length,sailors.Length];
+  for(int a=0;a<old;a++)for(int b=0;b<old;b++)expanded[a,b]=ignored[a,b];
+  ignored=expanded;
  }
  private void OnDestroy()
  {

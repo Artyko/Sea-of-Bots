@@ -8,5 +8,7 @@ class NovikChecks {
  points.Add(new NavalWalkPoint(0,s.HelmDeck,NavalShipDefinition.HelmZ(s)));points.Add(new NavalWalkPoint(3.6f/s.Scale,s.HoldFloor,-35.5f/s.Scale));
  int routes=0;foreach(var a in points)foreach(var b in points){var prior=a;foreach(var p in NavalSupplyRoutes.Plan(a,b,s)){Check(Math.Abs(p.Y-prior.Y)*s.Scale<.65f,"Route skips a deck height");Check(NavalCrewDeckSafety.Inside(p.X,p.Z,s,.8f),"Outside hull: "+p.X+","+p.Z);if(Math.Abs(p.Y-prior.Y)<.001&&!NavalDestroyerLayout.Stair(p,s)&&!NavalDestroyerLayout.Stair(prior,s))Check(NavalDestroyerNavigation.Clear(prior,p,s),"Blocked segment: "+prior.X+","+prior.Z+" -> "+p.X+","+p.Z+" y="+p.Y);prior=p;}routes++;}
  float time;Check(NavalTorpedoMath.Lead(1000,0,0,0,out time)&&Math.Abs(time-50)<.01,"Stationary lead");Check(NavalTorpedoMath.Lead(1000,0,0,5,out time)&&time>50,"Crossing lead");Check(!NavalTorpedoMath.Lead(1000,0,25,0,out time),"Unreachable receding target");Check(!NavalTorpedoMath.Armed(69)&&NavalTorpedoMath.Armed(70),"Safe run");Check(NavalTorpedoMath.Threat(200,0,-20,0,10,out time)&&Math.Abs(time-10)<.01,"Collision prediction");Check(!NavalTorpedoMath.Threat(200,100,-20,0,10,out time),"Passing torpedo");
+ Check(NavalTorpedoMath.SweepNearHull(-200,0,200,0,100),"Fast relative sweep crosses a hull between samples");
+ Check(!NavalTorpedoMath.SweepNearHull(-200,150,200,150,100),"Distant parallel sweep is culled");
  Console.WriteLine("PASS: Novik dimensions, crew, "+routes+" service routes; torpedo lead, safe run and threat prediction.");}
 }

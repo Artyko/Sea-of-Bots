@@ -9,7 +9,7 @@ $taskManifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'ModInfo.json'
 $taskSources = Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src') -Filter '*.cs' | ForEach-Object FullName
 # A response file avoids Windows' command-length limit as the mod grows.
 $taskResponse = Join-Path $taskOutput 'compile.rsp'
-$taskArguments = @('/nologo','/target:library','/nostdlib','/optimize+',('/out:"' + (Join-Path $taskOutput $taskManifest.MainDLLFileName) + '"'))
+$taskArguments = @('/nologo','/codepage:65001','/target:library','/nostdlib','/optimize+',('/out:"' + (Join-Path $taskOutput $taskManifest.MainDLLFileName) + '"'))
 $taskArguments += $taskReferences
 $taskArguments += $taskSources | ForEach-Object { '"' + $_ + '"' }
 try {

@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 // One tactical owner per tick. Shore/collision recovery remains the final authority.
 public sealed class NavalHelmDecision
 {
@@ -13,7 +13,7 @@ public sealed class NavalHelmDecision
  private float heading;
  private bool initialized,mainAssistKnown,mainAssistLogged;
  public void Reset(){mode=-1;loggedPass=0;observedShot=nextTelemetry=0;initialized=mainAssistKnown=mainAssistLogged=false;combat.Reset();stern.Reset();firePass.Reset();}
- public Vector3 Course(Transform own,NavalHull hull,NavalStations guns,Transform enemy,Vector3 enemyVelocity,float speed,float dt,bool retreat,bool targetRetreat,NavalRamDamage ram,ref float throttle)
+ public Vector3 Course(Transform own,NavalHull hull,NavalStations guns,Transform enemy,Vector3 enemyVelocity,float speed,float dt,bool retreat,bool targetRetreat,NavalRamDamage ram,ref float throttle,Vector3 convoyCourse=default(Vector3))
  {
   bool noArmedBattery=guns.PortCombatWorking+guns.StarboardCombatWorking==0&&!guns.MainBatteryCombatAvailable&&(guns.Torpedoes==null||!guns.Torpedoes.HasCombatPotential);
   int next=NavalHelmIntentMath.Mode(guns.RescueStop,guns.MustBoard,retreat||noArmedBattery&&!guns.MustBoard||guns.CrewRepairRetreat||guns.SteamPlant!=null&&guns.SteamPlant.PropulsionFloodEmergency||guns.AllGunsBroken&&guns.CanRestoreGun);
@@ -56,6 +56,7 @@ public sealed class NavalHelmDecision
     if(desired.sqrMagnitude<.001f)desired=combat.Course(own,hull,guns,enemy,enemyVelocity,speed,ref throttle,targetRetreat);
    }
   }
+  if(mode==0&&convoyCourse.sqrMagnitude>.01f){desired=convoyCourse;throttle=.8f;}
   Vector3 torpedoCourse;
   if(mode!=3&&torpedoAttack.Course(own,hull,guns,enemy,enemyVelocity,mode==1,ref throttle,out torpedoCourse))desired=torpedoCourse;
   if(mode!=3&&!torpedoAttack.HoldingLaunchCourse)desired=shellEvasion.Course(own,hull,guns,speed,desired);

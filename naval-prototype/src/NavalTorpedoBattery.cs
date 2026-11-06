@@ -41,7 +41,7 @@ public sealed class NavalTorpedoBattery:MonoBehaviour {
   m.Yaw=next;m.Pivot.localRotation=Quaternion.Euler(0,next,0);foreach(var cells in m.Tubes)foreach(var c in cells)hull.NoteCellMoved(c);return Mathf.Abs(Mathf.DeltaAngle(next,desired))<1;
  }
  private bool Corridor(Vector3 a,Vector3 target){Vector3 d=target-a;int count=NavalRayQueries.Ray(a,d.normalized,d.magnitude,PhysicsManager.GetEnvironmentLayerMask(),ref sight);if(count<0)return false;for(int n=0;n<count;n++){var hit=sight[n];if(hit.collider==null)continue;if(hit.collider.transform.IsChildOf(hull.Root)&&hit.distance<10)continue;var voxel=NavalVoxelHit.Resolve(hit.collider,hit.point);if(voxel==null||voxel.Owner==hull)return false; // target contact is allowed, intervening land is not
-   var world=NavalTestWorld.Active;bool enemy=world!=null&&(stations.EnemyControlled?voxel.Owner==world.PlayerHull:voxel.Owner.Root==world.EnemyBoat);if(!enemy)return false;
+   var world=NavalTestWorld.Active;var other=NavalStations.ForShip(voxel.Owner.Root);bool enemy=other!=null&&other.HostileToPlayer!=stations.HostileToPlayer;if(!enemy)return false;
   }return true;
  }
  public void AimAI(int i,Transform target,Vector3 targetVelocity,float dt,Character actor){
@@ -107,7 +107,7 @@ public sealed class NavalTorpedoBattery:MonoBehaviour {
    if(!atPost||m.PairOperator==null||!m.PairOperator.IsAlive()||hull.CombatCritical||Time.time>m.PairDeadline){ClearPair(m);continue;}
    Vector3 direction=m.PairDirection;
    if(m.PairTarget!=null){
-    Vector3 velocity=m.PairTarget==world.PlayerHull.Root?world.ShipVelocity:m.PairTarget==world.EnemyBoat?world.EnemyVelocity:m.PairVelocity;
+    Vector3 velocity=world.ConvoyMission?world.FleetVelocity(m.PairTarget):m.PairTarget==world.PlayerHull.Root?world.ShipVelocity:m.PairTarget==world.EnemyBoat?world.EnemyVelocity:m.PairVelocity;
     Vector3 delta=m.PairTarget.position-m.Pivot.position;float t;
     if(!NavalTorpedoMath.Lead(delta.x,delta.z,velocity.x,velocity.z,out t)){ClearPair(m);continue;}
     direction=m.PairTarget.position+velocity*t-m.Pivot.position;direction.y=0;direction=(Quaternion.Euler(0,m.PairSpread,0)*direction).normalized;

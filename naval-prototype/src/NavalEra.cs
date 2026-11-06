@@ -28,10 +28,12 @@ public interface INavalPropulsion
 public static class NavalEraMarker
 {
     public const string SailWater="NAVAL_OCEAN_SURFACE";
+    public const string ConvoyWater="NAVAL_CONVOY_OCEAN_SURFACE";
+    public const string AirRaidWater="NAVAL_CONVOY_AIR_RAID_SURFACE";
     public const string SteamWater="NAVAL_STEAM_OCEAN_SURFACE";
 
     public static bool IsWater(string name)
-    {return name==SailWater||name==SteamWater;}
+    {return name==SailWater||name==SteamWater||name==ConvoyWater||name==AirRaidWater;}
 
     public static bool TryResolve(IEnumerable<string> names,out NavalEra era,out string error)
     {
@@ -39,7 +41,7 @@ public static class NavalEraMarker
         if(names!=null)foreach(string name in names)
         {
             if(name==SailWater)sail++;
-            else if(name==SteamWater)steam++;
+            else if(name==SteamWater||name==ConvoyWater||name==AirRaidWater)steam++;
         }
         if(sail==1&&steam==0){era=NavalEra.Sail;error=null;return true;}
         if(steam==1&&sail==0){era=NavalEra.Steam;error=null;return true;}

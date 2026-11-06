@@ -7,6 +7,7 @@ public partial class NavalStations {
   for(int i=0;i<n;i++)if(mountObstacles[i]!=null&&!mountObstacles[i].transform.IsChildOf(guns[gun])){gunStatus[gun]="traverse blocked by "+mountObstacles[i].name+" local="+boat.InverseTransformPoint(mountObstacles[i].bounds.center);return false;}return true;
  }
  private void ApplyOpenGunAim(int gun,Quaternion rotation){if(appliedYaw==null){appliedYaw=new float[GunCount];appliedPitch=new float[GunCount];}
+  if(barrels[gun].localRotation.Equals(rotation))return;
   if(ClearOpenGun(gun,rotation)){barrels[gun].localRotation=rotation;appliedYaw[gun]=yaw[gun];appliedPitch[gun]=pitch[gun];NavalPhysicsQueries.Invalidate();}
   else {yaw[gun]=appliedYaw[gun];pitch[gun]=appliedPitch[gun];}
  }

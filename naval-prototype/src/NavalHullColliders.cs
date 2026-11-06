@@ -6,13 +6,14 @@ using UnityEngine;
 public sealed class NavalHullColliders : MonoBehaviour
 {
     private sealed class Source
-    {public NavalHullVoxel Cell;public BoxCollider Collider;public Vector3 Position,Scale,Center,Size;public bool Included;public int Layer;public PhysicsMaterial Material;public float ContactOffset;}
+    {public NavalHullVoxel Cell;public BoxCollider Collider;public Vector3 Position,Scale,Center,Size;public bool Included,Trigger;public NavalMergedCollider Proxy;public int Layer;public PhysicsMaterial Material;public float ContactOffset;}
     private sealed class Chunk
     {
         public readonly List<Source> Sources=new List<Source>();
         public readonly List<NavalSolidBox> Bounds=new List<NavalSolidBox>(),Input=new List<NavalSolidBox>();
         public readonly List<NavalMergedCollider> Proxies=new List<NavalMergedCollider>();
         public readonly NavalBoxMerger Merger=new NavalBoxMerger();
+        public Transform Parent;
         public bool Dirty,Merged;
         public int Active,Batched;
     }
@@ -26,34 +27,40 @@ public sealed class NavalHullColliders : MonoBehaviour
     public void Initialize(NavalHull owner)
     {
         hull=owner;all.Add(this);float chunkSize=NavalSpatialBatching.ColliderChunkSize(hull.Definition);bool centered=hull.Definition.SteamPowered;
+        bool fleet=NavalTestWorld.Active!=null&&NavalTestWorld.Active.ConvoyMission;
+        if(fleet)chunkSize=3f;
         Dictionary<string,Chunk> groups=new Dictionary<string,Chunk>();
         foreach(NavalHullVoxel cell in hull.Voxels)
         {
             BoxCollider collider=cell.PhysicsCollider as BoxCollider;
             Transform pose=cell.transform;
-            if(collider==null||!collider.enabled||collider.isTrigger||cell.ManagedRig||cell.MovableEquipment||
-                cell.CargoCollision!=null||cell.Missing||cell.Detached||pose.parent!=transform||!AxisAligned(pose)||!Positive(pose.localScale))continue;
+            Transform parent=pose.parent;
+            if(collider==null||!collider.enabled||(!fleet&&collider.isTrigger)||cell.ManagedRig||
+                cell.CargoCollision!=null||cell.Missing||cell.Detached||parent==null||
+                (!fleet&&(cell.MovableEquipment||parent!=transform))||
+                (parent!=transform&&!parent.IsChildOf(transform))||!AxisAligned(pose)||!Positive(pose.localScale))continue;
             Vector3 position=pose.localPosition,scale=pose.localScale;
             // Layer, physical material and contact offset must also agree. Built only at construction.
-            string key=NavalSpatialBatching.ColliderChunk(position.x,chunkSize,centered)+":"+NavalSpatialBatching.ColliderChunk(position.y,chunkSize,centered)+":"+NavalSpatialBatching.ColliderChunk(position.z,chunkSize,centered)+":"+
-                cell.gameObject.layer+":"+(collider.sharedMaterial!=null?collider.sharedMaterial.GetInstanceID():0)+":"+collider.contactOffset.ToString("R",System.Globalization.CultureInfo.InvariantCulture);
-            Chunk chunk;if(!groups.TryGetValue(key,out chunk)){chunk=new Chunk();groups.Add(key,chunk);chunks.Add(chunk);}
+            float size= fleet&&parent==transform&&!collider.isTrigger?4f:chunkSize;
+            string key=parent.GetInstanceID()+":"+NavalSpatialBatching.ColliderChunk(position.x,size,centered)+":"+NavalSpatialBatching.ColliderChunk(position.y,size,centered)+":"+NavalSpatialBatching.ColliderChunk(position.z,size,centered)+":"+
+                cell.gameObject.layer+":"+collider.isTrigger+":"+(collider.sharedMaterial!=null?collider.sharedMaterial.GetInstanceID():0)+":"+collider.contactOffset.ToString("R",System.Globalization.CultureInfo.InvariantCulture);
+            Chunk chunk;if(!groups.TryGetValue(key,out chunk)){chunk=new Chunk{Parent=parent};groups.Add(key,chunk);chunks.Add(chunk);}
             Vector3 center=position+Vector3.Scale(collider.center,scale),half=Vector3.Scale(collider.size,scale)*.5f;
             chunk.Bounds.Add(new NavalSolidBox{Id=chunk.Sources.Count,MinX=center.x-half.x,MaxX=center.x+half.x,MinY=center.y-half.y,MaxY=center.y+half.y,MinZ=center.z-half.z,MaxZ=center.z+half.z});
-            chunk.Sources.Add(new Source{Cell=cell,Collider=collider,Position=position,Scale=scale,Center=collider.center,Size=collider.size,Layer=cell.gameObject.layer,Material=collider.sharedMaterial,ContactOffset=collider.contactOffset});
-            cell.ColliderBatchOwner=this;cell.ColliderChunk=chunks.IndexOf(chunk);SourceCount++;
+            chunk.Sources.Add(new Source{Cell=cell,Collider=collider,Position=position,Scale=scale,Center=collider.center,Size=collider.size,Layer=cell.gameObject.layer,Trigger=collider.isTrigger,Material=collider.sharedMaterial,ContactOffset=collider.contactOffset});
+            cell.ColliderBatchOwner=this;cell.ColliderChunk=chunks.IndexOf(chunk);cell.ColliderSourceIndex=chunk.Sources.Count-1;SourceCount++;
         }
         foreach(Chunk chunk in chunks)Queue(chunk);
     }
     private static bool Positive(Vector3 p){return p.x>0f&&p.y>0f&&p.z>0f;}
     private static bool AxisAligned(Transform pose)
     {Quaternion q=pose.localRotation;return q.x==0f&&q.y==0f&&q.z==0f&&Mathf.Abs(q.w)==1f;}
-    private bool Eligible(Source source)
+    private bool Eligible(Source source,Transform parent)
     {
         NavalHullVoxel cell=source.Cell;Transform pose=cell.transform;
-        return !cell.Missing&&!cell.Detached&&pose.parent==transform&&AxisAligned(pose)&&
+        return !cell.Missing&&!cell.Detached&&!cell.NonPhysicalDecoration&&pose.parent==parent&&AxisAligned(pose)&&
             pose.localPosition.Equals(source.Position)&&pose.localScale.Equals(source.Scale)&&
-            source.Collider.center.Equals(source.Center)&&source.Collider.size.Equals(source.Size)&&!source.Collider.isTrigger&&
+            source.Collider.center.Equals(source.Center)&&source.Collider.size.Equals(source.Size)&&source.Collider.isTrigger==source.Trigger&&
             cell.gameObject.layer==source.Layer&&source.Collider.sharedMaterial==source.Material&&source.Collider.contactOffset==source.ContactOffset;
     }
     private void Queue(Chunk chunk){if(!chunk.Dirty){chunk.Dirty=true;dirty.Add(chunk);}}
@@ -61,14 +68,27 @@ public sealed class NavalHullColliders : MonoBehaviour
     {
         if(cell.ColliderChunk<0||cell.ColliderChunk>=chunks.Count)return;
         Chunk chunk=chunks[cell.ColliderChunk];
-        if(chunk.Merged)
+        int sourceIndex=cell.ColliderSourceIndex;
+        if(sourceIndex>=0&&sourceIndex<chunk.Sources.Count)
         {
-            // Never leave an old solid proxy over a freshly opened hole, even before the next Flush.
-            foreach(NavalMergedCollider proxy in chunk.Proxies)proxy.Shape.enabled=false;
-            ActiveCount-=chunk.Active;BatchedCount-=chunk.Batched;chunk.Active=chunk.Batched=0;chunk.Merged=false;
-            foreach(Source source in chunk.Sources)
+            var proxy=chunk.Sources[sourceIndex].Proxy;
+            if(proxy!=null&&proxy.Shape.enabled)
             {
-                source.Cell.ColliderBatched=false;source.Collider.enabled=!source.Cell.Missing;
+                // Restore only the original boxes covered by this proxy.
+                // Other exact shapes in the chunk remain valid until rebuilding.
+                proxy.Shape.enabled=false;
+                int count=proxy.Cells.Count;
+                chunk.Active--;ActiveCount--;
+                chunk.Batched-=count;BatchedCount-=count;
+                foreach(var member in proxy.Cells)
+                {
+                    Source source=chunk.Sources[member.ColliderSourceIndex];
+                    source.Proxy=null;
+                    source.Included=false;
+                    member.ColliderBatched=false;
+                    source.Collider.enabled=!member.Missing&&!member.NonPhysicalDecoration;
+                }
+                chunk.Merged=chunk.Active>0;
             }
         }
         Queue(chunk);
@@ -99,10 +119,12 @@ public sealed class NavalHullColliders : MonoBehaviour
     }
     private void Rebuild(Chunk chunk)
     {
+        ActiveCount-=chunk.Active;
+        BatchedCount-=chunk.Batched;
         chunk.Input.Clear();
-        for(int i=0;i<chunk.Sources.Count;i++)if(Eligible(chunk.Sources[i]))chunk.Input.Add(chunk.Bounds[i]);
+        for(int i=0;i<chunk.Sources.Count;i++)if(Eligible(chunk.Sources[i],chunk.Parent))chunk.Input.Add(chunk.Bounds[i]);
         List<NavalMergedBox> boxes=chunk.Merger.Build(chunk.Input);
-        foreach(Source source in chunk.Sources)source.Included=false;
+        foreach(Source source in chunk.Sources){source.Included=false;source.Proxy=null;}
         int proxyIndex=0,membersCount=0;
         foreach(NavalMergedBox merged in boxes)
         {
@@ -112,9 +134,9 @@ public sealed class NavalHullColliders : MonoBehaviour
             NavalMergedCollider proxy;
             if(i>=chunk.Proxies.Count)
             {
-                GameObject obj=new GameObject("NavalPrototype_HullCollisionBox");obj.transform.SetParent(transform,false);
+                GameObject obj=new GameObject("NavalPrototype_HullCollisionBox");obj.transform.SetParent(chunk.Parent,false);
                 obj.layer=chunk.Sources[0].Layer;
-                BoxCollider collider=obj.AddComponent<BoxCollider>();collider.enabled=false;
+                BoxCollider collider=obj.AddComponent<BoxCollider>();collider.enabled=false;collider.isTrigger=chunk.Sources[0].Trigger;
                 collider.sharedMaterial=chunk.Sources[0].Material;collider.contactOffset=chunk.Sources[0].ContactOffset;
                 proxy=obj.AddComponent<NavalMergedCollider>();proxy.Shape=collider;chunk.Proxies.Add(proxy);
             }
@@ -123,14 +145,20 @@ public sealed class NavalHullColliders : MonoBehaviour
             proxy.Shape.center=new Vector3((box.MinX+box.MaxX)*.5f,(box.MinY+box.MaxY)*.5f,(box.MinZ+box.MaxZ)*.5f);
             proxy.Shape.size=new Vector3(box.MaxX-box.MinX,box.MaxY-box.MinY,box.MaxZ-box.MinZ);
             proxy.Initialize(hull,chunk.Bounds,merged.Cells);
-            proxy.Cells.Clear();foreach(int member in merged.Cells)proxy.Cells.Add(chunk.Sources[member].Cell);
+            proxy.Cells.Clear();
+            foreach(int member in merged.Cells)
+            {
+                var source=chunk.Sources[member];
+                source.Proxy=proxy;
+                proxy.Cells.Add(source.Cell);
+            }
             proxy.Shape.enabled=true;
         }
         for(int i=proxyIndex;i<chunk.Proxies.Count;i++)chunk.Proxies[i].Shape.enabled=false;
         for(int i=0;i<chunk.Sources.Count;i++)
         {
             Source source=chunk.Sources[i];bool included=source.Included;
-            source.Cell.ColliderBatched=included;source.Collider.enabled=!source.Cell.Missing&&!included;
+            source.Cell.ColliderBatched=included;source.Collider.enabled=!source.Cell.Missing&&!source.Cell.NonPhysicalDecoration&&!included;
         }
         chunk.Active=proxyIndex;chunk.Batched=membersCount;ActiveCount+=chunk.Active;BatchedCount+=membersCount;chunk.Merged=proxyIndex>0;chunk.Dirty=false;
     }
@@ -153,10 +181,14 @@ public sealed class NavalMergedCollider : MonoBehaviour
     private List<NavalSolidBox> source;
     private List<int> members;
     public void Initialize(NavalHull owner,List<NavalSolidBox> bounds,List<int> indices){hull=owner;source=bounds;members=indices;}
+    public bool IsFixedSupportFor(NavalHull owner)
+    {
+        return hull==owner&&transform.parent==owner.Root&&Shape.enabled&&!Shape.isTrigger;
+    }
     public NavalHullVoxel Resolve(Vector3 point)
     {
         if(!Shape.enabled)return null;
-        Vector3 local=hull.Root.InverseTransformPoint(point);
+        Vector3 local=transform.InverseTransformPoint(point);
         int member=NavalBoxHitResolver.Resolve(source,members,local.x,local.y,local.z,.001f);
         if(member<0)return null;
         for(int i=0;i<members.Count;i++)if(members[i]==member)return Cells[i];

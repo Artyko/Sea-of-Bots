@@ -65,7 +65,7 @@ class BoxMergerChecks
         for(int scenario=0;scenario<100;scenario++)
         {
             input.Clear();foreach(NavalSolidBox box in full)if(random.NextDouble()>.35)input.Add(box);
-            Compare(full,input,merger.Build(input),random);
+            for(int axis=0;axis<3;axis++)Compare(full,input,merger.Build(input,axis),random);
         }
         input.Clear();Check(merger.Build(input).Count==0,"fully destroyed chunk has no collider");
         input.AddRange(full);Check(merger.Build(input).Count==1,"restore after complete destruction");
@@ -74,7 +74,7 @@ class BoxMergerChecks
         {
             full.Clear();input.Clear();
             for(int i=0;i<35;i++)full.Add(Box(i,random.Next(0,8)*.25f,random.Next(0,8)*.25f,random.Next(0,8)*.25f,random.Next(1,4)*.25f,random.Next(1,4)*.25f,random.Next(1,4)*.25f));
-            input.AddRange(full);Compare(full,input,merger.Build(input),random);
+            input.AddRange(full);for(int axis=0;axis<3;axis++)Compare(full,input,merger.Build(input,axis),random);
         }
         input.Clear();input.Add(Box(0,0,0,0,1,1,1));input.Add(Box(1,1.000001f,0,0,1,1,1));
         Check(merger.Build(input).Count==2,"even a tiny positive gap must not be bridged");

@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System.Reflection;
 [DefaultExecutionOrder(350)]
 public partial class NavalSailorRescue : MonoBehaviour
@@ -29,15 +29,16 @@ public partial class NavalSailorRescue : MonoBehaviour
         Vector3 foot=robot.transform.position-Vector3.up*worker.FootOffset;
         Vector3 local=home.Root.InverseTransformPoint(foot);
         float exit=HoldExitSeconds(home,local,false);
-        if(home.Definition.DeckCount>2&&local.y<.825f)exit+=6f;
-        return AirRemaining(world)>Mathf.Min(22f,exit)+Mathf.Max(0,travelSeconds)+workSeconds+2f;
+        return AirRemaining(world)>NavalHoldSafety.AirReserve(exit)+Mathf.Max(0,travelSeconds)+workSeconds+.5f;
     }
     private float HoldExitSeconds(NavalHull ship,Vector3 local,bool stairs)
     {
+        float extraDeck=ship.Definition.DeckCount>2&&local.y<.825f?
+            ship.Definition.UpperDeckOffset*ship.WorldScale/Mathf.Max(1f,worker.DeckWalkSpeed*.8f)+6f:0f;
         if(ship.Definition.Destroyer)
             return NavalHoldSafety.DestroyerExitSeconds(local.x,local.z,ship.WorldScale,
                 (ship.Definition.WeatherDeck-ship.Floor)*ship.WorldScale,worker.DeckWalkSpeed);
-        return NavalHoldSafety.ExitSeconds(local.x,local.y,local.z,ship.Floor,ship.WorldScale,worker.DeckWalkSpeed,stairs);
+        return extraDeck+NavalHoldSafety.ExitSeconds(local.x,local.y,local.z,ship.Floor,ship.WorldScale,worker.DeckWalkSpeed,stairs);
     }
     public void CheckForWater()
     {
@@ -48,11 +49,14 @@ public partial class NavalSailorRescue : MonoBehaviour
         NavalHull interior=InteriorShip(foot);
         if(interior!=null)
         {
+            bool headUnder=HeadUnder(world);
+            if(!interior.Sunk&&!headUnder)return;
             Vector3 local=interior.Root.InverseTransformPoint(foot);
             bool stairs=NavalWalkRoutes.InStairwell(local.x,local.y,local.z,interior.Definition.StairWidth*.5f+.175f,interior.Floor);
             float exitSeconds=HoldExitSeconds(interior,local,stairs);
-            if(interior.Definition.DeckCount>2&&local.y<.825f)exitSeconds+=interior.Definition.UpperDeckOffset*interior.WorldScale/Mathf.Max(1f,worker.DeckWalkSpeed*.8f)+6f;
-            if(!NavalHoldSafety.MustEscape(HeadUnder(world),interior.Sunk,AirRemaining(world),exitSeconds))return;
+            float air=AirRemaining(world);
+            if(!NavalHoldSafety.MustEscape(headUnder,interior.Sunk,air,exitSeconds)||
+                !interior.Sunk&&interior==home&&NavalHoldSafety.CanFinishPatch(air,exitSeconds,worker.ActiveHullPatchSeconds))return;
         }
         else
         {
@@ -81,27 +85,67 @@ public partial class NavalSailorRescue : MonoBehaviour
     private float AirRemaining(NavalTestWorld world)
     {if(drowning==null)drowning=world.GetComponent<NavalDrowning>();return drowning!=null?drowning.AirRemaining(robot):NavalBreathClock.Capacity;}
 
-    private bool Landing(NavalSeaLadder ladder,int which)
+    private Vector3 landingPoint;
+    private int landingRevision;
+    private static bool TryLanding(NavalSeaLadder ladder,int which,out Vector3 landing)
     {
-        Vector3 point=new Vector3(which==0?-2.2f:2.2f,ladder.Hull.Definition.WeatherDeck+.055f,ladder.Hull.Definition.LadderZ);RaycastHit hit;
-        Vector3 world=ladder.transform.TransformPoint(point);
-        return Physics.Raycast(world+ladder.transform.up*0.4f,-ladder.transform.up,out hit,0.8f,
-            PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore)&&hit.collider.transform.IsChildOf(ladder.transform)&&
-            Mathf.Abs(ladder.transform.InverseTransformPoint(hit.point).y-ladder.Hull.Definition.WeatherDeck)<0.2f;
+        var hull=ladder.Hull;
+        var ship=hull.Definition;
+        float scale=hull.WorldScale;
+        float sign=which==0?-1f:1f;
+        float deck=ship.WeatherDeck;
+        for(int i=0;i<3;i++)for(int along=0;along<3;along++)
+        {
+            float x=ladder.DeckX(which)-sign*i*.65f/scale;
+            float z=ship.LadderZ+(along==0?0f:along==1?.65f:-.65f)/scale;
+            Vector3 origin=ladder.transform.TransformPoint(new Vector3(x,ship.BoardingY+.35f/scale,z));
+            RaycastHit hit;
+            if(!Physics.Raycast(origin,-ladder.transform.up,out hit,(ship.BoardingY-deck)*scale+1.05f,
+                PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore))continue;
+            if(!hit.collider.transform.IsChildOf(ladder.transform))continue;
+            Vector3 local=ladder.transform.InverseTransformPoint(hit.point);
+            if(Mathf.Abs(local.y-deck)*scale>.45f)continue;
+            landing=local+Vector3.up*(.035f/scale);
+            return true;
+        }
+        landing=Vector3.zero;
+        return false;
+    }
+    private static float LadderRoute(NavalSeaLadder ladder,int side,Vector3 local,out NavalSwimPoint next)
+    {
+        var ship=ladder.Hull.Definition;
+        float sign=side==0?-1f:1f;
+        float width=ship.HullHalfWidth(0f)+.35f/ladder.Hull.WorldScale;
+        return NavalSwimPath.RouteToLadder(new NavalSwimPoint(local.x,local.z),
+            new NavalSwimPoint(ladder.OuterX(side)+sign*.45f/ladder.Hull.WorldScale,ship.LadderZ),
+            width,.55f/ladder.Hull.WorldScale,out next);
     }
     private void SelectLadder()
     {
         chosen=null;float nearest=float.MaxValue;
         foreach(NavalSeaLadder ladder in NavalSeaLadder.All)
         {
-            if(ladder==null)continue;Vector3 local=ladder.transform.InverseTransformPoint(robot.transform.position);
+            if(ladder==null||ladder.Hull.Sunk)continue;
+            var world=NavalTestWorld.Active;
+            if(world!=null&&world.ConvoyMission)
+            {
+                var controls=NavalStations.ForShip(ladder.Hull.Root);
+                if(controls==null||controls.HostileToPlayer==robot.IsPlayerTeam)continue;
+            }
+            Vector3 local=ladder.transform.InverseTransformPoint(robot.transform.position);
             for(int i=0;i<2;i++)
             {
-                if(!ladder.Usable(i)||!Landing(ladder,i))continue;
+                if(!ladder.Usable(i))continue;
+                float sign=i==0?-1f:1f,scale=ladder.Hull.WorldScale;
+                float dx=local.x-ladder.OuterX(i)-sign*.45f/scale;
+                float dz=local.z-ladder.Hull.Definition.LadderZ;
+                if((dx*dx+dz*dz)*scale*scale>=nearest*nearest)continue;
                 NavalSwimPoint next;
-                float distance=NavalSwimPath.Route(new NavalSwimPoint(local.x,local.z),new NavalSwimPoint(i==0?-3.7f:3.7f,ladder.Hull.Definition.LadderZ),out next);
+                float distance=LadderRoute(ladder,i,local,out next);
                 distance*=ladder.Hull.WorldScale;
-                if(distance<nearest){nearest=distance;chosen=ladder;side=i;}
+                Vector3 landing;
+                if(distance<nearest&&TryLanding(ladder,i,out landing))
+                {nearest=distance;chosen=ladder;side=i;landingPoint=landing;landingRevision=ladder.Hull.Revision;}
             }
         }
     }
@@ -112,6 +156,10 @@ public partial class NavalSailorRescue : MonoBehaviour
         robot.transform.position=position;if(enabled)controller.enabled=true;ZeroVelocity();
     }
     private void LateUpdate()
+    {
+        using(NavalPerformance.Measure(NavalPerfArea.RescueLate)) LateUpdateMeasured();
+    }
+    private void LateUpdateMeasured()
     {
         CheckForWater();NavalTestWorld world=NavalTestWorld.Active;
         if(!worker.Rescuing||robot==null||!robot.IsAlive()||world==null||!world.SimulationActive)return;
@@ -126,36 +174,51 @@ public partial class NavalSailorRescue : MonoBehaviour
         if(escapeShip!=null){EscapeHold(dt);return;}
         if(climbing)
         {
-            if(chosen==null||!chosen.Usable(side)||!Landing(chosen,side))
+            if(chosen==null||!chosen.Usable(side)||
+                chosen.Hull.Revision!=landingRevision&&!TryLanding(chosen,side,out landingPoint))
             {climbing=false;chosen=null;scanAt=0f;return;}
-            float sign=side==0?-1f:1f;
-            Vector3 target=stage==0?new Vector3(sign*3.7f,feet.y,chosen.Hull.Definition.LadderZ):stage==1?new Vector3(sign*3.7f,chosen.Hull.Definition.BoardingY,chosen.Hull.Definition.LadderZ):
-                stage==2?new Vector3(sign*2.2f,chosen.Hull.Definition.BoardingY,chosen.Hull.Definition.LadderZ):new Vector3(sign*2.2f,chosen.Hull.Definition.WeatherDeck+.035f,chosen.Hull.Definition.LadderZ);
-            feet=Vector3.MoveTowards(feet,target,1.3f*dt);Place(chosen.transform.TransformPoint(feet)+chosen.transform.up*worker.FootOffset);
+            landingRevision=chosen.Hull.Revision;
+            if(world.ConvoyMission)chosen.Hull.RescuePickupUntil=Time.time+1f;
+            float outside=chosen.OuterX(side)+(side==0?-.35f:.35f)/chosen.Hull.WorldScale;
+            Vector3 target=stage==0?new Vector3(outside,feet.y,chosen.Hull.Definition.LadderZ):stage==1?new Vector3(outside,chosen.Hull.Definition.BoardingY,chosen.Hull.Definition.LadderZ):
+                stage==2?new Vector3(landingPoint.x,chosen.Hull.Definition.BoardingY,landingPoint.z):landingPoint;
+            feet=Vector3.MoveTowards(feet,target,3.8f*dt/chosen.Hull.WorldScale);Place(chosen.transform.TransformPoint(feet)+chosen.transform.up*worker.FootOffset);
             if((feet-target).sqrMagnitude<0.0001f)
             {
                 if(stage<3){stage++;return;}
                 NavalHull landed=chosen.Hull;climbing=false;worker.EndRescue();
                 if(landed!=home)
                 {
-                    NavalBoarder boarder=Boarder;if(boarder==null){boarder=gameObject.AddComponent<NavalBoarder>();cachedBoarder=boarder;boarder.Initialize(robot,worker,home);}
-                    boarder.AdoptShip(landed);
+                    if(world.AcceptConvoySurvivor(home,landed,robot,worker))home=landed;
+                    else
+                    {
+                        NavalBoarder boarder=Boarder;if(boarder==null){boarder=gameObject.AddComponent<NavalBoarder>();cachedBoarder=boarder;boarder.Initialize(robot,worker,home);}
+                        boarder.AdoptShip(landed);
+                    }
                 }
+                Debug.Log("[NavalPrototype] Sailor boarded rescue ladder: sailor="+robot.GetInstanceID()+" ship="+landed.Root.name+" transferred="+(home==landed));
                 chosen=null;
             }
             return;
         }
-        if(Time.time>=scanAt||chosen==null||!chosen.Usable(side))
+        if(Time.time>=scanAt||chosen!=null&&!chosen.Usable(side))
         {scanAt=Time.time+0.75f;SelectLadder();}
         Vector3 direction=Vector3.zero;
         if(chosen!=null)
         {
+            if(world.ConvoyMission&&chosen.Hull!=home&&
+                (chosen.transform.position-robot.transform.position).sqrMagnitude<180f*180f)
+                chosen.Hull.RescuePickupUntil=Time.time+1f;
             Vector3 local=chosen.transform.InverseTransformPoint(robot.transform.position);NavalSwimPoint next;
-            NavalSwimPath.Route(new NavalSwimPoint(local.x,local.z),new NavalSwimPoint(side==0?-3.7f:3.7f,chosen.Hull.Definition.LadderZ),out next);
+            LadderRoute(chosen,side,local,out next);
             Vector3 destination=chosen.transform.TransformPoint(new Vector3(next.X,local.y,next.Z));
             direction=destination-robot.transform.position;direction.y=0f;
-            if(local.y> -1.6f&&local.y<2.7f&&Vector2.Distance(new Vector2(local.x,local.z),new Vector2(side==0?-3.7f:3.7f,chosen.Hull.Definition.LadderZ))*chosen.Hull.WorldScale<1.1f)
-            {climbing=true;stage=0;feet=chosen.transform.InverseTransformPoint(robot.transform.position-chosen.transform.up*worker.FootOffset);return;}
+            if(Vector2.Distance(new Vector2(local.x,local.z),new Vector2(chosen.OuterX(side),chosen.Hull.Definition.LadderZ))*chosen.Hull.WorldScale<1.5f)
+            {
+                climbing=true;stage=0;feet=chosen.transform.InverseTransformPoint(robot.transform.position-chosen.transform.up*worker.FootOffset);
+                Debug.Log("[NavalPrototype] Sailor starting rescue climb: sailor="+robot.GetInstanceID()+" ship="+chosen.Hull.Root.name+" side="+side);
+                return;
+            }
         }
         float sea=world.WaterLevelAt(robot.transform.position);
         float targetY=sea-headOffset+0.2f;

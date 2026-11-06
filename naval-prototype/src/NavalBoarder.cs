@@ -44,6 +44,7 @@ public partial class NavalBoarder : MonoBehaviour
     public void Initialize(Character sailor,NavalRepairSailor repair,NavalHull ship)
     {robot=sailor;worker=repair;home=ship;current=home;All.Add(this);}
     public void SuspendForRescue(){localDefense=false;phase=0;opponent=null;route.Clear();}
+    public void JoinCrew(NavalHull ship){SuspendForRescue();home=current=ship;retryAt=Time.time+3f;}
     public void AdoptShip(NavalHull ship)
     {current=ship;phase=3;opponent=null;quietSince=-1f;previousBoat=ship.Root.localToWorldMatrix;worker.BeginAssault();robot.ActivateAI();}
     private static bool Valid(NavalHull ship){return ship!=null&&ship.Root!=null;}
@@ -265,6 +266,10 @@ public partial class NavalBoarder : MonoBehaviour
         else AdoptShip(ship.Hull);
     }
     private void LateUpdate()
+    {
+        using(NavalPerformance.Measure(NavalPerfArea.BoarderLate)) LateUpdateMeasured();
+    }
+    private void LateUpdateMeasured()
     {
         if(!Busy||worker.Rescuing||Time.timeScale==0f||robot==null||!robot.IsAlive()||NavalTestWorld.Active!=null&&!NavalTestWorld.Active.SimulationActive)return;
         float dt=Mathf.Min(Time.deltaTime,0.05f);

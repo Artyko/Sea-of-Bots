@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 
@@ -18,6 +18,7 @@ public partial class NavalRepairSailor : MonoBehaviour
     private int scanRevision=-1;
     private readonly NavalRepairProgress progress=new NavalRepairProgress();
     private float work { get { return progress.Elapsed; } }
+    public float ActiveHullPatchSeconds {get{return leak!=null&&leak.HydraulicShell&&leak.RepairMechanism==null&&route.Count==0&&work>0f?Mathf.Max(0f,RepairSeconds-work):0f;}}
     private float RepairSeconds {get{return leak!=null&&leak.RepairMechanism!=null?leak.RepairMechanism.RepairSeconds:4f;}}
     private NavalHullVoxel leak;
     private readonly List<Vector3> route=new List<Vector3>();
@@ -42,7 +43,9 @@ public partial class NavalRepairSailor : MonoBehaviour
         // the final waypoint in place while the same nearby post is moving.
         if(returning&&changingPost&&boat.TransformVector(home-post).sqrMagnitude<.75f*.75f)
         {
-            home=post;if(route.Count>0)route[route.Count-1]=post;return;
+            if(!home.Equals(post)&&route.Count>0&&route[route.Count-1].Equals(home))
+                route[route.Count-1]=post;
+            home=post;return;
         }
         // A cancelled task can leave the sailor far from an unchanged home post.
         // The post being unchanged does not mean the sailor has arrived there.
@@ -53,7 +56,7 @@ public partial class NavalRepairSailor : MonoBehaviour
     }
     public void FollowDestroyerGunPost(Vector3 post)
     {
-        if(Busy||stranded||!AtStation(home)||!NavalStationArrival.CanRideMovingPost(boat.TransformVector(home-post).sqrMagnitude))return;
+        if(home.Equals(post)||Busy||stranded||!AtStation(home)||!NavalStationArrival.CanRideMovingPost(boat.TransformVector(home-post).sqrMagnitude))return;
         if(!Supported(post)||!ClearBody(post)||!NavigationClear(feet,post))return;
         home=post;feet=post;
         HoldPosition();
@@ -110,6 +113,21 @@ public partial class NavalRepairSailor : MonoBehaviour
     public string RescueStatus {get{NavalSailorRescue rescue=RescueComponent;return rescue!=null?rescue.Status:"Rescuing";}}
     public void BeginRescue()
     {RestoreStepHeight();combatReturnPending=false;Release();route.Clear();returning=false;changingPost=false;stranded=false;Defending=false;Assaulting=false;Rescuing=true;if(gait!=null)gait.enabled=false;robot.DisableAI();}
+    public void JoinCrew(NavalHull ship,NavalStructure frame)
+    {
+        var oldControls=NavalStations.ForShip(boat);
+        if(CapitalReserved&&oldControls!=null)ClearCapitalAccess(oldControls);
+        Release();
+        route.Clear();retryAfter.Clear();rejectedRepairPoints.Clear();
+        hull.RepairWorkers.Remove(this);
+        hull=ship;structure=frame;boat=ship.Root;
+        hull.RepairWorkers.Add(this);
+        FinalAttackDuty=false;StationDutyProtected=false;SpareMaintenance=true;
+        changingPost=false;escapePending=false;ledgeWaypoints=0;
+        stableFootingRevision=-1;yieldUntil=0;unsupportedFallSpeed=0;
+        EndRescue();
+        InitializeDeckCarry();
+    }
     public void EndRescue()
     {Rescuing=false;stranded=false;Defending=false;Assaulting=false;feet=boat.InverseTransformPoint(robot.transform.position-Vector3.up*footOffset);home=feet;returning=false;if(gait!=null)gait.enabled=true;}
     public bool SpareMaintenance {get;set;}
@@ -160,7 +178,24 @@ public partial class NavalRepairSailor : MonoBehaviour
             return NavalSwimMovement.Speed(walking,movingInWater);
         }
     }
-    private static readonly FieldInfo Velocity=typeof(FirstPersonMover).GetField("_velocity",BindingFlags.Instance|BindingFlags.NonPublic);
+    private static readonly System.Action<FirstPersonMover,Vector3> SetVelocity=CreateVelocitySetter();
+    private static System.Action<FirstPersonMover,Vector3> CreateVelocitySetter()
+    {
+        FieldInfo field=typeof(FirstPersonMover).GetField("_velocity",BindingFlags.Instance|BindingFlags.NonPublic);
+        if(field==null)return null;
+        try
+        {
+            var method=new System.Reflection.Emit.DynamicMethod("SetNavalCrewVelocity",typeof(void),
+                new[]{typeof(FirstPersonMover),typeof(Vector3)},typeof(NavalRepairSailor),true);
+            var il=method.GetILGenerator();
+            il.Emit(System.Reflection.Emit.OpCodes.Ldarg_0);
+            il.Emit(System.Reflection.Emit.OpCodes.Ldarg_1);
+            il.Emit(System.Reflection.Emit.OpCodes.Stfld,field);
+            il.Emit(System.Reflection.Emit.OpCodes.Ret);
+            return (System.Action<FirstPersonMover,Vector3>)method.CreateDelegate(typeof(System.Action<FirstPersonMover,Vector3>));
+        }
+        catch(System.Exception){return (mover,value)=>field.SetValue(mover,value);}
+    }
     public bool Busy { get { return Yielding||CapitalReserved||ammoTarget!=null||HandlingSails||nextTaskPending||fireJob!=null||waitingForRepair||shieldJob!=null||pumpDuty||bailState!=0||leak!=null||returning; } }
     public bool MaintenanceDuty {get{return nextTaskPending||fireJob!=null||waitingForRepair||shieldJob!=null||leak!=null||pumpDuty||bailState!=0;}}
     public bool RepairingCannon {get{return leak!=null&&leak.RepairMechanism!=null&&leak.RepairMechanism.IsCannon;}}
@@ -197,6 +232,7 @@ public partial class NavalRepairSailor : MonoBehaviour
     public void Initialize(Character sailor,NavalHull owner,NavalStructure frame,Vector3 station,float feetOffset)
     {
         NavalCharacters.Register(sailor);
+        var mission=NavalTestWorld.Active;if(mission!=null)mission.RecordConvoySailor(sailor,owner);
         robot=sailor;hull=owner;structure=frame;boat=owner.Root;home=station;footOffset=feetOffset;feet=home;
         cachedController=robot.GetComponentInChildren<CharacterController>();
         CharacterController bodyController=Controller();
@@ -218,6 +254,11 @@ public partial class NavalRepairSailor : MonoBehaviour
     }
     public void Tick(float dt,bool mayTakeJob)
     {
+        using(NavalPerformance.Measure(NavalPerfArea.CrewWorkerTick))TickWorker(dt,mayTakeJob);
+    }
+
+    private void TickWorker(float dt,bool mayTakeJob)
+    {
         if(robot!=null&&robot.IsAlive()&&TickPassageYield(dt))return;
         if(capitalStage>=2)return;
         if(Defending||Rescuing)return;
@@ -225,7 +266,7 @@ public partial class NavalRepairSailor : MonoBehaviour
         ApplyUnsupportedFall(dt);
         if(TickSails(dt))return;
         if(TickAmmo(dt,mayTakeJob))return;
-        if(nextTaskPending){if(StationDutyProtected){nextTaskPending=false;SetPost(home,true);}else {DispatchNextTask();return;}}
+        if(nextTaskPending){if(StationDutyProtected){nextTaskPending=false;SetPost(home,true);}else {using(NavalPerformance.Measure(NavalPerfArea.CrewNextTask))DispatchNextTask();return;}}
         if(leak!=null&&leak.RepairMechanism!=null&&!leak.RepairMechanism.CanRepair){ContinueRepair();return;}
         if(TickCannonParts(dt))return;
         // Retain the accepted leak reservation throughout its supply trip.
@@ -239,15 +280,18 @@ public partial class NavalRepairSailor : MonoBehaviour
         if(TickBailing(dt,mayMaintain)||nextTaskPending)return;
         if(leak==null&&MayAcquireMaintenance()&&(mayTakeJob||RepairDuty)&&Time.time>=scanAt)
         {
-            if(Busy)HoldPosition();TryFindLeak();
+            if(Busy)HoldPosition();
+            using(NavalPerformance.Measure(NavalPerfArea.CrewLeakSearch))TryFindLeak();
             if(leak==null&&ReserveRepairWait())
             {waitingForRepair=true;returning=false;changingPost=false;route.Clear();}
         }
         if(TickPlanks(dt))return;
+        bool reachablePatch=false;
         if(leak!=null)
         {
             // Only accept flowing leaks, but finish an accepted patch across wave troughs.
-            progress.StepAccepted(dt,route.Count==0&&CanReachLeak());
+            reachablePatch=route.Count==0&&CanReachLeak();
+            progress.StepAccepted(dt,reachablePatch);
             if(!leak.Missing&&!leak.Detached){ContinueRepair();return;}
         }
         if(waitingForRepair&&leak==null)
@@ -279,7 +323,7 @@ public partial class NavalRepairSailor : MonoBehaviour
             Vector3 face=boat.TransformPoint(leak.LocalCenter)-robot.transform.position;face.y=0f;
             if(face.sqrMagnitude>0.01f)robot.transform.rotation=Quaternion.LookRotation(face);
             if(hammer!=null)hammer.localRotation=hammerRest*Quaternion.Euler(-35f+Mathf.Sin(work*12f)*45f,0f,0f);
-            if(!CanReachLeak())
+            if(!reachablePatch)
             {
                 AbandonBlockedJob();
                 return;
@@ -410,23 +454,39 @@ public partial class NavalRepairSailor : MonoBehaviour
     }
     private bool ReachFrom(Vector3 stand,NavalHullVoxel hole)
     {
-        Vector3 hand=boat.TransformPoint(stand)+boat.up*NavalRepairAim.HandHeight;
+        Vector3 hand,offset;
+        return RepairReachVector(stand,hole,out hand,out offset)&&RepairSightClear(hand,offset,CannonRepairTarget(hole));
+    }
+    private static NavalRepairableMechanism CannonRepairTarget(NavalHullVoxel hole)
+    {
+        return hole.RepairMechanism!=null&&hole.RepairMechanism.IsCannon?hole.RepairMechanism:null;
+    }
+    private bool RepairReachVector(Vector3 stand,NavalHullVoxel hole,out Vector3 hand,out Vector3 offset)
+    {
+        hand=boat.TransformPoint(stand)+boat.up*NavalRepairAim.HandHeight;
         Vector3 local=hull.RepairAccess(hole,stand);
         if(hole.HydraulicShell&&(local-hole.LocalCenter).sqrMagnitude<.001f){
             if(NavalRepairAim.AtEnd(local.z))local.z=NavalRepairAim.InnerEnd(local.z,hull.WorldScale);
             else if(NavalRepairAim.AtSide(local.x,hull.Definition.HullHalfWidth(local.z)))local.x=NavalRepairAim.InnerSide(local.x,hull.Definition.HullHalfWidth(local.z),hull.WorldScale);
         }
         local.y=hull.Definition.RepairAimY(local.y,stand.y);
-        Vector3 point=boat.TransformPoint(local),offset=point-hand;
-        if(!NavalRepairSite.WithinReach(offset.x,offset.y,offset.z))return false;
-        return RepairSightClear(hand,offset,hole.RepairMechanism!=null&&hole.RepairMechanism.IsCannon?hole.RepairMechanism:null);
+        offset=boat.TransformPoint(local)-hand;
+        return NavalRepairSite.WithinReach(offset.x,offset.y,offset.z);
     }
+    private bool CanUseRepairSite(Vector3 point,NavalHullVoxel hole)
+    {
+        Vector3 hand,offset;
+        return InsideWalkingDeck(point)&&!RejectedPoint(hole,point)&&RepairReachVector(point,hole,out hand,out offset)&&
+            Supported(point)&&!hull.DeckGapAt(point,NavigationRadius)&&ClearBody(point)&&
+            RepairSightClear(hand,offset,CannonRepairTarget(hole));
+    }
+    private static readonly float[] destroyerRepairOffsets={0f,-1.2f,1.2f,-2.2f,2.2f};
     private bool FindWorkPoint(NavalHullVoxel hole,out Vector3 point)
     {
         if(hull.Definition.Destroyer){
-            float q=hull.WorldScale;foreach(float floor in new[]{hull.Floor,hull.Definition.WeatherDeck,NavalDestroyerLayout.Foredeck(hull.Definition),hull.Definition.HelmDeck})foreach(float dx in new[]{0f,-1.2f,1.2f,-2.2f,2.2f})foreach(float dz in new[]{0f,-1.2f,1.2f,-2.2f,2.2f}){
+            float q=hull.WorldScale;foreach(float floor in new[]{hull.Floor,hull.Definition.WeatherDeck,NavalDestroyerLayout.Foredeck(hull.Definition),hull.Definition.HelmDeck})foreach(float dx in destroyerRepairOffsets)foreach(float dz in destroyerRepairOffsets){
                 point=new Vector3(hole.LocalCenter.x+dx/q,floor,hole.LocalCenter.z+dz/q);float limit=hull.Definition.HullHalfWidth(point.z)-.9f/q;point.x=Mathf.Clamp(point.x,-limit,limit);point.z=Mathf.Clamp(point.z,-6+.9f/q,6-.9f/q);
-                if(InsideWalkingDeck(point)&&Supported(point)&&!hull.DeckGapAt(point,NavigationRadius)&&!RejectedPoint(hole,point)&&ClearBody(point)&&ReachFrom(point,hole))return true;
+                if(CanUseRepairSite(point,hole))return true;
             }
             point=Vector3.zero;return false;
         }
@@ -450,14 +510,14 @@ public partial class NavalRepairSailor : MonoBehaviour
             if(!NavalRepairWorkSites.SteamSternBelt(hull.Definition,hole.LocalCenter.x,hole.LocalCenter.y,hole.LocalCenter.z,
                 service,out serviceX,out serviceY,out serviceZ))break;
             point=new Vector3(serviceX,serviceY,serviceZ);
-            if(InsideWalkingDeck(point)&&Supported(point)&&!hull.DeckGapAt(point,NavigationRadius)&&!RejectedPoint(hole,point)&&ReachFrom(point,hole)&&ClearBody(point))return true;
+            if(CanUseRepairSite(point,hole))return true;
         }
         for(int service=0;service<NavalRepairWorkSites.SteamBowBeltCandidateCount;service++)
         {
             if(!NavalRepairWorkSites.SteamBowBelt(hull.Definition,hole.LocalCenter.x,hole.LocalCenter.y,hole.LocalCenter.z,
                 service,out serviceX,out serviceY,out serviceZ))break;
             point=new Vector3(serviceX,serviceY,serviceZ);
-            if(InsideWalkingDeck(point)&&Supported(point)&&!hull.DeckGapAt(point,NavigationRadius)&&!RejectedPoint(hole,point)&&ReachFrom(point,hole)&&ClearBody(point))return true;
+            if(CanUseRepairSite(point,hole))return true;
         }
         bool endWall=NavalRepairWorkSites.EndWall(hole.LocalCenter.z);
         for(int deck=0;deck<hull.Definition.DeckCount;deck++)
@@ -468,14 +528,14 @@ public partial class NavalRepairSailor : MonoBehaviour
                 float shift=NavalRepairWorkSites.Shift(i);
                 point=new Vector3(Mathf.Clamp(hole.LocalCenter.x+shift,-2.35f,2.35f),floor,NavalRepairWorkSites.EndZ(hull.Definition,hole.LocalCenter.z));
                 if(hull.Definition.MaintenanceFloorAt(floor)&&hull.Bilge!=null)point.y=NavalBallastLayout.Surface(point.x,point.z,floor,hull.Definition);
-                if((!avoidCasemate||NavalRepairWorkSites.ClearOfCasemate(hull.Definition,floor,point.z))&&InsideWalkingDeck(point)&&Supported(point)&&!hull.DeckGapAt(point,NavigationRadius)&&!RejectedPoint(hole,point)&&ReachFrom(point,hole)&&ClearBody(point))return true;
+                if((!avoidCasemate||NavalRepairWorkSites.ClearOfCasemate(hull.Definition,floor,point.z))&&CanUseRepairSite(point,hole))return true;
             }
             for(int c=0;c<NavalRepairWorkSites.CorridorCount;c++)for(int i=0;i<NavalRepairWorkSites.ShiftCount;i++)
             {
                 float corridor=NavalRepairWorkSites.Corridor(hull.Definition,c),shift=NavalRepairWorkSites.Shift(i);
                 point=new Vector3(hole.LocalCenter.x<0f?-corridor:corridor,floor,Mathf.Clamp(hole.LocalCenter.z+shift,-5.1f,5.1f));
                 if(hull.Definition.MaintenanceFloorAt(floor)&&hull.Bilge!=null)point.y=NavalBallastLayout.Surface(point.x,point.z,floor,hull.Definition);
-                if((!avoidCasemate||NavalRepairWorkSites.ClearOfCasemate(hull.Definition,floor,point.z))&&InsideWalkingDeck(point)&&Supported(point)&&!hull.DeckGapAt(point,NavigationRadius)&&!RejectedPoint(hole,point)&&ReachFrom(point,hole)&&ClearBody(point))return true;
+                if((!avoidCasemate||NavalRepairWorkSites.ClearOfCasemate(hull.Definition,floor,point.z))&&CanUseRepairSite(point,hole))return true;
             }
         }
         if(endWall)for(int deck=0;deck<hull.Definition.DeckCount;deck++){
@@ -485,7 +545,7 @@ public partial class NavalRepairSailor : MonoBehaviour
                 float x=hole.LocalCenter.x+lateral*1.2f/hull.WorldScale;
                 point=new Vector3(x,floor,z);
                 if(hull.Definition.MaintenanceFloorAt(floor)&&hull.Bilge!=null)point.y=NavalBallastLayout.Surface(x,z,floor,hull.Definition);
-                if(InsideWalkingDeck(point)&&Supported(point)&&!hull.DeckGapAt(point,NavigationRadius)&&!RejectedPoint(hole,point)&&ClearBody(point)&&ReachFrom(point,hole))return true;
+                if(CanUseRepairSite(point,hole))return true;
             }
         }
         // Bow deck-seam holes need positions inward and aft of the destroyed slab.
@@ -497,7 +557,7 @@ public partial class NavalRepairSailor : MonoBehaviour
                 float z=hole.LocalCenter.z-aft*1.1f/hull.WorldScale;
                 point=new Vector3(x,floor,z);
                 if(hull.Definition.MaintenanceFloorAt(floor)&&hull.Bilge!=null)point.y=NavalBallastLayout.Surface(x,z,floor,hull.Definition);
-                if(InsideWalkingDeck(point)&&Supported(point)&&!hull.DeckGapAt(point,NavigationRadius)&&!RejectedPoint(hole,point)&&ClearBody(point)&&ReachFrom(point,hole))return true;
+                if(CanUseRepairSite(point,hole))return true;
             }
         }
         // Fixed corridor lanes can miss a narrow service pocket at the bow or a deck seam.
@@ -509,7 +569,7 @@ public partial class NavalRepairSailor : MonoBehaviour
                 float z=hole.LocalCenter.z+along*1.2f/hull.WorldScale;
                 point=new Vector3(x,floor,z);
                 if(hull.Definition.MaintenanceFloorAt(floor)&&hull.Bilge!=null)point.y=NavalBallastLayout.Surface(x,z,floor,hull.Definition);
-                if(InsideWalkingDeck(point)&&Supported(point)&&!hull.DeckGapAt(point,NavigationRadius)&&!RejectedPoint(hole,point)&&ClearBody(point)&&ReachFrom(point,hole))return true;
+                if(CanUseRepairSite(point,hole))return true;
             }
         }
         // A flooded hold can be repaired from a swimming position without floor support.
@@ -530,6 +590,9 @@ public partial class NavalRepairSailor : MonoBehaviour
         point=Vector3.zero;return false;
     }
     private void PlanTo(Vector3 goal)
+    {using(NavalPerformance.Measure(NavalPerfArea.CrewPlan))BuildRoute(goal);}
+
+    private void BuildRoute(Vector3 goal)
     {
         stairExitWaypoints=0;
         var world=NavalTestWorld.Active;
@@ -554,7 +617,8 @@ public partial class NavalRepairSailor : MonoBehaviour
         return false;
     }
     public bool StationDutyProtected;
-    private bool MayAcquireMaintenance(){if(StationDutyProtected)return false;if(SpareMaintenance&&!FinalAttackDuty&&hull.CrewCannonRepairAllowed&&!hull.HasRepairDemand&&(hull.Fire==null||!hull.Fire.HasFire))return true;return NavalMaintenanceMath.CanAcquireMaintenance(FinalAttackDuty,SpareMaintenance,hull.ParallelMaintenance,OtherMaintenanceWorker());}
+    private bool MayAcquireMaintenance(){if(StationDutyProtected)return false;if(SpareMaintenance&&!FinalAttackDuty&&hull.CrewCannonRepairAllowed&&!hull.HasRepairDemand&&(hull.Fire==null||!hull.Fire.HasFire))return true;return NavalMaintenanceMath.CanAcquireMaintenance(FinalAttackDuty,SpareMaintenance,hull.ParallelMaintenance,
+        !FinalAttackDuty&&!SpareMaintenance&&!hull.ParallelMaintenance&&OtherMaintenanceWorker());}
     private bool OtherLeakRepairer()
     {
         foreach(NavalRepairSailor worker in hull.RepairWorkers)
@@ -690,25 +754,52 @@ public partial class NavalRepairSailor : MonoBehaviour
     private CharacterController Controller()
     {if(cachedController==null&&robot!=null)cachedController=robot.GetComponentInChildren<CharacterController>();return cachedController;}
     private void HoldPosition()
+    {using(NavalPerformance.Measure(NavalPerfArea.CrewAnchor))ApplyStationPosition();}
+
+    private void ApplyStationPosition()
     {
         Vector3 wanted=boat.TransformPoint(feet)+Vector3.up*footOffset;
         if((robot.transform.position-wanted).sqrMagnitude>.000001f){
             CharacterController controller=Controller();bool enabled=controller!=null&&controller.enabled;
             if(enabled)controller.enabled=false;
             robot.transform.position=wanted;
-            if(enabled){controller.enabled=true;NavalCrewPassage.Prepare(controller);}
+            if(enabled)controller.enabled=true;
         }
-        FirstPersonMover mover=robot as FirstPersonMover;if(mover!=null&&Velocity!=null)Velocity.SetValue(mover,Vector3.zero);
+        FirstPersonMover mover=robot as FirstPersonMover;if(mover!=null&&SetVelocity!=null)SetVelocity(mover,Vector3.zero);
     }
     private float unsupportedFallSpeed;
+    private int stableFootingRevision=-1;
+    private Vector3 stableFootingPoint,stableFootingUp;
+
+    private bool HasStableFooting()
+    {
+        if(stableFootingRevision==hull.Revision&&
+            (stableFootingPoint-feet).sqrMagnitude<.000001f&&
+            Vector3.Dot(stableFootingUp,boat.up)>.9994f)return true;
+        bool stable;
+        bool supported=NavalPhysicsQueries.HasLocalSupport(hull,feet,out stable);
+        if(stable)
+        {
+            stableFootingRevision=hull.Revision;
+            stableFootingPoint=feet;
+            stableFootingUp=boat.up;
+        }
+        else stableFootingRevision=-1;
+        return supported;
+    }
     private void ApplyUnsupportedFall(float dt){
-        if(movingInWater||NavalPhysicsQueries.HasLocalSupport(hull,feet)){unsupportedFallSpeed=0;return;}
+        using(NavalPerformance.Measure(NavalPerfArea.CrewFooting))
+        if(movingInWater||HasStableFooting()){unsupportedFallSpeed=0;return;}
         var controller=Controller();if(controller==null||!controller.enabled)return;
         unsupportedFallSpeed=Mathf.Min(12f,unsupportedFallSpeed+9.81f*dt);
+        NavalCrewPassage.Prepare(controller);
         movementContacts=controller.Move(Vector3.down*unsupportedFallSpeed*dt);
         feet=boat.InverseTransformPoint(robot.transform.position-Vector3.up*footOffset);
     }
     private void Move(Vector3 destination,float dt,bool finalPoint)
+    {using(NavalPerformance.Measure(NavalPerfArea.CrewMotion))MoveWithController(destination,dt,finalPoint);}
+
+    private void MoveWithController(Vector3 destination,float dt,bool finalPoint)
     {
         if(hull.Bilge!=null)destination=hull.Bilge.PassageTarget(feet,destination,this,dt);
         Vector3 before=feet;
@@ -723,13 +814,21 @@ public partial class NavalRepairSailor : MonoBehaviour
         moveSpeed=NavalCrewMovement.Accelerate(moveSpeed,wanted,dt);
         if(movingInWater)moveSpeed=Mathf.Min(moveSpeed,wanted);
         Vector3 step=Vector3.ClampMagnitude(offset,moveSpeed*dt);
-        if(hopTime>0)step.y=HopStep(dt);
-        else if(!movingInWater&&step.y>0&&!NavalPhysicsQueries.HasLocalSupport(hull,feet+boat.InverseTransformVector(step)))step.y=0;
-        if(!stairs&&hopTime<=0f&&step.sqrMagnitude>.000001f)
+        bool hopping=hopTime>0f;
+        if(hopping)step.y=HopStep(dt);
+        bool checkSupport=!hopping&&!movingInWater&&step.y>0f;
+        bool checkGap=!stairs&&hopTime<=0f&&step.sqrMagnitude>.000001f;
+        Vector3 localStep=checkSupport||checkGap?boat.InverseTransformVector(step):Vector3.zero;
+        if(checkSupport&&!NavalPhysicsQueries.HasLocalSupport(hull,feet+localStep))
         {
-            Vector3 proposed=feet+boat.InverseTransformVector(step);
-            bool currentGap=hull.DeckGapAt(feet,NavigationRadius);
-            bool proposedGap=hull.DeckGapAt(proposed,NavigationRadius);
+            step.y=0f;
+            if(checkGap)localStep=boat.InverseTransformVector(step);
+        }
+        if(checkGap&&step.sqrMagnitude>.000001f)
+        {
+            Vector3 proposed=feet+localStep;
+            bool currentGap,proposedGap;
+            hull.DeckGapsAlongStep(feet,proposed,NavigationRadius,out currentGap,out proposedGap);
             if(!currentGap)deckGapEscape=false;
             else if(!deckGapEscape&&Time.time>=deckGapRetryAt)
             {
@@ -748,7 +847,11 @@ public partial class NavalRepairSailor : MonoBehaviour
             }
         }
         CharacterController controller=Controller();DeckStepHeight(controller);
-        if(controller!=null&&controller.enabled)movementContacts=controller.Move(step+Vector3.down*0.3f*dt);
+        if(controller!=null&&controller.enabled)
+        {
+            NavalCrewPassage.Prepare(controller);
+            movementContacts=controller.Move(step+Vector3.down*.3f*dt);
+        }
         else robot.transform.position+=step;
         feet=boat.InverseTransformPoint(robot.transform.position-Vector3.up*footOffset);
         if(InsideWalkingDeck(before)&&!InsideWalkingDeck(feet))

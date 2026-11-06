@@ -27,6 +27,10 @@ public class NavalAlliedCrew : MonoBehaviour
     }
     public void Initialize(FirstPersonMover owner,NavalHull ship,NavalStructure frame,NavalStations controls,float feet)
     {player=owner;hull=ship;structure=frame;stations=controls;footOffset=feet;crew=new Character[ship.Definition.CrewCount];workers=new NavalRepairSailor[crew.Length];spawned=new bool[crew.Length];roles.Initialize(hull,stations,crew,workers);}
+    public bool ReceiveSurvivor(NavalHull origin,Character sailor,NavalRepairSailor worker)
+    {
+        return roles.ReceiveSurvivor(origin,sailor,worker,transform,out crew,out workers);
+    }
     private void LateUpdate()
     {
         if(NavalTestWorld.Active==null||!NavalTestWorld.Active.SimulationActive)return;
@@ -49,12 +53,14 @@ public class NavalAlliedCrew : MonoBehaviour
         NavalTestWorld world=NavalTestWorld.Active;
         NavalShipVisuals rig=hull.Root.GetComponent<NavalShipVisuals>();
         bool useful=NavalCrewRoles.HelmUseful(rig!=null?rig.PowerFactor:0f,world!=null?world.ShipVelocity.magnitude:0f);
-        roles.Tick(Mathf.Min(Time.deltaTime,0.05f),world!=null?world.EnemyBoat:null,world!=null?world.EnemyVelocity:Vector3.zero,useful,footOffset);
+        Transform target=world==null?null:world.ConvoyMission?world.ConvoyTarget(hull.Root,true):world.EnemyBoat;
+        Vector3 velocity=world==null?Vector3.zero:world.ConvoyMission?world.FleetVelocity(target):world.EnemyVelocity;
+        roles.Tick(Mathf.Min(Time.deltaTime,0.05f),target,velocity,useful,footOffset);
     }
     private void OnGUI()
     {
         Camera camera=NavalTestWorld.Active!=null?NavalTestWorld.Active.ViewCamera:null;if(camera==null)return;
-        for(int i=0;i<hull.Definition.CrewCount;i++)if(crew[i]!=null&&crew[i].IsAlive())
+        for(int i=0;i<crew.Length;i++)if(crew[i]!=null&&crew[i].IsAlive())
         {
             Vector3 screen=camera.WorldToScreenPoint(crew[i].transform.position+Vector3.up*2.2f);
             if(screen.z>0f&&screen.x>-200f&&screen.x<Screen.width+200f&&screen.y>-30f&&screen.y<Screen.height+30f)

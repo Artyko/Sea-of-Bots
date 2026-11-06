@@ -3,14 +3,18 @@ using System.Reflection;
 public class NavalDeckDefense
 {
     private readonly NavalHull hull;
-    private readonly Character[] crew;
-    private readonly NavalRepairSailor[] workers;
+    private Character[] crew;
+    private NavalRepairSailor[] workers;
     private Character intruder;
     private float scanAt;
     private static readonly MethodInfo SetOpponent=typeof(AIController).GetMethod("SetTargetOpponentCharacter",BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic);
     public int Guard {get;private set;}
     public NavalDeckDefense(NavalHull ship,Character[] sailors,NavalRepairSailor[] repair)
-    {hull=ship;crew=sailors;workers=repair;Guard=-1;}
+    {
+        hull=ship;crew=sailors;workers=repair;Guard=-1;
+        scanAt=Time.time+(ship.Root.GetInstanceID()&15)*(.35f/16f);
+    }
+    public void SetRoster(Character[] sailors,NavalRepairSailor[] repair){crew=sailors;workers=repair;}
     private bool Alive(int i)
     {return i>=0&&crew[i]!=null&&crew[i].IsAlive()&&workers[i]!=null&&!workers[i].Stranded&&!workers[i].Assaulting&&!workers[i].Rescuing;}
     private bool OnDeck(Character character)

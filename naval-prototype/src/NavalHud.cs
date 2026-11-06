@@ -1,18 +1,15 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 public partial class NavalTestWorld
 {
             private static readonly string[,] spectatorHelp={
                 {"F3","CPU-замеры"},{"W A S D","Свободный полёт"},{"ПКМ (держать)","Осматриваться"},{"Space / E","Подняться"},{"Ctrl / Q","Опуститься"},
-                {"Shift","Лететь быстрее"},{"F8","Камера у своего корабля"},{"F4","Меню кораблей"},{"F7","Сильные / слабые волны"},{"F12","Убрать / создать врага"},{"H","Скрыть список клавиш"}
+                {"Shift","Лететь быстрее"},{"F8","Камера у своего корабля"},{"F4","Меню кораблей"},{"F7","Сильные / слабые волны"},{"F12","Убрать / создать врага"}
             };
             private static readonly string[,] liveHelp={
                 {"F3","CPU-замеры"},{"F4","Выбор кораблей"},{"F6","Включить / выключить мод"},{"F7","Сильные / слабые волны"},
                 {"F8","Вернуться на палубу"},{"F9","Пробоина слева"},{"F10 (держать)","Тестовая откачка"},
-                {"F11","Пробоина справа"},{"F12","Убрать / создать врага"},{"E","Станция / лестница"},
-                {"W/S у поста","Движитель / задний ход"},{"C у поста","Автоуправление экипажа"},{"ЛКМ / Space","Выстрел из пушки"},{"Space в воде","Подняться к поверхности"},
-                {"Ctrl в воде","Погружаться"},{"B (держать)","Набрать ведро у борта / воды"},{"V","Вылить воду на огонь"},{"Y","Тест: поджечь выбранное"},{"G","Повредить выбранное"},{"R (держать)","Чинить выбранное"},
-                {"Shift + R","Восстановить судно"},{"Q у помпы","Выбрать режим помпы"},{"T (держать)","Работать помпой"},{"H","Скрыть список клавиш"}
+                {"F11","Пробоина справа"},{"F12","Убрать / создать врага"}
             };
 
     public bool RestartRequested {get;private set;}
@@ -30,7 +27,7 @@ public partial class NavalTestWorld
     {
         if(Input.GetKeyDown(KeyCode.F3))NavalPerformance.Toggle();
         if(Input.GetKeyDown(KeyCode.H))showHelp=!showHelp;
-        if(Input.GetKeyDown(KeyCode.F4))
+        if(!ConvoyMission&&Input.GetKeyDown(KeyCode.F4))
         {
             if(ShipMenuOpen)CloseShipMenu();
             else {oldCursorLock=Cursor.lockState;oldCursorVisible=Cursor.visible;ShipMenuOpen=true;}
@@ -106,7 +103,7 @@ public partial class NavalTestWorld
         NavalShipDefinition definition=ship!=null?ship.Definition:own?NavalSessionSettings.PlayerShip:NavalSessionSettings.EnemyShip;
         float line=y+33f;
         Row(x+12f,line,"Тип",ShipName(definition));line+=18f;
-        Row(x+12f,line,"Состояние",ship==null?"Не создан":ship.Sunk?"Тонет":(own?Retreating:enemy.Retreating)?"Отход для ремонта":(own?helmNavigator.Reversing:enemy.Reversing)?"Манёвр задним ходом":"На плаву");line+=18f;
+        Row(x+12f,line,"Состояние",ship==null?"Не создан":ship.SimulationRetired?"Затонул":ship.Sunk||ship.SinkingDanger?"Тонет":(own?Retreating:enemy.Retreating)?"Отход для ремонта":(own?helmNavigator.Reversing:enemy.Reversing)?"Манёвр задним ходом":"На плаву");line+=18f;
         if(ship!=null)
         {
             string[] values=ShipNumbers(own,ship,controls,definition);
@@ -156,22 +153,22 @@ public partial class NavalTestWorld
         GUI.matrix=Matrix4x4.TRS(Vector3.zero,Quaternion.identity,Vector3.one*scale);
         ShipCard(14f,true);ShipCard(302f,false);
         GUI.Label(new Rect(16f,474f,600f,22f),ShipMenuOpen?"ВЫБОР КОРАБЛЕЙ — F4 закрыть меню":"F4 — выбор кораблей  |  H — список клавиш",hudText);
+        float infoY=498f;
         if(showHelp)
         {
-            GUI.Box(new Rect(14f,453f,350f,416f),"");
-            GUI.Label(new Rect(26f,460f,254f,22f),"УПРАВЛЕНИЕ",hudTitle);
             string[,] rows=Spectating?spectatorHelp:liveHelp;
+            float height=31f+rows.GetLength(0)*19f;
+            GUI.Box(new Rect(14f,498f,350f,height),"");
+            GUI.Label(new Rect(26f,503f,254f,22f),"УПРАВЛЕНИЕ",hudTitle);
             for(int i=0;i<rows.GetLength(0);i++)
             {
-                GUI.Label(new Rect(26f,487f+i*19f,110f,19f),rows[i,0],hudText);
-                GUI.Label(new Rect(136f,487f+i*19f,220f,19f),rows[i,1],hudText);
+                GUI.Label(new Rect(26f,527f+i*19f,110f,19f),rows[i,0],hudText);
+                GUI.Label(new Rect(136f,527f+i*19f,220f,19f),rows[i,1],hudText);
             }
+            infoY+=height+4f;
         }
-        float infoY=showHelp?876f:456f;
-        string distance=enemy!=null?Vector3.Distance(boat.position,enemy.Boat.position).ToString("F0")+" м":"—";
-        string wave=rough?"сильные":NavalSessionSettings.Era==NavalEra.Steam?"умеренные":"слабые";
-        GUI.Label(new Rect(16f,infoY,650f,20f),"До противника: "+distance+"  |  "+(Spectating?"Наблюдатель":swimming?"Плавание":"На ногах")+"  |  Волны: "+wave,hudText);
-        GUI.Label(new Rect(16f,infoY+20f,650f,20f),"v313 "+NavalSessionSettings.Era+(NavalPerformance.LaptopMode?" ECO":"")+"  |  FPS: "+(1000f/Mathf.Max(1f,frameMilliseconds)).ToString("F0")+"  |  Вода CPU: "+ocean.BuildMilliseconds.ToString("F1")+" мс",hudText);
+        string distance=EnemyBoat!=null?Vector3.Distance(boat.position,EnemyBoat.position).ToString("F0")+" м":"—";
+        GUI.Label(new Rect(16f,infoY,350f,20f),"До противника: "+distance,hudText);
         GUI.matrix=previous;
         NavalPerformance.Draw();
     }

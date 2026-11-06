@@ -39,6 +39,8 @@ public partial class NavalStations : MonoBehaviour
     public bool PlayerOperatingGunOrHelm {get{return active>=0||playerCapitalSlot>=0;}}
     private int nearest = -1;
     public bool EnemyControlled;
+    public bool AlliedAI;
+    public bool HostileToPlayer {get{return EnemyControlled&&!AlliedAI;}}
     public bool CrewRepairRetreat;
     private Character firingRobot;
     public bool IsFunctional(int station) { return Functional(station); }
@@ -78,17 +80,20 @@ public partial class NavalStations : MonoBehaviour
     public float CombatOrbitSign(float preferred)
     {UpdateGunAvailability();return NavalBroadsideMath.OrbitSign(portWorking,starboardWorking,preferred);}
     private struct BearingMemo {public int Frame,Revision,Station;public Vector3 Point,Muzzle;public Quaternion Rotation;public bool Result;}
-    private readonly BearingMemo[] bearingMemo=new BearingMemo[24];private int bearingCursor;
+    private const int BearingEntriesPerGun=4;
+    private readonly BearingMemo[] bearingMemo=new BearingMemo[32*BearingEntriesPerGun];
+    private readonly int[] bearingCursor=new int[32];
     public bool CanBearOn(int station,Vector3 point)
     {
         if(station<=0||station>GunCount||!Functional(station))return false;
         if(!NavalCasemateHeelMath.CanOperate(station-1,NavalHullStability.Roll(boat)))return false;
         Vector3 muzzle=barrels[station-1].TransformPoint(new Vector3(0,0,hull.Definition.GunMuzzleZ));Quaternion rotation=boat.rotation;
-        for(int i=0;i<bearingMemo.Length;i++){
+        int gun=station-1,first=gun*BearingEntriesPerGun;
+        for(int i=first;i<first+BearingEntriesPerGun;i++){
             var m=bearingMemo[i];if(m.Frame==Time.frameCount&&m.Revision==hull.Revision&&m.Station==station&&m.Point.Equals(point)&&m.Muzzle.Equals(muzzle)&&m.Rotation.Equals(rotation))return m.Result;
         }
         float yawAngle,elevation;bool result=TryAimSolution(station-1,point,out yawAngle,out elevation);
-        bearingMemo[bearingCursor]=new BearingMemo{Frame=Time.frameCount,Revision=hull.Revision,Station=station,Point=point,Muzzle=muzzle,Rotation=rotation,Result=result};bearingCursor=(bearingCursor+1)%bearingMemo.Length;
+        bearingMemo[first+bearingCursor[gun]]=new BearingMemo{Frame=Time.frameCount,Revision=hull.Revision,Station=station,Point=point,Muzzle=muzzle,Rotation=rotation,Result=result};bearingCursor[gun]=(bearingCursor[gun]+1)%BearingEntriesPerGun;
         return result;
     }
     public bool CanBearOnShip(int station,Transform target)
@@ -374,13 +379,26 @@ public partial class NavalStations : MonoBehaviour
         }
     }
     private void Aim(int gun) {var rotation=Quaternion.Euler(-pitch[gun],hull.Definition.GunBaseYaw(gun)+yaw[gun],0);if(hull.Definition.Destroyer){ApplyOpenGunAim(gun,rotation);if(openShields!=null&&openShields[gun]!=null)openShields[gun].localRotation=Quaternion.Euler(0,hull.Definition.GunBaseYaw(gun)+yaw[gun],0);}else barrels[gun].localRotation=rotation;}
+    private int functionalRevision=-1;
+    private uint checkedStations,workingStations;
+
     private bool Functional(int station)
     {
         if(station==SailStation)return !hull.Sunk;
         if(station==0&&helmMechanism!=null)return helmMechanism.Functional||emergencyTiller!=null&&emergencyTiller.Functional;
         if (mechanisms==null||station<0||station>=mechanisms.Length||mechanisms[station] == null) return false;
-        if (mechanisms[station].Count == 0) return false;
-        foreach (NavalHullVoxel voxel in mechanisms[station]) if (voxel == null || voxel.Missing || voxel.Detached) return false;
+        if(functionalRevision!=hull.Revision)
+        {
+            functionalRevision=hull.Revision;
+            checkedStations=workingStations=0;
+        }
+        uint bit=1u<<station;
+        if((checkedStations&bit)!=0)return (workingStations&bit)!=0;
+        checkedStations|=bit;
+        if(mechanisms[station].Count==0)return false;
+        foreach(NavalHullVoxel voxel in mechanisms[station])
+            if(voxel==null||voxel.Missing||voxel.Detached)return false;
+        workingStations|=bit;
         return true;
     }
     private bool Fire(int gun)
@@ -408,7 +426,7 @@ public partial class NavalStations : MonoBehaviour
         ball.transform.localScale = hull.Definition.RifledWeapons?Vector3.one:Vector3.one*.3f;
         Collider collider = ball.GetComponent<Collider>(); if(collider!=null){collider.enabled = false; Destroy(collider);}
         ball.GetComponent<Renderer>().sharedMaterial = hull.Definition.RifledWeapons?shellMaterial:iron;
-        ball.AddComponent<NavalCannonball>().Initialize(direction * hull.Definition.ProjectileSpeed+FiringPlatformVelocity(), boat, hull, player, ocean, smoke,impactSpark, Time.time + 10f,EnemyControlled,firingRobot,hull.Definition.ProjectilePower,1f,hull.Definition.RifledWeapons);
+        ball.AddComponent<NavalCannonball>().Initialize(direction * hull.Definition.ProjectileSpeed+FiringPlatformVelocity(), boat, hull, player, ocean, smoke,impactSpark, Time.time + 10f,HostileToPlayer,firingRobot,hull.Definition.ProjectilePower,1f,hull.Definition.RifledWeapons);
         AudioSource.PlayClipAtPoint(sound, muzzle, 0.7f);
         NavalShotPuff.Create(transform, muzzle, direction * 2f, flash, 0.07f, 0.38f);
         GameObject muzzleGlow=new GameObject("Naval muzzle flash");muzzleGlow.transform.position=muzzle+direction*.25f;
@@ -515,8 +533,9 @@ public class NavalCannonball : MonoBehaviour
     private bool waterStopped;
     private float armedDetonateAt,armedResidual,armedTravelled,armedStepOffset;
     private readonly System.Collections.Generic.HashSet<NavalHullVoxel> penetratedCells=new System.Collections.Generic.HashSet<NavalHullVoxel>();
+    private bool convoyHitRecorded;
     public void Initialize(Vector3 speed, Transform ship, NavalHull shell, FirstPersonMover player, NavalWater sea, Material material,Material sparks, float end,bool enemy=false,Character robot=null,float power=1f,float radiusScale=1f,bool armorPiercingBurst=false)
-    { Active.Add(this);velocity = speed; boat = ship; hull = shell; owner = player; ocean = sea; splash = material;metalSpark=sparks; expires = end; attackId = nextAttackId++; hostile=enemy;attacker=robot!=null?robot:player;projectilePower=Mathf.Max(.1f,power);projectileRadiusScale=Mathf.Clamp(radiusScale,1f,3f);internalArmorPiercingBurst=armorPiercingBurst; }
+    { var mission=NavalTestWorld.Active;if(mission!=null)mission.RecordConvoyShot(ship,false,false); Active.Add(this);velocity = speed; boat = ship; hull = shell; owner = player; ocean = sea; splash = material;metalSpark=sparks; expires = end; attackId = nextAttackId++; hostile=enemy;attacker=robot!=null?robot:player;projectilePower=Mathf.Max(.1f,power);projectileRadiusScale=Mathf.Clamp(radiusScale,1f,3f);internalArmorPiercingBurst=armorPiercingBurst; }
     private void Update()
     {
         if (boat == null) { Destroy(gameObject); return; }
@@ -638,6 +657,11 @@ public class NavalCannonball : MonoBehaviour
             if(voxel!=null&&hit.collider.isTrigger)continue;
             bool metalImpact=voxel!=null&&NavalImpactMaterial.IsMetal(voxel.Armored,voxel.Metallic,voxel.RepairableEquipment);
             if(voxel!=null&&penetratedCells.Contains(voxel))continue;
+            if(!convoyHitRecorded&&voxel!=null&&voxel.Owner!=null&&voxel.Owner!=hull)
+            {
+                convoyHitRecorded=true;
+                var mission=NavalTestWorld.Active;if(mission!=null)mission.RecordConvoyShot(boat,false,true);
+            }
             if (voxel != null && voxel.Owner != null)
             {
                 Vector3 local=voxel.transform.InverseTransformPoint(hitPoint);
