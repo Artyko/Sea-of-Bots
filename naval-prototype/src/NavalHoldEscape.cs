@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 public partial class NavalSailorRescue
@@ -22,7 +22,7 @@ public partial class NavalSailorRescue
         NavalShipPhysics physics=ship.PhysicsBody;
         if(physics==null)local=ship.Root.InverseTransformPoint(point);
         else if(!physics.TryWaterLocalPoint(point,out local))return false;
-        return NavalHoldEscapeRules.InHold(local.x,local.y,local.z,ship.Floor,ship.Definition.WeatherDeck);
+        return Mathf.Abs(local.x)<=ship.Definition.HullHalfWidth(local.z)+.1f/ship.WorldScale&&NavalHoldEscapeRules.InHold(local.x,local.y,local.z,ship.Floor,ship.Definition.WeatherDeck);
     }
     private void BeginHoldEscape(NavalHull ship)
     {

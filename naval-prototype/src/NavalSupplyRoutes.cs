@@ -5,6 +5,8 @@ public static class NavalSupplyRoutes
 {
  public static List<NavalWalkPoint> Plan(NavalWalkPoint start,NavalWalkPoint goal,NavalShipDefinition ship)
  {
+ List<NavalWalkPoint> stairRepair;if(NavalStairRepairSites.TryRoute(start,goal,ship,out stairRepair))return stairRepair;
+ List<NavalWalkPoint> aft;if(NavalCapitalAADeck.TryRoute(start,goal,ship,out aft))return aft;
  List<NavalWalkPoint> raised;if(NavalRaisedBridge.TryRoute(start,goal,ship,out raised))return raised;
  if(ship.Destroyer)return NavalDestroyerLayout.Route(start,goal,ship);
  var route=NavalShipRoutes.Plan(start,goal,ship);

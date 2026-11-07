@@ -4,20 +4,16 @@ public partial class NavalRepairSailor
     private int ledgeWaypoints;
     private bool LedgePathClear(Vector3 from,Vector3 to)
     {
-        CharacterController body=Controller();
-        float height=body!=null?Mathf.Max(1.8f,body.height*Mathf.Abs(body.transform.lossyScale.y)):2.6f;
-        Vector3 bottom=boat.TransformPoint(from)+Vector3.up*.45f,top=boat.TransformPoint(from)+Vector3.up*(height-.4f);
-        Vector3 movement=boat.TransformVector(to-from);
-        foreach(Collider c in Physics.OverlapCapsule(bottom+movement,top+movement,.38f,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore))
-            if(!c.transform.IsChildOf(robot.transform))return false;
-        if(movement.magnitude<.001f)return true;
-        foreach(RaycastHit hit in Physics.CapsuleCastAll(bottom,top,.38f,movement.normalized,movement.magnitude,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore))
-            if(!hit.collider.transform.IsChildOf(robot.transform))return false;
-        return true;
+        // Use the same full-size capsule as ordinary navigation. The old
+        // 38 cm probe accepted gaps that an 80 cm sailor could never traverse.
+        return ClearBody(to)&&NavigationClear(from,to);
     }
     private bool TryPlanLedgeRecovery(Vector3 goal)
     {
         ledgeWaypoints=0;
+        var destination=new NavalWalkPoint(goal.x,goal.y,goal.z);
+        if(NavalCapitalAADeck.Upper(destination,hull.Definition)||NavalRaisedBridge.Upper(destination,hull.Definition)||
+           NavalRaisedBridge.Flight(new NavalWalkPoint(feet.x,feet.y,feet.z),hull.Definition))return false;
         // A missed moving-deck carry used to leave a routed sailor at a fixed
         // world position while the ship sailed away. The ordinary ledge path
         // then tried to walk dozens of local metres back and was rebuilt every

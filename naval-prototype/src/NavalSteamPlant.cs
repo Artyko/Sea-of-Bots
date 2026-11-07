@@ -105,7 +105,8 @@ public sealed partial class NavalSteamPlant : MonoBehaviour
                 AddGroup(funnel,new Vector3(-.95f,(bottom+top)*.5f,z),new Vector3(.22f,top-bottom,.22f),darkIron);
                 AddGroup(funnel,new Vector3(-.95f,top+.68f,z),new Vector3(.38f,1.36f,.38f),darkIron);
                 AddGroup(funnel,new Vector3(-.95f,top+1.38f,z),new Vector3(.44f,.08f,.44f),accent);
-                AddGroup(funnel,new Vector3(-1.2f,top-.30f,z),new Vector3(.50f,.20f,.22f),darkIron);
+                FunnelMouth(-.95f,z,top+1.42f,.44f,.44f,accent);
+
             }
             // No longitudinal collector between the two funnels: keep the middle-deck passage open.
         }else{
@@ -118,6 +119,7 @@ public sealed partial class NavalSteamPlant : MonoBehaviour
         AddGroup(funnel,new Vector3(NavalSteamLayout.FunnelX,hull.Definition.WeatherDeck+funnelHeight*.5f,NavalSteamLayout.FunnelZ),new Vector3(.40f,funnelHeight,.40f),darkIron);
         AddGroup(funnel,new Vector3(NavalSteamLayout.FunnelX,hull.Definition.WeatherDeck+1.18f,NavalSteamLayout.FunnelZ),new Vector3(.48f,.16f,.48f),accent);
         AddGroup(funnel,new Vector3(NavalSteamLayout.FunnelX,hull.Definition.WeatherDeck+funnelHeight+.04f,NavalSteamLayout.FunnelZ),new Vector3(.52f,.18f,.52f),darkIron);
+        FunnelMouth(NavalSteamLayout.FunnelX,NavalSteamLayout.FunnelZ,hull.Definition.WeatherDeck+funnelHeight+.13f,.52f,.52f,darkIron);
         }
         // Three solid live-steam mains, mounted above wing-room equipment. Their
         // equipment cells accept shell hits and repairs, while
@@ -158,6 +160,18 @@ public sealed partial class NavalSteamPlant : MonoBehaviour
         int first=hull.Voxels.Count;hull.AddDecorationBox(hull.Root,material,position,size,true);
         for(int i=first;i<hull.Voxels.Count;i++){NavalHullVoxel cell=hull.Voxels[i];cell.Metallic=true;cell.Flammable=false;target.Add(cell);}
     }
+    private Material funnelInterior;
+    private void FunnelMouth(float x,float z,float top,float width,float depth,Material rim)
+    {
+        if(funnelInterior==null){funnelInterior=new Material(rim);funnelInterior.color=new Color(.008f,.008f,.009f);}
+        Material black=funnelInterior;
+        AddDetail(new Vector3(x,top+.006f,z),new Vector3(width*.78f,.012f,depth*.78f),black);
+        float t=width*.09f;
+        foreach(int side in new[]{-1,1}){
+            AddDetail(new Vector3(x+side*(width-t)*.5f,top+.03f,z),new Vector3(t,.07f,depth),rim);
+            AddDetail(new Vector3(x,top+.03f,z+side*(depth-t)*.5f),new Vector3(width-2*t,.07f,t),rim);
+        }
+    }
     private void AddDetail(Vector3 position,Vector3 size,Material material)
     {
         int first=hull.Voxels.Count;hull.AddDecorationBox(hull.Root,material,position,size,true);
@@ -192,7 +206,7 @@ public sealed partial class NavalSteamPlant : MonoBehaviour
             Pipe(propulsionMain,drum,new Vector3(drum.x,steamY,drum.z),.09f,accent);
             Pipe(propulsionMain,new Vector3(drum.x,steamY,drum.z),header,.09f,accent);
             Vector3 smokeTop=new Vector3(NavalSteamLayout.BoilerX,hull.Definition.WeatherDeck-.30f,boilerZ+dz);
-            Pipe(funnel,new Vector3(NavalSteamLayout.BoilerX,hull.Floor+.55f,boilerZ+dz),smokeTop,.18f,dark);
+            if(!Twin)Pipe(funnel,new Vector3(NavalSteamLayout.BoilerX,hull.Floor+.55f,boilerZ+dz),smokeTop,.18f,dark);
         }
         Pipe(propulsionMain,new Vector3(-1.78f,steamY,-1.2f),new Vector3(NavalSteamLayout.EngineX,hull.Floor+.55f,-1.2f),.10f,accent);
         Pipe(pumpMain,new Vector3(-1.78f,steamY,-4.70f),new Vector3(-1.78f,steamY,-5.35f),.09f,accent);
@@ -201,7 +215,11 @@ public sealed partial class NavalSteamPlant : MonoBehaviour
         // Keep horizontal exhaust collectors below the deck surface: their old top faces
         // were coplanar with the deck and flickered (z-fighting). Vertical trunks remain.
         // Uptake crosspieces connect both real funnel trunks to the boiler exhaust collector.
-        if(Twin)foreach(float z in new[]{.4f,-2f})Pipe(funnel,new Vector3(NavalSteamLayout.BoilerX,hull.Definition.WeatherDeck-.30f,z),new Vector3(-.95f,hull.Definition.WeatherDeck-.30f,z),.18f,dark);
+        if(Twin)foreach(float z in new[]{.4f,-2f}){
+            Vector3 from=new Vector3(NavalSteamLayout.BoilerX,hull.Floor+.55f,boilerZ+(z>0?.4f:-.4f));
+            Vector3 low=new Vector3(-.95f,hull.Floor+.62f,z);
+            Pipe(funnel,from,low,.18f,dark);
+        }
         Vector3 drive=new Vector3(NavalSteamLayout.EngineX,hull.Floor+.03f,NavalSteamLayout.EngineZ-.20f);
         Vector3 stern=new Vector3(0,NavalSteamLayout.ScrewY(hull.Definition),-6.24f);
         Pipe(shaftCells,drive,stern,.10f,iron);
@@ -377,5 +395,5 @@ public sealed partial class NavalSteamPlant : MonoBehaviour
     public void Restore(){if(oilStates!=null)foreach(var v in oilStates)v.Reset();state.Reset();secondState.Reset();earlyRetreat.Reset();secondFlood=0;setting=smokeClock=steamClock=scaldClock=boilerFlooding=rupturedAt=0f;pumpAssist=1f;pumpDemandUntil=0f;liveLeakLogged=pumpSteamLogged=false;steamExposure.Clear();}
     public string Diagnostics
     {get{if(oilStates!=null)return OilDiagnostics;return "telegraph="+(setting*100f).ToString("F0")+" pressure="+(Pressure*100f).ToString("F0")+" coal="+Coal.ToString("F1")+" boiler="+(BoilerIntegrity*100f).ToString("F0")+" engine="+(EngineIntegrity*100f).ToString("F0")+" funnel="+(FunnelIntegrity*100f).ToString("F0")+" mains="+(PropulsionMainIntegrity*100f).ToString("F0")+"/"+(PumpMainIntegrity*100f).ToString("F0")+"/"+(AuxiliaryMainIntegrity*100f).ToString("F0")+" drive="+DriveContinuity.ToString("F2")+" screw="+Integrity(screwCells).ToString("F2")+" pump="+PumpAssist.ToString("F2")+"x flood="+(boilerFlooding*100f).ToString("F0")+" burn="+(state.Combustion*100f).ToString("F0")+" twin="+Twin+" secondaryPressure="+(secondState.Pressure*100f).ToString("F0")+" secondaryFlood="+(secondFlood*100f).ToString("F0")+" ruptured="+state.Ruptured;}}
-    private void OnDestroy(){if(steamMaterial!=null)Destroy(steamMaterial);if(smokeMaterial!=null)Destroy(smokeMaterial);}
+    private void OnDestroy(){if(funnelInterior!=null)Destroy(funnelInterior);if(steamMaterial!=null)Destroy(steamMaterial);if(smokeMaterial!=null)Destroy(smokeMaterial);}
 }

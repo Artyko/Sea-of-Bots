@@ -136,6 +136,20 @@ public class NavalStructure : MonoBehaviour
         debris.Add(group);
         hull.Revision++;
     }
+    public void DropEquipment(IEnumerable<NavalHullVoxel> equipment,Vector3 velocity){
+        GameObject group=new GameObject("NavalPrototype_EquipmentDebris");group.layer=PhysicsManager.GetEnvironmentLayer();
+        group.transform.SetParent(transform.parent,false);group.transform.position=transform.position;group.transform.rotation=transform.rotation;
+        int count=0;
+        foreach(var cell in equipment){
+            if(cell==null||cell.Missing||cell.Detached)continue;
+            cell.Detached=true;cell.Batched=false;cell.GetComponent<Renderer>().enabled=true;
+            cell.transform.SetParent(group.transform,true);cell.NotifyVisualChanged();cell.SetNonPhysicalDecoration(false);cell.PhysicsCollider.isTrigger=false;count++;
+        }
+        if(count==0){Destroy(group);return;}
+        Rigidbody body=group.AddComponent<Rigidbody>();body.mass=Mathf.Clamp(count*.4f,.5f,500f);body.linearVelocity=velocity;
+        body.interpolation=RigidbodyInterpolation.Interpolate;body.collisionDetectionMode=CollisionDetectionMode.ContinuousDynamic;
+        debris.Add(group);hull.Revision++;
+    }
     public void Restore()
     {
         foreach(GameObject group in debris)

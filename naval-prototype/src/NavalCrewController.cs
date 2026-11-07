@@ -367,7 +367,7 @@ public partial class NavalCrewController
             if(assigned[i]>=200&&assigned[i]<204||assigned[i]>=300&&assigned[i]<302||assigned[i]>=400&&assigned[i]<404)continue;
             if(!Free(i))continue;
             roles[i]=assigned[i];
-            Vector3 post=roles[i]>=0?stations.Post(roles[i]):NavalShipDefinition.StandbyPost(hull.Definition,i);
+            Vector3 post=roles[i]>=0?stations.Post(roles[i]):workers[i].SafeStandby(NavalShipDefinition.StandbyPost(hull.Definition,i),i);
             workers[i].SetPost(post);if(workers[i].Busy)continue;
             if(!workers[i].AtStation(post)){workers[i].SetPost(post,true);continue;}
             Character sailor=crew[i];sailor.DisableAI();
@@ -419,7 +419,7 @@ public partial class NavalCrewController
             workers[i].SpareMaintenance=!boarding;
             if(!boarding)
             {
-                if(!workers[i].MaintenanceDuty&&!workers[i].HandlingSails)workers[i].SetPost(NavalShipDefinition.StandbyPost(hull.Definition,i));
+                if(!workers[i].MaintenanceDuty&&!workers[i].HandlingSails)workers[i].SetPost(workers[i].SafeStandby(NavalShipDefinition.StandbyPost(hull.Definition,i),i));
                 continue;
             }
             if(workers[i].HandlingSails){ready=false;continue;}
@@ -427,7 +427,7 @@ public partial class NavalCrewController
             if(!boarders[i].Departed)ready=false;
             if(!boarders[i].Busy)
             {
-                workers[i].SetPost(NavalShipDefinition.StandbyPost(hull.Definition,i));
+                workers[i].SetPost(workers[i].SafeStandby(NavalShipDefinition.StandbyPost(hull.Definition,i),i));
             }
         }
         if(helm>=0)

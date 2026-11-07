@@ -1,7 +1,7 @@
 ﻿using System.Collections.Generic;
 using UnityEngine;
 
-public class NavalShipVisuals : MonoBehaviour,INavalPropulsion
+public partial class NavalShipVisuals : MonoBehaviour,INavalPropulsion
 {
     private NavalHull hull;
     private readonly List<NavalHullVoxel> sail = new List<NavalHullVoxel>();
@@ -283,15 +283,16 @@ public class NavalShipVisuals : MonoBehaviour,INavalPropulsion
     private void BuildRaisedCommand(Material iron,Material accent,Material dark){
         var s=hull.Definition;float q=s.Scale,z=NavalRaisedBridge.Center(s),w=NavalRaisedBridge.HalfWidth(s),d=NavalRaisedBridge.HalfDepth(s),floor=s.WeatherDeck,top=NavalRaisedBridge.Top(s),t=.16f/q;
         // Lower vestibule, with a full-size entrance on the accessible side of the ship.
-        int doorway=s.CapitalShip?-1:1;float doorHalf=1.2f/q;
+        int doorway=s.CapitalShip?-1:1;float doorHalf=(s.CapitalShip?1.65f:1.2f)/q;
         for(int side=-1;side<=1;side+=2){
             ArmoredTowerBox(new Vector3(side*w,floor+(top-floor)*.5f,z),new Vector3(t,top-floor,d*2),iron);
             if(side==doorway){
                 float span=w-doorHalf;
                 for(int edge=-1;edge<=1;edge+=2)ArmoredTowerBox(new Vector3(edge*(doorHalf+span*.5f),floor+(top-floor)*.5f,z+side*d),new Vector3(span,top-floor,t),iron);
-                ArmoredTowerBox(new Vector3(0,top-.2f/q,z+side*d),new Vector3(doorHalf*2,.4f/q,t),iron);
+                ArmoredTowerBox(new Vector3(0,top-.05f/q,z+side*d),new Vector3(doorHalf*2,.1f/q,t),iron);
             }else ArmoredTowerBox(new Vector3(0,floor+(top-floor)*.5f,z+side*d),new Vector3(w*2,top-floor,t),iron);
         }
+        if(s.CapitalShip)BuildAftAADeck(iron,accent);
         float left=(NavalRaisedBridge.StairX-NavalRaisedBridge.StairWidth*.5f)/q,right=(NavalRaisedBridge.StairX+NavalRaisedBridge.StairWidth*.5f)/q,run=NavalRaisedBridge.Run*.5f/q,holeRun=run+.85f/q;
         ArmoredTowerBox(new Vector3((-w+left)*.5f,top-t*.5f,z),new Vector3(w+left,t,d*2),dark);
         ArmoredTowerBox(new Vector3((right+w)*.5f,top-t*.5f,z),new Vector3(w-right,t,d*2),dark);
@@ -301,14 +302,20 @@ public class NavalShipVisuals : MonoBehaviour,INavalPropulsion
             ArmoredTowerBox(new Vector3(NavalRaisedBridge.StairX/q,floor+h*.5f,z+run-(i+.5f)*step),new Vector3(NavalRaisedBridge.StairWidth/q,h,step+.002f),i%2==0?iron:accent);
         }
         for(int side=-1;side<=1;side+=2){
-            ArmoredTowerBox(new Vector3(side*w,top+.5f/q,z),new Vector3(t,1f/q,d*2),iron);
+            if(!s.CapitalShip)ArmoredTowerBox(new Vector3(side*w,top+.5f/q,z),new Vector3(t,1f/q,d*2),iron);
+            else {
+                ArmoredTowerBox(new Vector3(side*1.31f,top-t*.5f,z),new Vector3(.76f,t,d*2),dark);
+                ArmoredTowerBox(new Vector3(side*1.69f,top+.45f/q,z),new Vector3(t,.9f/q,d*2),iron);
+                for(int support=-1;support<=1;support+=2)
+                    ArmoredTowerBox(new Vector3(side*1.67f,(floor+top)*.5f,z+support*(d-.07f)),new Vector3(.04f,top-floor,.12f),iron);
+            }
             ArmoredTowerBox(new Vector3(0,top+.5f/q,z+side*d),new Vector3(w*2,1f/q,t),iron);
-            ArmoredTowerBox(new Vector3(side*w,top+2.9f/q,z),new Vector3(t,.6f/q,d*2),iron);
-            ArmoredTowerBox(new Vector3(0,top+2.9f/q,z+side*d),new Vector3(w*2,.6f/q,t),iron);
-            foreach(float x in new[]{-w,0,w})ArmoredTowerBox(new Vector3(x,top+1.8f/q,z+side*d),new Vector3(t,1.6f/q,t),accent);
-            foreach(float dz in new[]{-d,0,d})ArmoredTowerBox(new Vector3(side*w,top+1.8f/q,z+dz),new Vector3(t,1.6f/q,t),accent);
+            ArmoredTowerBox(new Vector3(side*w,top+3.5f/q,z),new Vector3(t,.6f/q,d*2),iron);
+            ArmoredTowerBox(new Vector3(0,top+3.5f/q,z+side*d),new Vector3(w*2,.6f/q,t),iron);
+            foreach(float x in new[]{-w,0,w})ArmoredTowerBox(new Vector3(x,top+2.1f/q,z+side*d),new Vector3(t,2.2f/q,t),accent);
+            foreach(float dz in new[]{-d,d})ArmoredTowerBox(new Vector3(side*w,top+2.1f/q,z+dz),new Vector3(t,2.2f/q,t),accent);
         }
-        ArmoredTowerBox(new Vector3(0,top+3.3f/q,z),new Vector3(w*2+.2f/q,t,d*2+.2f/q),dark);
+        ArmoredTowerBox(new Vector3(0,top+3.9f/q,z),new Vector3(w*2+.2f/q,t,d*2+.2f/q),dark);
     }
     private void ArmoredTowerBox(Vector3 position,Vector3 size,Material material)
     {

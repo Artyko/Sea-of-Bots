@@ -7,6 +7,14 @@ public static class NavalDestroyerLayout {
  private static readonly float[] gunZ={41,-33,-43};
  public static Vector3 Gun(NavalShipDefinition s,int i){return Point(s,0,(i==0?2.6f:1.4f)+.55f,gunZ[i]);}
  public static float Foredeck(NavalShipDefinition s){return s.WeatherDeck+1.2f/s.Scale;}
+ public static bool ForedeckStair(NavalWalkPoint p,NavalShipDefinition s){
+  if(!s.Destroyer)return false;float x=p.X*s.Scale,z=p.Z*s.Scale;
+  if(Math.Abs(Math.Abs(x)-3.1f)>.65f||z<25.2f||z>29.8f)return false;
+  float progress=Math.Max(0f,Math.Min(1f,(z-25.5f)/4f));
+  float dy=(p.Y-s.WeatherDeck)*s.Scale-progress*1.2f;
+  return dy>=-.3f&&dy<=.7f;
+ }
+ public static bool ReachedRamp(float dx,float dy,float dz,float scale){return Math.Abs(dx)*scale<.82f&&Math.Abs(dz)*scale<.45f&&dy*scale>=-.25f&&dy*scale<.7f;}
  public static bool Stair(NavalWalkPoint p,NavalShipDefinition s){float x=p.X*s.Scale,z=p.Z*s.Scale;return Math.Abs(Math.Abs(x)-3.6f)<1.2f&&(Math.Abs(z-20.5f)<4.8f||Math.Abs(z+20.5f)<4.8f)&&p.Y>=s.HoldFloor-.05f&&p.Y<=s.WeatherDeck+.05f;}
  public static List<NavalWalkPoint> Route(NavalWalkPoint a,NavalWalkPoint b,NavalShipDefinition s,float stairZ=float.NaN,float laneSide=0,bool gunApproach=true){
   // Resume along the actual treads when a task changes midway through a flight.
@@ -22,7 +30,7 @@ public static class NavalDestroyerLayout {
    resumed.Add(new NavalWalkPoint(side0*3.6f/q0,floor0,landing.Z));resumed.Add(landing);
    resumed.AddRange(Route(landing,b,s,stairZ,laneSide,gunApproach));return resumed;
   }
-  if(gunApproach&&b.Y>=s.WeatherDeck-.05f){for(int gun=0;gun<s.GunCount;gun++){var mount=s.GunPosition(gun);float dx=(b.X-mount.x)*s.Scale,dz=(b.Z-mount.z)*s.Scale,distance=(float)Math.Sqrt(dx*dx+dz*dz);if(Math.Abs(distance-2.3f)<.12f&&Math.Abs(b.Y-(mount.y-.55f/s.Scale))<.05f){var approach=new NavalWalkPoint(b.X+dx/distance*1.4f/s.Scale,b.Y,b.Z+dz/distance*1.4f/s.Scale);var entry=Route(a,approach,s,stairZ,laneSide,false);entry.Add(b);return entry;}}}
+  if(gunApproach&&b.Y>=s.WeatherDeck-.05f){for(int gun=0;gun<s.GunCount;gun++){var mount=s.GunPosition(gun);float dx=(b.X-mount.x)*s.Scale,dz=(b.Z-mount.z)*s.Scale,distance=(float)Math.Sqrt(dx*dx+dz*dz);if(Math.Abs(distance-NavalGunStationLayout.RearDistance)<.12f&&Math.Abs(b.Y-(mount.y-.55f/s.Scale))<.05f){var approach=new NavalWalkPoint(b.X+dx/distance*NavalGunStationLayout.ApproachDistance/s.Scale,b.Y,b.Z+dz/distance*NavalGunStationLayout.ApproachDistance/s.Scale);var entry=Route(a,approach,s,stairZ,laneSide,false);entry.Add(b);return entry;}}}
   float scale=s.Scale;bool fromRaised=a.Z>29.5f/scale&&a.Y>s.WeatherDeck+.1f,toRaised=b.Z>29.5f/scale&&b.Y>s.WeatherDeck+.1f;
   if(fromRaised&&b.Y<s.WeatherDeck-.1f||toRaised&&a.Y<s.WeatherDeck-.1f){float sideGate=(fromRaised?a.X:b.X)<0?-1:1;var gate=new NavalWalkPoint(sideGate*5.2f/scale,s.WeatherDeck,25.5f/scale);var split=Route(a,gate,s,stairZ,laneSide);split.AddRange(Route(gate,b,s,stairZ,laneSide));return split;}
   var r=new List<NavalWalkPoint>();float q=s.Scale;bool belowA=a.Y<s.WeatherDeck-.1f,belowB=b.Y<s.WeatherDeck-.1f;

@@ -11,7 +11,7 @@ public partial class NavalRepairSailor
     public bool CapitalSeated {get{return capitalStage==3;}}
     private void ClearCapitalAccess(NavalStations controls)
     {
-        if(capitalSlot>=0){home=NavalTurretAccessLayout.Approach(hull.Definition,capitalSlot);controls.RequestCapitalAccess(capitalSlot,false);}
+        if(capitalSlot>=0){home=capitalStage==4?feet:NavalTurretAccessLayout.Approach(hull.Definition,capitalSlot);controls.RequestCapitalAccess(capitalSlot,false);}
         route.Clear();returning=changingPost=false;escapePending=false;
         capitalSlot=-1;capitalStage=0;capitalStep=0;capitalPath.Clear();SetMainBatterySeated(false);Walking(false,0);
     }
@@ -60,15 +60,23 @@ public partial class NavalRepairSailor
     {
         if(capitalStep>=capitalPath.Count){Walking(false,dt);return true;}
         Vector3 goal=capitalPath[capitalStep];float before=boat.TransformVector(goal-feet).magnitude;
-        Move(goal,dt,capitalStep==capitalPath.Count-1);Walking(true,dt);
+        if(capitalSlot==3&&Mathf.Abs(goal.y-feet.y)*hull.WorldScale>.02f&&
+            new Vector2(goal.x-feet.x,goal.z-feet.z).magnitude*hull.WorldScale<.4f)
+        {feet=Vector3.MoveTowards(feet,goal,2.4f*dt/hull.WorldScale);HoldPosition();}
+        else Move(goal,dt,capitalStep==capitalPath.Count-1);
+        Walking(true,dt);
         Vector3 delta=boat.TransformVector(goal-feet);
         // A full capsule spans several descending treads; its feet cannot
         // reach each tread's nominal height until it advances outward.
         bool descending=capitalStage==4&&capitalStep+1<capitalPath.Count&&capitalPath[capitalStep+1].y<goal.y;
         float heightTolerance=descending?Mathf.Max(.32f,NavigationRadius+.4f):.32f;
         bool exteriorEnd=capitalStage==4&&capitalStep==capitalPath.Count-1&&NavalPhysicsQueries.HasLocalSupport(hull,feet);
-        float horizontalTolerance=exteriorEnd?NavigationRadius+.5f:descending?NavigationRadius+.2f:.16f;
+        float horizontalTolerance=exteriorEnd?NavigationRadius+1.25f:descending?NavigationRadius+.2f:.16f;
         if(exteriorEnd)heightTolerance=.4f;
+        bool verticalX=capitalSlot==3&&capitalStep>0&&
+            new Vector2(goal.x-capitalPath[capitalStep-1].x,goal.z-capitalPath[capitalStep-1].z).sqrMagnitude<.00001f&&
+            Mathf.Abs(goal.y-capitalPath[capitalStep-1].y)*hull.WorldScale>.15f;
+        if(verticalX){horizontalTolerance=.12f;heightTolerance=.08f;}
         if(new Vector2(delta.x,delta.z).sqrMagnitude<horizontalTolerance*horizontalTolerance&&Mathf.Abs(delta.y)<heightTolerance){capitalStep++;capitalStuck=0;return capitalStep>=capitalPath.Count;}
         capitalStuck=NavalRouteProgress.Step(capitalStuck,before,delta.magnitude,dt,false,false);
         if(capitalStuck>6f){

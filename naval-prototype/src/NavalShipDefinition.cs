@@ -14,7 +14,7 @@ public sealed class NavalShipDefinition
     public float GunBaseYaw(int gun){return Destroyer?(gun==0?0f:180f):GunSide(gun)*90f;}
     public float GunTraverse {get{return Destroyer?150f:30f;}}
     public Vector3 GunPosition(int gun){return Destroyer?NavalDestroyerLayout.Gun(this,gun):new Vector3(GunSide(gun)*GunMountX,GunMountY,GunZ(this,gun));}
-    public Vector3 GunOperator(int gun){return Destroyer?GunPosition(gun)+NavalGunStationLayout.Offset(GunBaseYaw(gun))/Scale:new Vector3(GunSide(gun)*GunPostX,GunDeck,GunZ(this,gun));}
+    public Vector3 GunOperator(int gun){return Destroyer?GunPosition(gun)+NavalGunStationLayout.Offset(GunBaseYaw(gun))/Scale:new Vector3(GunSide(gun)*(CapitalShip&&GunZ(this,gun)>2.8f?1.20f:GunPostX),GunDeck,GunZ(this,gun));}
     public int HeavyCrewCount {get{return !SteamPowered||Destroyer?0:CapitalShip?5:2;}}
     public readonly float Scale,LadderZ,StairWidth,HoldFloor,MaxSailingSpeed,ProjectileSpeed,ProjectilePower,legacyGunMuzzleZ;
     public readonly NavalEra Era;

@@ -53,6 +53,8 @@ public class NavalRamDamage : MonoBehaviour
     }
     private static Vector3[] Corners(Transform ship)
     {
+        var profile=ship.GetComponent<NavalRamDamage>();
+        if(profile!=null)return NavalHullContactGeometry.WorldOutline(profile.Hull.Definition,ship.position,ship.eulerAngles.y);
         Quaternion flat=Quaternion.Euler(0f,ship.eulerAngles.y,0f);
         Vector3[] points=new Vector3[4];
         var damage=ship.GetComponent<NavalRamDamage>();float beam=damage!=null&&damage.Hull.Definition.Destroyer?damage.Hull.Definition.HullBeam:NavalShipContactMath.HalfWidth*Mathf.Abs(ship.lossyScale.x);
@@ -62,9 +64,9 @@ public class NavalRamDamage : MonoBehaviour
     public static void Closest(Transform a,Transform b,out Vector3 pa,out Vector3 pb)
     {
         Vector3[] aa=Corners(a),bb=Corners(b);pa=aa[0];pb=bb[0];float best=float.MaxValue;
-        for(int side=0;side<2;side++)for(int i=0;i<4;i++)for(int j=0;j<4;j++)
+        for(int side=0;side<2;side++)for(int i=0;i<(side==0?aa.Length:bb.Length);i++)for(int j=0;j<(side==0?bb.Length:aa.Length);j++)
         {
-            Vector3 p=side==0?aa[i]:bb[i],start=side==0?bb[j]:aa[j],end=side==0?bb[(j+1)%4]:aa[(j+1)%4];
+            Vector3 p=side==0?aa[i]:bb[i],start=side==0?bb[j]:aa[j],end=side==0?bb[(j+1)%bb.Length]:aa[(j+1)%aa.Length];
             Vector3 edge=end-start,q=start+edge*Mathf.Clamp01(Vector3.Dot(p-start,edge)/edge.sqrMagnitude);
             float distance=(p-q).sqrMagnitude;if(distance>=best)continue;best=distance;
             pa=side==0?p:q;pb=side==0?q:p;

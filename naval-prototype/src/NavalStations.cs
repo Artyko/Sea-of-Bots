@@ -153,7 +153,7 @@ public partial class NavalStations : MonoBehaviour
     // Steam captains withdraw on weapon loss; sail-era last-attack behavior remains available.
     public bool MustBoard {get{return !hull.Definition.SteamPowered&&AllGunsBroken&&!CanRestoreGun;}}
     public Vector3 Post(int station)
-    {return station==SailStation?SailPost:station==0?(EmergencySteering?TillerPost:new Vector3(0f,hull.Definition.HelmDeck,NavalShipDefinition.HelmZ(hull.Definition))):hull.Definition.Destroyer&&openShields!=null&&openShields[station-1]!=null?hull.Definition.GunPosition(station-1)+openShields[station-1].localRotation*new Vector3(0,-.55f,-2.3f)/hull.WorldScale:hull.Definition.GunOperator(station-1);}
+    {return station==SailStation?SailPost:station==0?(EmergencySteering?TillerPost:new Vector3(0f,hull.Definition.HelmDeck,NavalShipDefinition.HelmZ(hull.Definition))):hull.Definition.Destroyer&&openShields!=null&&openShields[station-1]!=null?hull.Definition.GunPosition(station-1)+openShields[station-1].localRotation*new Vector3(0,NavalGunStationLayout.OperatorHeightOffset,-NavalGunStationLayout.RearDistance)/hull.WorldScale:hull.Definition.GunOperator(station-1);}
     public Vector3 CrewPosition(int station){return boat.TransformPoint(Post(station));}
     public Vector3 CrewForward(int station) { return station==0||station==SailStation?boat.forward:barrels[station-1].forward; }
     public bool AimAndFire(int gun,Vector3 target,float dt,Character sailor)
@@ -447,6 +447,7 @@ public partial class NavalStations : MonoBehaviour
     private void OnGUI()
     {
         DrawReloadBars();
+        DrawRangefinder();
         if(DrawCapitalControls())return;
         if(Torpedoes!=null&&Torpedoes.PlayerOperating)return;
         if(EnemyControlled||NavalTestWorld.Active!=null&&NavalTestWorld.Active.Spectating)return;
@@ -460,6 +461,7 @@ public partial class NavalStations : MonoBehaviour
                 "ОРУДИЕ УНИЧТОЖЕНО ВЗРЫВОМ БОЕЗАПАСА — ремонту не подлежит":"ПУШКА ПОВРЕЖДЕНА — R: ремонт 60 с, один раз");
         if(active<0&&nearest==0&&!Functional(0)&&helmMechanism!=null&&helmMechanism.Destroyed)
             text="Штурвал разрушен — восстановление невозможно";
+        if(active<0&&nearest<0)return;
         GUI.Box(new Rect(Screen.width * 0.5f - 350f, Screen.height - 90f, 700f, 70f), text);
     }
     private void ArmoredDecoration(Transform parent,Material material,Vector3 centre,Vector3 size,bool solid)

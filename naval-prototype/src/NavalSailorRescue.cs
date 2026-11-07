@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Reflection;
 [DefaultExecutionOrder(350)]
 public partial class NavalSailorRescue : MonoBehaviour
@@ -61,9 +61,14 @@ public partial class NavalSailorRescue : MonoBehaviour
         else
         {
             float depth=world.WaterLevelAt(foot)-foot.y;
-            if(depth<.9f)return;
+            Vector3 local=home.Root.InverseTransformPoint(foot);
+            bool outside=local.y<home.Definition.WeatherDeck-.3f/home.WorldScale&&
+                (Mathf.Abs(local.x)>home.Definition.HullHalfWidth(local.z)+.15f/home.WorldScale||Mathf.Abs(local.z)>BoatDimensions.HalfLength);
+            // Below-deck sailors outside the shell cannot walk back through the armour.
+            // Route them to a boarding ladder even when the wave trough is shallow.
+            if(depth<.9f&&!outside)return;
             bool standing=SupportedOnShip(foot);
-            if(!HeadUnder(world)&&standing)return;
+            if(!HeadUnder(world)&&standing&&!outside)return;
         }
         worker.BeginRescue();if(boarder!=null)boarder.SuspendForRescue();scanAt=0f;climbing=false;chosen=null;
         if(interior!=null)

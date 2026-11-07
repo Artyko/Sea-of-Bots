@@ -8,14 +8,20 @@ public static class NavalShipContact
         if(other==null)return false;
         // Once completely below the other hull, a wreck no longer blocks surface travel.
         float scaleA=self!=null?Mathf.Abs(self.lossyScale.x)/2f:1f,scaleB=Mathf.Abs(other.lossyScale.x)/2f;
-        float height=9.5f*Mathf.Max(scaleA,scaleB);
-        float minY=Mathf.Min(start.y,next.y)-other.position.y,maxY=Mathf.Max(start.y,next.y)-other.position.y;
-        if(minY>=height||maxY<=-height)return false;
-        float yaw=rotation.eulerAngles.y,turn=Mathf.DeltaAngle(yaw,nextRotation.eulerAngles.y);
         NavalRamDamage ra=self!=null?self.GetComponent<NavalRamDamage>():null,rb=other.GetComponent<NavalRamDamage>();
+        if(ra!=null&&rb!=null){
+            if(NavalHullVerticalContact.SweepSeparated(ra.Hull.Definition,start,rotation,next,nextRotation,rb.Hull.Definition,other.position,other.rotation))return false;
+        }else{
+            float height=9.5f*Mathf.Max(scaleA,scaleB);
+            float minY=Mathf.Min(start.y,next.y)-other.position.y,maxY=Mathf.Max(start.y,next.y)-other.position.y;
+            if(minY>=height||maxY<=-height)return false;
+        }
+        float yaw=rotation.eulerAngles.y,turn=Mathf.DeltaAngle(yaw,nextRotation.eulerAngles.y);
         float wa=ra!=null&&ra.Hull.Definition.Destroyer?(ra.Hull.Definition.HullBeam+.9f)/ra.Hull.WorldScale:NavalShipContactMath.HalfWidth,wb=rb!=null&&rb.Hull.Definition.Destroyer?(rb.Hull.Definition.HullBeam+.9f)/rb.Hull.WorldScale:NavalShipContactMath.HalfWidth;
         float fraction=NavalShipContactMath.SafeFraction(start.x,start.z,yaw,next.x,next.z,turn,
             other.position.x,other.position.z,other.eulerAngles.y,scaleA,scaleB,wa,wb);
+        if(fraction>=1f)return false;
+        if(ra!=null&&rb!=null)fraction=NavalHullContactGeometry.SafeFraction(ra.Hull.Definition,rb.Hull.Definition,start.x,start.z,yaw,next.x,next.z,turn,other.position.x,other.position.z,other.eulerAngles.y);
         if(fraction>=1f)return false;
         // Preserve buoyancy while blocking horizontal penetration and hull rotation.
         float y=next.y;next=Vector3.Lerp(start,next,fraction);next.y=y;

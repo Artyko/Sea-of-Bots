@@ -35,7 +35,21 @@ public partial class NavalRepairSailor
                 navigationHits,delta.magnitude,PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore);
             if(count<navigationHits.Length)break;System.Array.Resize(ref navigationHits,navigationHits.Length*2);
         }
-        bool clear=true;for(int i=0;i<count;i++)if(!navigationHits[i].collider.transform.IsChildOf(robot.transform)&&!FriendlyCrewShape(navigationHits[i].collider))clear=false;
+        bool clear=true;bool? endpointClear=null;
+        for(int i=0;i<count;i++){
+            var hit=navigationHits[i];var shape=hit.collider;
+            if(shape.transform.IsChildOf(robot.transform)||FriendlyCrewShape(shape))continue;
+            // A capsule touching an inflated machinery box must be able to retreat.
+            // Only a convex primitive at the start may be left, toward a verified clear endpoint.
+            if(hit.distance<=.001f&&(shape is BoxCollider||shape is CapsuleCollider||shape is SphereCollider)){
+                Vector3 centre=(bottom+top)*.5f,away=centre-shape.ClosestPoint(centre);
+                if(Vector3.Dot(delta,away)>.0001f){
+                    if(!endpointClear.HasValue)endpointClear=ClearBody(b);
+                    if(endpointClear.Value)continue;
+                }
+            }
+            clear=false;
+        }
         System.Array.Clear(navigationHits,0,count);return clear;
     }
     private bool NavigationWalkClear(Vector3 a,Vector3 b)

@@ -174,7 +174,7 @@ public partial class NavalTestWorld : MonoBehaviour
         Material wood = MakeMaterial(new Color(0.30f, 0.19f, 0.115f));
         Material lightWood = MakeMaterial(new Color(0.66f, 0.51f, 0.32f));
         Material deckWood = MakeMaterial(new Color(0.47f, 0.375f, 0.255f));
-        Material alternatePlank = MakeMaterial(new Color(0.515f, 0.415f, 0.285f));
+        Material alternatePlank = MakeMaterial(new Color(0.515f, 0.426f, 0.285f));
         Material blackMast = MakeMaterial(new Color(0.025f, 0.025f, 0.03f));
         // A readable slate-grey upper belt and oxide-red underwater body.
         // The old near-black mast material made the whole ironclad look like
@@ -228,7 +228,7 @@ public partial class NavalTestWorld : MonoBehaviour
         if(GetComponent<NavalBattleTelemetry>()==null)gameObject.AddComponent<NavalBattleTelemetry>();
         if(ConvoyMission)SpawnConvoy();else ToggleEnemy();
         rough=era==NavalEra.Sail;
-        Debug.Log("[NavalPrototype] v397 "+era+" ships and waves started on native editor map.");
+        Debug.Log("[NavalPrototype] v426 "+era+" ships and waves started on native editor map.");
     }
 
     private Material MakeMaterial(Color color)
@@ -296,19 +296,21 @@ public partial class NavalTestWorld : MonoBehaviour
         if(boat==null||!SimulationActive)return;
         if(ConvoyMission){UpdateConvoyInput();TickConvoy();}
         if(Spectating)UpdateSpectator();else RememberLiveCamera();
-        if(Time.unscaledDeltaTime>.15f&&Time.unscaledTime>=slowFrameLogAt){slowFrameLogAt=Time.unscaledTime+2f;Debug.Log("[NavalPrototype] Long frame v397: milliseconds="+(Time.unscaledDeltaTime*1000f).ToString("F1"));}
+        if(Time.unscaledDeltaTime>.15f&&Time.unscaledTime>=slowFrameLogAt){slowFrameLogAt=Time.unscaledTime+2f;Debug.Log("[NavalPrototype] Long frame v426: milliseconds="+(Time.unscaledDeltaTime*1000f).ToString("F1"));}
         UpdateBinoculars();ApplyBinocularZoom();
         UpdateHudInput();
         if(replaceEnemy){replaceEnemy=false;if(enemy==null)ToggleEnemy();}
         float dt = Mathf.Min(Time.deltaTime, 0.05f);
+        float motionDt=NavalMotionClock.Elapsed(Time.deltaTime);
         frameMilliseconds=Mathf.Lerp(frameMilliseconds,Time.unscaledDeltaTime*1000f,0.05f);
-        bool aaHandled=AirRaid!=null&&stations.AirDefense!=null&&
-            stations.AirDefense.TickPlayer(player,AirRaid,!Spectating&&!ShipMenuOpen&&!boarding.Climbing&&!swimming&&!hull.Sunk);
+        bool ladderHandled=TickCapitalLadder(dt);
+        bool aaHandled=!ladderHandled&&AirRaid!=null&&stations.AirDefense!=null&&
+            stations.AirDefense.TickPlayer(player,AirRaid,DefendsAgainstRaid(hull)&&!Spectating&&!ShipMenuOpen&&!boarding.Climbing&&!swimming&&!hull.Sunk);
         bool aaOperating=AirRaid!=null&&stations.AirDefense!=null&&stations.AirDefense.PlayerOperating;
-        if(!Spectating&&!aaHandled)boarding.Tick(dt,stations.Operating);
-        if(!Spectating&&!ShipMenuOpen&&!boarding.Climbing&&!aaHandled)stations.Tick(dt, footOffset, hull.Sunk, swimming);
-        if(!Spectating)SetStationLock(stations.Operating||boarding.Climbing||ShipMenuOpen||aaOperating);
-        if(ShipMenuOpen||aaOperating)stations.PauseInput();
+        if(!Spectating&&!aaHandled&&!ladderHandled)boarding.Tick(dt,stations.Operating);
+        if(!Spectating&&!ShipMenuOpen&&!boarding.Climbing&&!aaHandled&&!ladderHandled)stations.Tick(dt, footOffset, hull.Sunk, swimming);
+        if(!Spectating)SetStationLock(stations.Operating||boarding.Climbing||ShipMenuOpen||aaOperating||ladderHandled);
+        if(ShipMenuOpen||aaOperating||ladderHandled)stations.PauseInput();
         if (Input.GetKeyDown(KeyCode.F7)) rough = !rough;
         ocean.Amplitude = rough ? 0.65f : NavalSessionSettings.Era==NavalEra.Steam?0.35f:0.20f;
         if (Input.GetKeyDown(KeyCode.F9)) hull.Damage(new Vector3(-BoatDimensions.HalfWidth, -0.225f, 0f), 1.5f);
@@ -360,8 +362,8 @@ public partial class NavalTestWorld : MonoBehaviour
         Vector3 oldPosition=boat.position;Quaternion oldRotation=boat.rotation;
         Quaternion smoothed=Quaternion.Slerp(oldRotation,Quaternion.Euler(pitch,heading,oldRotation.eulerAngles.z),1f-Mathf.Exp(-4f*dt));
         Quaternion nextRotation=Quaternion.Euler(smoothed.eulerAngles.x,smoothed.eulerAngles.y,roll);
-        Vector3 next = boat.position + Vector3.up*verticalVelocity*dt + (flatForward * speed / (1f + depth) + ram.Drift) * dt * (hull.Sunk ? 0f : 1f);
-        ram.Velocity=(next-oldPosition)/Mathf.Max(dt,0.001f);ram.AngularRate=Mathf.DeltaAngle(oldRotation.eulerAngles.y,nextRotation.eulerAngles.y)/Mathf.Max(dt,0.001f);
+        Vector3 next = boat.position + Vector3.up*verticalVelocity*dt + (flatForward * speed / (1f + depth) + ram.Drift) * motionDt * (hull.Sunk ? 0f : 1f);
+        ram.Velocity=(next-oldPosition)/Mathf.Max(motionDt,0.001f);ram.AngularRate=Mathf.DeltaAngle(oldRotation.eulerAngles.y,nextRotation.eulerAngles.y)/Mathf.Max(motionDt,0.001f);
         float rigRetention;
         if(ConvoyMission)
         {
@@ -377,8 +379,8 @@ public partial class NavalTestWorld : MonoBehaviour
         if(rigRetention<1f){speed*=rigRetention;heading=nextRotation.eulerAngles.y;}
         if(seaMap!=null&&seaMap.ConstrainShore(boat,ref next,ref nextRotation))
         {if(new Vector2(next.x-boat.position.x,next.z-boat.position.z).sqrMagnitude<.00000001f){speed=0f;ram.StopMomentum();}heading=nextRotation.eulerAngles.y;rudder=0f;helmNavigator.LandBlocked();}
-        SpeedThroughWater=NavalShipSpeedMath.Measure(next.x-oldPosition.x,next.z-oldPosition.z,dt);
-        motionVelocity=(next-oldPosition)/Mathf.Max(dt,.001f);
+        SpeedThroughWater=NavalShipSpeedMath.Measure(next.x-oldPosition.x,next.z-oldPosition.z,motionDt);
+        motionVelocity=(next-oldPosition)/Mathf.Max(motionDt,.001f);
         hull.PhysicsBody.SetPose(next,nextRotation);
         UpdateHelmCamera();
         ocean.Focus = ViewCamera!=null?ViewCamera.transform.position:boat.position;
@@ -655,6 +657,7 @@ public partial class NavalTestWorld : MonoBehaviour
         if(boat==null)return;
         if(binocularHeld){DrawBinoculars();return;}
         DrawStructuredHud();
+        DrawCompass();
         if(ConvoyMission)DrawConvoy();
         GUI.Label(new Rect(Screen.width*.5f-5f,Screen.height*.5f-10f,20f,20f),"+");
         if(Time.time<damageMessageUntil)GUI.Box(new Rect(NavalHudLayout.ContextX(Screen.width,Screen.height,500f),Screen.height-285f,NavalHudLayout.ContextWidth(Screen.width,Screen.height,500f),28f),damageMessage);

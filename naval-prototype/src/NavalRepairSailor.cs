@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Reflection;
 using UnityEngine;
 
@@ -334,8 +334,8 @@ public partial class NavalRepairSailor : MonoBehaviour
                 {leak.RepairMechanism.CompleteCannonRepair(structure,work);ContinueRepair();return;}
                 Vector3 patch=leak.LocalCenter;bool usesBoard=NeedsPlanks(leak),restored=false;int restoredCells=0;
                 foreach(NavalHullVoxel cell in claimed)
-                    if(cell.RepairClaim==this&&(cell.HydraulicShell||cell.InternalBarrier||cell.RepairableEquipment||IsWalkwayHole(cell))&&(cell.Missing||cell.Detached)&&
-                        (cell.LocalCenter-patch).sqrMagnitude<=0.85f*0.85f){structure.RestoreCell(cell);if(!cell.Missing&&!cell.Detached){if(usesBoard)hull.ApplyWoodPatch(cell);restored=true;restoredCells++;}}
+                    if(cell.RepairClaim==this&&(cell.HydraulicShell||cell.InternalBarrier||cell.RepairableEquipment||IsWalkwayHole(cell))&&(cell.Missing||cell.Detached)&&ReachFrom(feet,cell)&&
+                        NavalRepairPatchMath.Within(cell.LocalCenter.x-patch.x,cell.LocalCenter.y-patch.y,cell.LocalCenter.z-patch.z,hull.WorldScale)){structure.RestoreCell(cell);if(!cell.Missing&&!cell.Detached){if(usesBoard)hull.ApplyWoodPatch(cell);restored=true;restoredCells++;}}
                 if(!restored){
                     retryAfter[leak]=Time.time+30f;
                     Debug.Log("[NavalPrototype] Repair attempt deferred: sailor="+robot.GetInstanceID()+" target="+patch+" reason=no restorable claimed cells");
@@ -418,8 +418,7 @@ public partial class NavalRepairSailor : MonoBehaviour
                 if((candidate.LocalCenter-tested).sqrMagnitude*hull.WorldScale*hull.WorldScale<.75f*.75f){duplicate=true;break;}
             if(duplicate)continue;
             if(checkedSites++>=12)break;
-            if(!NavalWalkRoutes.InStairwell(feet.x,feet.y,feet.z,hull.Definition.StairWidth*.5f+.175f,hull.Floor)&&
-                (Mathf.Abs(feet.y-0.825f)<0.25f||Mathf.Abs(feet.y-hull.Floor)<0.25f||Mathf.Abs(feet.y-hull.Definition.WeatherDeck)<0.25f)&&ReachFrom(feet,candidate))
+            if(RepairFooting(feet)&&ReachFrom(feet,candidate))
             {workPoint=feet;if(CloserRepairer(candidate,workPoint))continue;selected=candidate;break;}
             if(FindWorkPoint(candidate,out workPoint)){if(CloserRepairer(candidate,workPoint))continue;selected=candidate;break;}
             testedRepairSites.Add(candidate.LocalCenter);
@@ -441,7 +440,7 @@ public partial class NavalRepairSailor : MonoBehaviour
         if(leak.RepairMechanism!=null&&leak.RepairMechanism.IsCannon)leak.RepairMechanism.RepairWorker=this;
         waitingForRepair=false;repairReplans=0;rejectedRepairPoints.Clear();repairDestination=workPoint;progress.Reset();route.Clear();returning=false;changingPost=false;stuck=0f;
         foreach(NavalHullVoxel cell in hull.GetDamagedVoxels())
-            if((cell.HydraulicShell||cell.InternalBarrier||cell.RepairableEquipment||IsWalkwayHole(cell))&&(cell.Missing||cell.Detached)&&cell.RepairClaim==null&&structure.CanRestoreCell(cell)&&(cell.LocalCenter-leak.LocalCenter).sqrMagnitude<0.85f*0.85f)
+            if((cell.HydraulicShell||cell.InternalBarrier||cell.RepairableEquipment||IsWalkwayHole(cell))&&(cell.Missing||cell.Detached)&&cell.RepairClaim==null&&structure.CanRestoreCell(cell)&&NavalRepairPatchMath.Within(cell.LocalCenter.x-leak.LocalCenter.x,cell.LocalCenter.y-leak.LocalCenter.y,cell.LocalCenter.z-leak.LocalCenter.z,hull.WorldScale))
             {cell.RepairClaim=this;claimed.Add(cell);}
         Vector3 destination=workPoint;
         if((destination-feet).sqrMagnitude>.01f)
@@ -473,11 +472,21 @@ public partial class NavalRepairSailor : MonoBehaviour
         offset=boat.TransformPoint(local)-hand;
         return NavalRepairSite.WithinReach(offset.x,offset.y,offset.z);
     }
+    private bool RepairFooting(Vector3 point){
+        if(Supported(point))return true;
+        if(NavalStairRepairSites.Flight(new NavalWalkPoint(point.x,point.y,point.z),hull.Definition)<0)return false;
+        if(hull.DeckGapAt(point,NavigationRadius))return false;
+        // Three live support probes reject a missing tread or an unsupported side edge.
+        float width=NavigationRadius*.7f/hull.WorldScale;
+        return NavalPhysicsQueries.HasLocalSupport(hull,point)&&
+            NavalPhysicsQueries.HasLocalSupport(hull,point+Vector3.right*width)&&
+            NavalPhysicsQueries.HasLocalSupport(hull,point-Vector3.right*width);
+    }
     private bool CanUseRepairSite(Vector3 point,NavalHullVoxel hole)
     {
         Vector3 hand,offset;
         return InsideWalkingDeck(point)&&!RejectedPoint(hole,point)&&RepairReachVector(point,hole,out hand,out offset)&&
-            Supported(point)&&!hull.DeckGapAt(point,NavigationRadius)&&ClearBody(point)&&
+            RepairFooting(point)&&!hull.DeckGapAt(point,NavigationRadius)&&ClearBody(point)&&
             RepairSightClear(hand,offset,CannonRepairTarget(hole));
     }
     private static readonly float[] destroyerRepairOffsets={0f,-1.2f,1.2f,-2.2f,2.2f};
@@ -488,7 +497,25 @@ public partial class NavalRepairSailor : MonoBehaviour
                 point=new Vector3(hole.LocalCenter.x+dx/q,floor,hole.LocalCenter.z+dz/q);float limit=hull.Definition.HullHalfWidth(point.z)-.9f/q;point.x=Mathf.Clamp(point.x,-limit,limit);point.z=Mathf.Clamp(point.z,-6+.9f/q,6-.9f/q);
                 if(CanUseRepairSite(point,hole))return true;
             }
+            // Severed narrow bow/stern floors require a work point farther inboard,
+            // or an air-budgeted swimming repair instead of a rejected floor pin.
+            if(Mathf.Abs(hole.LocalCenter.z)>4.3f)foreach(float floor in new[]{hull.Floor,hull.Definition.WeatherDeck,NavalDestroyerLayout.Foredeck(hull.Definition)})
+            for(int aft=1;aft<=6;aft++)for(int lane=-1;lane<=1;lane++){
+                float z=hole.LocalCenter.z-Mathf.Sign(hole.LocalCenter.z)*aft*.7f/hull.WorldScale;
+                point=new Vector3(lane*.8f/hull.WorldScale,floor,z);
+                if(CanUseRepairSite(point,hole))return true;
+                var repairWorld=NavalTestWorld.Active;Vector3 wet=boat.TransformPoint(point);
+                if(repairWorld!=null&&RescueComponent!=null&&repairWorld.WaterLevelAt(wet)>wet.y+2.6f&&InsideWalkingDeck(point)&&!RejectedPoint(hole,point)&&ClearBody(point)&&ReachFrom(point,hole)&&
+                    RescueComponent.HasAirForWork(boat.TransformVector(point-feet).magnitude/2.8f,RepairSeconds))return true;
+            }
             point=Vector3.zero;return false;
+        }
+        if(Mathf.Abs(hole.LocalCenter.x)<hull.Definition.StairWidth*.5f+.3f&&hole.LocalCenter.z> -3.6f&&hole.LocalCenter.z<1.05f){
+            for(int flight=0;flight<hull.Definition.DeckCount-1;flight++)for(int step=0;step<NavalWalkRoutes.StepCount;step++)for(int lane=-1;lane<=1;lane++){
+                var site=NavalStairRepairSites.Candidate(hull.Definition,flight,step,lane);
+                point=new Vector3(site.X,site.Y,site.Z);
+                if(CanUseRepairSite(point,hole))return true;
+            }
         }
         float preferred=NavalRepairSite.Floor(hole.LocalCenter.y,hull.Floor);
         if(hull.Definition.SteamPowered&&Mathf.Abs(hole.LocalCenter.y-hull.Definition.HelmDeck)*hull.WorldScale<.6f){
@@ -572,6 +599,18 @@ public partial class NavalRepairSailor : MonoBehaviour
                 if(CanUseRepairSite(point,hole))return true;
             }
         }
+        // Small side holes may fall between the fixed corridors, or behind a tank edge.
+        // Search the real inner face in world metres without enlarging repair reach.
+        if(hole.HydraulicShell)for(int deck=0;deck<hull.Definition.DeckCount;deck++){
+            float floor=hull.Definition.RepairFloor(preferred,deck);
+            for(int inward=1;inward<=7;inward++)for(int along=-3;along<=3;along++){
+                float x=hole.LocalCenter.x-Mathf.Sign(hole.LocalCenter.x)*inward*.55f/hull.WorldScale;
+                float z=hole.LocalCenter.z+along*.65f/hull.WorldScale;
+                point=new Vector3(x,floor,z);
+                if(hull.Definition.MaintenanceFloorAt(floor)&&hull.Bilge!=null)point.y=NavalBallastLayout.Surface(x,z,floor,hull.Definition);
+                if(CanUseRepairSite(point,hole))return true;
+            }
+        }
         // A flooded hold can be repaired from a swimming position without floor support.
         var world=NavalTestWorld.Active;
         if(world!=null&&RescueComponent!=null){
@@ -600,6 +639,13 @@ public partial class NavalRepairSailor : MonoBehaviour
             float floor=hull.Floor;for(int level=0;level<hull.Definition.MaintenanceDeckCount;level++)if(hull.Definition.MaintenanceFloor(level)<=goal.y+.001f)floor=hull.Definition.MaintenanceFloor(level);
             float surface=NavalBallastLayout.Surface(goal.x,goal.z,floor,hull.Definition);
             if(goal.y>surface+.1f){Append(NavalSupplyRoutes.Plan(new NavalWalkPoint(feet.x,feet.y,feet.z),new NavalWalkPoint(goal.x,surface,goal.z),hull.Definition));route.Add(goal);return;}
+        }
+        var currentWalk=new NavalWalkPoint(feet.x,feet.y,feet.z);var goalWalk=new NavalWalkPoint(goal.x,goal.y,goal.z);
+        // Raised stations own their access paths. Generic ledge recovery must not
+        // replace a nine-metre AA ladder with a vertical step under the platform.
+        if(NavalCapitalAADeck.Upper(goalWalk,hull.Definition)||NavalCapitalAADeck.Upper(currentWalk,hull.Definition)||
+           NavalRaisedBridge.Upper(goalWalk,hull.Definition)||NavalRaisedBridge.Flight(currentWalk,hull.Definition)){
+            Append(hull.Definition.Destroyer?NavalDestroyerLiveRoutes.Plan(hull,currentWalk,goalWalk):NavalSupplyRoutes.Plan(currentWalk,goalWalk,hull.Definition));return;
         }
         if(TryPlanLedgeRecovery(goal))return;
         float routeY=feet.y;
@@ -695,13 +741,14 @@ public partial class NavalRepairSailor : MonoBehaviour
         return true;
     }
     private bool RepairNearbyAccessGap(){
-        if(planks.Count==0||!Supported(feet))return false;
+        if(planks.Count==0||!RepairFooting(feet))return false;
         NavalHullVoxel selected=null;float best=3.5f*3.5f;
         foreach(var cell in hull.GetDamagedVoxels()){
             if(cell==null||!IsWalkwayHole(cell)||!NeedsPlanks(cell)||!structure.CanRestoreCell(cell)||cell.RepairClaim!=null&&cell.RepairClaim!=this)continue;
             float retry;if(retryAfter.TryGetValue(cell,out retry)&&Time.time<retry)continue;
             Vector3 shape=cell.transform.localScale;
-            if(cell.NonPhysicalDecoration||!NavalDeckGapMath.IsDeckLayer(cell.LocalCenter.y,Mathf.Abs(shape.y),hull.Definition))continue;
+            bool stair=NavalStairRepairSites.Flight(new NavalWalkPoint(cell.LocalCenter.x,cell.LocalCenter.y+Mathf.Abs(shape.y)*.5f,cell.LocalCenter.z),hull.Definition)>=0;
+            if(cell.NonPhysicalDecoration||!stair&&!NavalDeckGapMath.IsDeckLayer(cell.LocalCenter.y,Mathf.Abs(shape.y),hull.Definition))continue;
             float distance=boat.TransformVector(cell.LocalCenter-feet).sqrMagnitude;
             if(distance<best&&ReachFrom(feet,cell)){best=distance;selected=cell;}
         }
@@ -720,7 +767,7 @@ public partial class NavalRepairSailor : MonoBehaviour
             float delay=Mathf.Max(8f,NavalRepairDispatch.RetryDelay(leak.InflowRate>.00001f));retryAfter[leak]=Time.time+delay;
             // Exclude the whole blocked repair patch, not just one voxel from the same hole.
             foreach(var cell in hull.GetDamagedVoxels())
-                if((cell.LocalCenter-leak.LocalCenter).sqrMagnitude<.85f*.85f)retryAfter[cell]=Time.time+delay;
+                if(NavalRepairPatchMath.Within(cell.LocalCenter.x-leak.LocalCenter.x,cell.LocalCenter.y-leak.LocalCenter.y,cell.LocalCenter.z-leak.LocalCenter.z,hull.WorldScale))retryAfter[cell]=Time.time+delay;
             Debug.Log("[NavalPrototype] Repair access retry: hole="+leak.LocalCenter+" flow="+leak.InflowRate.ToString("F3")+" retry="+delay+"s");
         }
         ContinueRepair();
@@ -789,7 +836,7 @@ public partial class NavalRepairSailor : MonoBehaviour
     }
     private void ApplyUnsupportedFall(float dt){
         using(NavalPerformance.Measure(NavalPerfArea.CrewFooting))
-        if(movingInWater||HasStableFooting()){unsupportedFallSpeed=0;return;}
+        if(movingInWater||Navigating&&NavalCapitalAADeck.Ladder(feet,hull.Definition)||HasStableFooting()){unsupportedFallSpeed=0;return;}
         var controller=Controller();if(controller==null||!controller.enabled)return;
         unsupportedFallSpeed=Mathf.Min(12f,unsupportedFallSpeed+9.81f*dt);
         NavalCrewPassage.Prepare(controller);
@@ -801,6 +848,7 @@ public partial class NavalRepairSailor : MonoBehaviour
 
     private void MoveWithController(Vector3 destination,float dt,bool finalPoint)
     {
+        if(ClimbAftAALadder(destination,dt))return;
         if(hull.Bilge!=null)destination=hull.Bilge.PassageTarget(feet,destination,this,dt);
         Vector3 before=feet;
         HoldPosition();Vector3 offset=boat.TransformVector(destination-feet);

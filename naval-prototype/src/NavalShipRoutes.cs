@@ -15,6 +15,7 @@ public static class NavalShipRoutes
     public const float SteamAftGatewayLane=1.58f,SteamAftGatewayZ=-4.05f;
     public static bool InStairwell(NavalWalkPoint p,NavalShipDefinition ship)
     {
+        if(NavalCapitalAADeck.Ladder(new UnityEngine.Vector3(p.X,p.Y,p.Z),ship))return true;
         if(NavalRaisedBridge.Flight(p,ship))return true;
         if(ship.Destroyer)return NavalStairTraffic.InPassage(p,ship);
         if(NavalWalkRoutes.InStairwell(p.X,p.Y,p.Z,ship.StairWidth*.5f+.175f,ship.HoldFloor))return true;

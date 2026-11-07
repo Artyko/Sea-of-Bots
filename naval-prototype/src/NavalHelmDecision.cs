@@ -10,13 +10,21 @@ public sealed class NavalHelmDecision
  private readonly NavalFirePassMath firePass=new NavalFirePassMath();
  private int mode=-1,loggedPass;
  private float observedShot,nextTelemetry;
- private float heading;
+ private float heading,convoyRepairUntil,convoyLastLaunch;private bool convoyReengage;
  private bool initialized,mainAssistKnown,mainAssistLogged;
  public void Reset(){mode=-1;loggedPass=0;observedShot=nextTelemetry=0;initialized=mainAssistKnown=mainAssistLogged=false;combat.Reset();stern.Reset();firePass.Reset();}
  public Vector3 Course(Transform own,NavalHull hull,NavalStations guns,Transform enemy,Vector3 enemyVelocity,float speed,float dt,bool retreat,bool targetRetreat,NavalRamDamage ram,ref float throttle,Vector3 convoyCourse=default(Vector3))
  {
   bool noArmedBattery=guns.PortCombatWorking+guns.StarboardCombatWorking==0&&!guns.MainBatteryCombatAvailable&&(guns.Torpedoes==null||!guns.Torpedoes.HasCombatPotential);
   int next=NavalHelmIntentMath.Mode(guns.RescueStop,guns.MustBoard,retreat||noArmedBattery&&!guns.MustBoard||guns.CrewRepairRetreat||guns.SteamPlant!=null&&guns.SteamPlant.PropulsionFloodEmergency||guns.AllGunsBroken&&guns.CanRestoreGun);
+  var mission=NavalTestWorld.Active;bool interceptor=mission!=null&&mission.ConvoyMission&&hull.Definition.Destroyer;
+  if(interceptor){
+   float launched=guns.Torpedoes!=null?guns.Torpedoes.LastLaunch:0f;
+   if(launched>convoyLastLaunch){convoyLastLaunch=launched;convoyReengage=false;convoyRepairUntil=0;}
+   if(next==1&&!convoyReengage){if(convoyRepairUntil<=0)convoyRepairUntil=Time.time+35f;
+    if(Time.time>=convoyRepairUntil&&!hull.CombatCritical&&!noArmedBattery&&(guns.SteamPlant==null||!guns.SteamPlant.PropulsionFloodEmergency))convoyReengage=true;}
+   if(convoyReengage&&next==1&&!hull.CombatCritical&&!noArmedBattery&&(guns.SteamPlant==null||!guns.SteamPlant.PropulsionFloodEmergency))next=0;
+  }
   if(next!=mode){initialized=false;loggedPass=0;observedShot=guns.LastCrewShotAt;mode=next;combat.Reset();stern.Reset();firePass.Reset();}
   Vector3 toward=enemy.position-own.position;toward.y=0;
   if(toward.sqrMagnitude<.001f)toward=own.forward;
@@ -59,6 +67,7 @@ public sealed class NavalHelmDecision
   if(mode==0&&convoyCourse.sqrMagnitude>.01f){desired=convoyCourse;throttle=.8f;}
   Vector3 torpedoCourse;
   if(mode!=3&&torpedoAttack.Course(own,hull,guns,enemy,enemyVelocity,mode==1,ref throttle,out torpedoCourse))desired=torpedoCourse;
+  if(interceptor&&mode==1&&toward.magnitude>900f){desired=toward;throttle=hull.CombatCritical?.35f:.7f;}
   if(mode!=3&&!torpedoAttack.HoldingLaunchCourse)desired=shellEvasion.Course(own,hull,guns,speed,desired);
   if(mode!=3&&torpedoAvoid.Course(own,hull,speed,ref throttle,out torpedoCourse)){desired=torpedoCourse;if(guns.Torpedoes!=null)guns.Torpedoes.LaunchWindowUntil=0;}
   if(!initialized){initialized=true;heading=own.eulerAngles.y;}

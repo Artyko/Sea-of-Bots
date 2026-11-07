@@ -19,8 +19,9 @@ public static class NavalHoldSafety
 
     public static float AirReserve(float exitSeconds)
     {return Math.Max(8f,Math.Min(22f,exitSeconds+4f));}
+    public const float EscapeAirSeconds=22f;
     public static bool MustEscape(bool headUnder,bool sinking,float air,float exitSeconds)
-    {return sinking||headUnder&&air<=AirReserve(exitSeconds);}
+    {return headUnder&&air<=EscapeAirSeconds;}
     public static bool CanFinishPatch(float air,float exitSeconds,float remaining)
     {
         // Spend only the contingency buffer once hands are already on the patch.

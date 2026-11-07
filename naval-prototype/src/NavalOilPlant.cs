@@ -37,6 +37,7 @@ public sealed partial class NavalSteamPlant {
   for(int i=0;i<4;i++){var cells=new List<NavalHullVoxel>();oilStacks.Add(cells);float z=22-i*10;
    OilBox(cells,new Vector3(0,(s.HoldFloor+s.WeatherDeck)*.5f,z/q),new Vector3(1.2f,(s.WeatherDeck-s.HoldFloor)*q,1.5f),dark);
    OilBox(cells,new Vector3(0,s.WeatherDeck+NavalOilStackLayout.Height*.5f/q,z/q),new Vector3(1.4f,NavalOilStackLayout.Height,2),dark);funnel.AddRange(cells);new NavalRepairableMechanism(hull,cells,false,false,"Дымоход "+(i+1));
+   FunnelMouth(0,z/q,s.WeatherDeck+NavalOilStackLayout.Height/q,1.4f/q,2f/q,dark);
   }
   for(int i=0;i<6;i++){float z=26-i*8;int stack=NavalOilStackLayout.ForBoiler(i);var cells=oilStacks[stack];int begin=cells.Count;
    Vector3 from=new Vector3(0,s.HoldFloor+2.3f/q,z/q),elbow=new Vector3(0,s.HoldFloor+4.8f/q,z/q),to=new Vector3(0,s.HoldFloor+4.8f/q,(22-stack*10)/q);

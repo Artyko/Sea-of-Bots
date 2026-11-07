@@ -45,23 +45,51 @@ public sealed class NavalTorpedo:MonoBehaviour {
   if(!NavalTorpedoMath.SweepNearHull(start.x,start.z,end.x,end.z,radius))return false;
   return Cast(carried,b,ship,out hit);
  }
- private void Update(){var world=NavalTestWorld.Active;if(world==null||!world.SimulationActive)return;float dt=Time.deltaTime;Vector3 a=transform.position,b=a+Velocity*dt;
-  // Slowly filtered sea level follows swell, not the short crest under every frame.
-  seaLevel=Mathf.Lerp(seaLevel,sea.Height(b.x,b.z),1-Mathf.Exp(-dt*.35f));b.y=seaLevel-NavalTorpedoMath.Depth;
+ private bool expired,wasDry,nearInterior;
+ private bool NearInterior(Vector3 a,Vector3 b){
+  for(int slot=0;slot<hullPoses.Length;slot++){
+   var hull=NavalPhysicsQueries.HullAtSlot(slot);if(hull==null||hull.Root==null||hull.SimulationRetired)continue;
+   Vector3 start=a-hull.Root.position,end=b-hull.Root.position;
+   float vertical=hull.WorldScale*4f;
+   if(Mathf.Min(start.y,end.y)>vertical||Mathf.Max(start.y,end.y)<-vertical)continue;
+   if(NavalTorpedoMath.SweepNearHull(start.x,start.z,end.x,end.z,hull.Definition.HullLength*.5f+hull.Definition.HullBeam*.5f+2f))return true;
+  }
+  return false;
+ }
+ private void Update(){using(NavalPerformance.Measure(NavalPerfArea.TorpedoMotion))Tick();}
+ private void Tick(){var world=NavalTestWorld.Active;if(world==null||!world.SimulationActive)return;
+  float elapsed=Mathf.Min(Time.deltaTime,.5f);nearInterior=NearInterior(transform.position,transform.position+Velocity*elapsed);
+  int steps=nearInterior?Mathf.Max(1,Mathf.CeilToInt(elapsed/.05f)):1;
+  for(int step=0;step<steps&&!expired;step++)Step(world,elapsed/steps);
+ }
+ private void Step(NavalTestWorld world,float dt){Vector3 a=transform.position,b=a+Velocity*dt;
+  float actualLevel=nearInterior?world.WaterLevelAt(b):sea.Height(b.x,b.z);
+  bool wet=NavalTorpedoWaterMath.Submerged(actualLevel,b.y);
+  if(wet){
+   seaLevel=Mathf.Lerp(seaLevel,actualLevel,1-Mathf.Exp(-dt*.35f));
+   Vector3 horizontal=Vector3.ProjectOnPlane(Velocity,Vector3.up);
+   if(horizontal.sqrMagnitude>.001f)Velocity=horizontal.normalized*Mathf.MoveTowards(horizontal.magnitude,NavalTorpedoMath.Speed,2f*dt);
+   else Velocity=Vector3.ProjectOnPlane(transform.up,Vector3.up).normalized*NavalTorpedoMath.Speed;
+   b=a+Velocity*dt;b.y=Mathf.MoveTowards(a.y,actualLevel-NavalTorpedoMath.Depth,1.2f*dt);
+  }else{
+   float damping=Mathf.Exp(-.8f*dt);Velocity=new Vector3(Velocity.x*damping,Velocity.y-9.81f*dt,Velocity.z*damping);b=a+Velocity*dt;
+   if(!wasDry)Debug.Log("[NavalPrototype] Torpedo left water: position="+a+" travel_m="+Travel.ToString("F1")+" mode=ballistic");
+  }
+  wasDry=!wet;
   RaycastHit hit,relative;
   bool contact=Cast(a,b,null,out hit);
   for(int slot=0;slot<hullPoses.Length;slot++)
    if(MovingContact(slot,a,b,out relative)&&(!contact||(relative.point-a).sqrMagnitude<(hit.point-a).sqrMagnitude))
    {hit=relative;contact=true;}
   float step=Vector3.Distance(a,b);Travel+=contact?Mathf.Min(step,Vector3.Distance(a,hit.point)):step;
-  if(contact){if(NavalTorpedoMath.Armed(Travel))Explode(hit);else Debug.Log("[NavalPrototype] Torpedo unarmed contact: travel="+Travel);Destroy(gameObject);return;}
+  if(contact){if(NavalTorpedoMath.Armed(Travel))Explode(hit);else Debug.Log("[NavalPrototype] Torpedo unarmed contact: travel="+Travel);expired=true;Destroy(gameObject);return;}
   transform.position=b;transform.rotation=Quaternion.LookRotation(Velocity)*Quaternion.Euler(90,0,0);if(!detected&&world.PlayerHull!=null&&world.PlayerHull.Root!=null){
    Vector3 offset=b-world.PlayerHull.Root.position;
    offset.y=0;
    if(offset.sqrMagnitude<=DetectionRange*DetectionRange){detected=true;torpedoRenderer.enabled=true;}
   }
-  if(detected&&Time.time>=wakeAt){wakeAt=Time.time+.12f;NavalShotPuff.Create(transform.parent,new Vector3(b.x,seaLevel+.04f,b.z),Vector3.up*.15f,water,1.4f,.22f);}
-  if(Travel>=NavalTorpedoMath.Range){Debug.Log("[NavalPrototype] Torpedo range exhausted: source="+(Source!=null?Source.name:"destroyed")+" travel="+Travel.ToString("F1"));Destroy(gameObject);}
+  if(wet&&detected&&Time.time>=wakeAt){wakeAt=Time.time+.12f;NavalShotPuff.Create(transform.parent,new Vector3(b.x,seaLevel+.04f,b.z),Vector3.up*.15f,water,1.4f,.22f);}
+  if(Travel>=NavalTorpedoMath.Range){expired=true;Debug.Log("[NavalPrototype] Torpedo range exhausted: source="+(Source!=null?Source.name:"destroyed")+" travel="+Travel.ToString("F1"));Destroy(gameObject);}
  }
  private void Explode(RaycastHit hit){Debug.Log("[NavalPrototype] Torpedo armed contact: obstacle="+hit.collider.name+" position="+hit.point+" travel="+Travel.ToString("F1"));var cell=NavalVoxelHit.Resolve(hit.collider,hit.point);if(cell!=null&&cell.Owner!=null){var h=cell.Owner;var mission=NavalTestWorld.Active;if(mission!=null)mission.RecordConvoyShot(Source,true,true);int removed=h.Damage(h.Root.InverseTransformPoint(hit.point),NavalTorpedoMath.BlastRadius,true,cell,NavalTorpedoMath.BlastPower,NavalTorpedoMath.BlastArmorPower,true);var ram=h.Root.GetComponent<NavalRamDamage>();if(ram!=null)ram.ExplosionImpulse(Velocity.normalized*1.2f);
    Debug.Log("[NavalPrototype] Torpedo hit: ship="+h.Root.name+" blast_radius_m="+NavalTorpedoMath.BlastRadius.ToString("F2")+" removed_voxels="+removed+" travel_m="+Travel.ToString("F0"));}

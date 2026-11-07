@@ -1,7 +1,7 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using UnityEngine;
 
-public enum NavalPerfArea {Sail,RigSupport,Ocean,HullDamage,Chunks,Structure,Crew,Gunnery,PhysicsSync,Flood,Effects,RigRendering,RigContact,HullPose,SupportQuery,ColliderChunks,Shore,ShoreNavigation,ShoreMotion,CrewCarry,CrewRescue,CrewDispatch,CrewPlan,CrewRoute,CrewMotion,CrewAnchor,CrewPassage,CrewWorkerTick,CrewFooting,WaterQuery,GunTargetSearch,CrewGait,CrewSeatAnimation,EnemyLateTick,WorldLateTick,ConvoyCoordinator,RigRefresh,FloodVisualLate,FireLate,BreathLate,RescueLate,BoarderLate,PassageLate,FleetTarget,CrewRecruit,FleetHelm,FleetContact,GunRecoil,CharacterDiscovery,CrewDefense,CrewLeakSearch,CrewNextTask,AirRaid,AirDefense,Count}
+public enum NavalPerfArea {Sail,RigSupport,Ocean,HullDamage,Chunks,Structure,Crew,Gunnery,PhysicsSync,Flood,Effects,RigRendering,RigContact,HullPose,SupportQuery,ColliderChunks,Shore,ShoreNavigation,ShoreMotion,CrewCarry,CrewRescue,CrewDispatch,CrewPlan,CrewRoute,CrewMotion,CrewAnchor,CrewPassage,CrewWorkerTick,CrewFooting,WaterQuery,GunTargetSearch,CrewGait,CrewSeatAnimation,EnemyLateTick,WorldLateTick,ConvoyCoordinator,RigRefresh,FloodVisualLate,FireLate,BreathLate,RescueLate,BoarderLate,PassageLate,FleetTarget,CrewRecruit,FleetHelm,FleetContact,GunRecoil,CharacterDiscovery,CrewDefense,CrewLeakSearch,CrewNextTask,AirRaid,AirDefense,TorpedoMotion,Count}
 // Opt-in CPU sampling. Inclusive scopes may overlap; these numbers must not be summed.
 public static class NavalPerformance
 {

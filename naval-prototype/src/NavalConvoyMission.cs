@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 public partial class NavalTestWorld
@@ -21,10 +21,26 @@ public partial class NavalTestWorld
         if(Time.fixedDeltaTime==ConvoyFixedStep)Time.fixedDeltaTime=savedFixedStep;
         ownsFixedStep=false;
     }
+    public Vector3 ConvoyShipVelocity(NavalHull ship){
+        if(ship==hull)return boat.forward*speed;
+        foreach(var member in convoyFleet)if(member!=null&&member.Hull==ship)return member.ShipVelocity;
+        return Vector3.zero;
+    }
+    public bool ConvoyBattleFinished {get{return convoyResult!=null;}}
+    public bool ConvoyAirSupport {get;private set;}
+    public bool DefendsAgainstRaid(NavalHull ship){return !ConvoyAirSupport||!ship.Definition.Destroyer;}
+    private void ReviewAirSupport(){
+        if(ConvoyAirSupport||AirRaidMission||flagship==null||convoyResult!=null)return;
+        if(airSupportAt<0f)airSupportAt=Time.time+Mathf.Min(NavalAirRaidMath.SupportDelay(Random.value),NavalAirRaidMath.SupportDeadline);
+        if(Time.time<airSupportAt)return;
+        var ram=flagship.GetComponent<NavalRamDamage>();if(ram==null||ram.Hull.Sunk)return;
+        ConvoyAirSupport=true;AirRaid=gameObject.AddComponent<NavalAirRaid>();AirRaid.Initialize(this,ram.Hull,ocean);
+        Debug.Log("[NavalPrototype] Convoy air support called: reason=random timer waves=3 approach=3000m fixed_bearing=NE");
+    }
     private bool interceptorSide;
     private Transform flagship;
     private NavalShipDefinition previousPlayerProfile,previousEnemyProfile;
-    private const float PassageSeconds=720f;
+    private float airSupportAt=-1f;
     private float convoyFinishZ,convoyElapsed,screenReviewAt;
     private Transform screenEscort;
     private readonly Dictionary<Transform,int> missionSlots=new Dictionary<Transform,int>();
@@ -96,9 +112,9 @@ public partial class NavalTestWorld
     {
         switch(slot)
         {
-            case 1:return waterCenter+new Vector3(-105f,0f,50f);
-            case 2:return waterCenter+new Vector3(105f,0f,50f);
-            case 3:return waterCenter+new Vector3(0f,0f,150f);
+            case 1:return waterCenter+new Vector3(-140f,0f,70f);
+            case 2:return waterCenter+new Vector3(140f,0f,70f);
+            case 3:return waterCenter+new Vector3(0f,0f,200f);
             case 4:return waterCenter+new Vector3(-340f,0f,1250f);
             case 5:return waterCenter+new Vector3(0f,0f,1430f);
             case 6:return waterCenter+new Vector3(340f,0f,1250f);
@@ -157,6 +173,8 @@ public partial class NavalTestWorld
     public Transform ConvoyTarget(Transform source,bool allied)
     {
         if(source==null)return null;
+        int sourceSlot;
+        if(!AirRaidMission&&missionSlots.TryGetValue(source,out sourceSlot)&&sourceSlot>=4&&flagship!=null){var flagshipDamage=flagship.GetComponent<NavalRamDamage>();if(flagshipDamage!=null&&!flagshipDamage.Hull.Sunk)return flagship;}
         Transform incumbent;
         convoyEngagementTargets.TryGetValue(source,out incumbent);
         Transform best=null;
@@ -225,10 +243,10 @@ public partial class NavalTestWorld
         if(convoyResult!=null||ship==screenEscort)return Vector3.zero;
         Vector3 offset;
         if(flagship==null||!escortOffsets.TryGetValue(ship,out offset))return Vector3.forward;
-        Vector3 station=flagship.position+offset+Vector3.forward*100f;
+        Vector3 station=NavalRangefinderMath.Formation(flagship.position,flagship.eulerAngles.y,offset);
         Vector3 course=station-ship.position;
         course.y=0;
-        return course.z<30f?new Vector3(course.x,0,30f):course;
+        return course.magnitude<30f?Vector3.ProjectOnPlane(flagship.forward,Vector3.up)*30f:course;
     }
 
     public IEnumerable<NavalHull> ConvoyHulls()
@@ -292,8 +310,9 @@ public partial class NavalTestWorld
         enemy=null;
         foreach(var ship in convoyFleet)if(ship!=null&&ship.Boat==target){enemy=ship;break;}
         if(convoyResult!=null||flagship==null)return;
+        ReviewAirSupport();
         ReviewScreen();
-        convoyElapsed+=Mathf.Min(Time.deltaTime,.05f);
+        convoyElapsed+=Time.deltaTime;
         var flagshipRam=flagship.GetComponent<NavalRamDamage>();
         if(flagshipRam!=null&&flagshipRam.Hull.Sunk){convoyWon=interceptorSide;convoyResult="Дредноут потоплен";}
         else if(flagship.position.z>=convoyFinishZ){convoyWon=!interceptorSide;convoyResult="Дредноут вышел из зоны перехвата";}
@@ -302,8 +321,8 @@ public partial class NavalTestWorld
             bool interceptorsRemain=interceptorSide&&!hull.Sunk;
             foreach(var ship in convoyFleet)
                 if(ship!=null&&ship.Hull.Definition.Destroyer&&!ship.Hull.Sunk)interceptorsRemain=true;
-            if(!interceptorsRemain){convoyWon=!interceptorSide;convoyResult="Перехватчики потоплены";}
-            else if(convoyElapsed>=PassageSeconds){convoyWon=interceptorSide;convoyResult="Конвой задержан";}
+            if(!interceptorsRemain&&(AirRaid==null||AirRaid.Completed)){convoyWon=!interceptorSide;convoyResult="Перехватчики потоплены";}
+
         }
         if(convoyResult!=null)
         {
@@ -320,8 +339,7 @@ public partial class NavalTestWorld
         if(AirRaidMission){if(AirRaid!=null)AirRaid.Draw();return;}
         string objective=interceptorSide?"Потопить дредноут":"Провести дредноут через зону перехвата";
         float remaining=flagship!=null?Mathf.Max(0,convoyFinishZ-flagship.position.z):0;
-        string progress="До выхода "+remaining.ToString("F0")+" м · осталось "+
-            Mathf.CeilToInt(Mathf.Max(0,PassageSeconds-convoyElapsed))+" с";
+        string progress="До выхода "+remaining.ToString("F0")+" м";
         int escorts=finalConvoyShips,interceptors=finalInterceptors;
         if(convoyResult==null)CountConvoyShips(out escorts,out interceptors);
         string counts="Конвой "+escorts+"/4 · Эсминцы "+interceptors+"/3";
@@ -334,7 +352,7 @@ public partial class NavalTestWorld
         float width=Mathf.Min(620f,Screen.width-24f);
         float height=Mathf.Max(76f,convoyPanelStyle.CalcHeight(label,width)+8f);
         float x=(Screen.width-width)*.5f;
-        GUI.Box(new Rect(x,14,width,height),label,convoyPanelStyle);
+        GUI.Box(new Rect(x,62,width,height),label,convoyPanelStyle);
         if(convoyResult!=null)
         {
             float columnWidth=(width-8f)*.5f;
@@ -342,12 +360,12 @@ public partial class NavalTestWorld
             var right=new GUIContent(enemySummary);
             float columnHeight=Mathf.Max(convoyPanelStyle.CalcHeight(left,columnWidth),
                 convoyPanelStyle.CalcHeight(right,columnWidth))+8f;
-            GUI.Box(new Rect(x,18f+height,columnWidth,columnHeight),left,convoyPanelStyle);
-            GUI.Box(new Rect(x+columnWidth+8f,18f+height,columnWidth,columnHeight),right,convoyPanelStyle);
+            GUI.Box(new Rect(x,66f+height,columnWidth,columnHeight),left,convoyPanelStyle);
+            GUI.Box(new Rect(x+columnWidth+8f,66f+height,columnWidth,columnHeight),right,convoyPanelStyle);
             height+=columnHeight+4f;
         }
         if(Time.time<torpedoWarningUntil)
-            GUI.Box(new Rect(Screen.width*.5f-160,20+height,320,28),"Торпеды на курсе — уклоняйся");
+            GUI.Box(new Rect(Screen.width*.5f-160,68+height,320,28),"Торпеды на курсе — уклоняйся");
     }
 
     private void UpdateConvoyInput()

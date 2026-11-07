@@ -8,7 +8,7 @@ public static class NavalStairTraffic
  {return PassageLevel(point,ship)>=0;}
  public static int PassageLevel(NavalWalkPoint point,NavalShipDefinition ship)
  {
-  if(ship.Destroyer){if(!NavalDestroyerLayout.Stair(point,ship))return -1;float z=point.Z*ship.Scale,centre=z<0?-20.5f:20.5f,t=Math.Max(0,Math.Min(1,(z-centre+4f)/8f));float y=ship.HoldFloor+(ship.WeatherDeck-ship.HoldFloor)*t;if(Math.Abs(point.Y-y)*ship.Scale>.65f)return -1;return (point.X<0?0:2)+(point.Z<0?0:1);}
+  if(ship.Destroyer){if(NavalDestroyerLayout.ForedeckStair(point,ship))return point.X<0?4:5;if(!NavalDestroyerLayout.Stair(point,ship))return -1;float z=point.Z*ship.Scale,centre=z<0?-20.5f:20.5f,t=Math.Max(0,Math.Min(1,(z-centre+4f)/8f));float y=ship.HoldFloor+(ship.WeatherDeck-ship.HoldFloor)*t;if(Math.Abs(point.Y-y)*ship.Scale>.65f)return -1;return (point.X<0?0:2)+(point.Z<0?0:1);}
   if(AtFlight(point,ship,0))return 0;
   if(ship.DeckCount>2&&AtFlight(point,ship,ship.UpperDeckOffset))return 1;
   return -1;

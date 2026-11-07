@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 public partial class NavalStations
 {
     private void BuildCapitalDoor(CapitalMount t,int slot,Material armor,Material accent)
@@ -17,6 +17,14 @@ public partial class NavalStations
         Transform ramp=Root("Turret access stairs "+NavalCapitalLayout.Name(slot),mount);ramp.localRotation=Quaternion.Euler(0,NavalCapitalLayout.BaseYaw(slot),0);
         float rise=NavalCapitalLayout.TurretRise(slot)+NavalTurretAccessLayout.RootLift+NavalTurretAccessLayout.Floor;
         float outer=NavalTurretAccessLayout.GroundDistance(slot),edge=NavalTurretAccessLayout.Side(slot)==0?.36f:.43f;
+        if(slot==3){
+            float x=NavalTurretAccessLayout.Side(slot)*(edge+.15f);
+            for(int side=-1;side<=1;side+=2)
+                ArmoredDecoration(ramp,armor,new Vector3(x,rise*.5f,side*.22f),new Vector3(.035f,rise+.15f,.035f),true);
+            for(float y=.05f;y<=rise+.05f;y+=.05f)
+                ArmoredDecoration(ramp,accent,new Vector3(x,y,0),new Vector3(.04f,.025f,.48f),true);
+            return;
+        }
         int steps=Mathf.Max(4,Mathf.CeilToInt(rise*hull.WorldScale/.14f));float run=(outer-edge)/steps;
         for(int i=0;i<steps;i++){
             float top=rise*(i+1)/steps;Vector3 p=NavalTurretAccessLayout.Out(slot)*(outer-(i+.5f)*run);p.y=top*.5f;
@@ -48,6 +56,7 @@ public partial class NavalStations
             if(Time.time>=t.NextDoorScan){
                 t.NextDoorScan=Time.time+.2f;Vector3 approach=NavalTurretAccessLayout.Approach(hull.Definition,slot),door=NavalTurretAccessLayout.Door(slot),normal=NavalTurretAccessLayout.Out(slot);
                 foreach(Character actor in NavalCharacters.Snapshot())if(actor!=null&&actor.IsAlive()){
+                    if(actor==player&&slot==playerCapitalSlot)continue;
                     Vector3 ship=boat.InverseTransformPoint(actor.transform.position),local=t.Root.InverseTransformPoint(actor.transform.position),d=local-door;
                     float depth=Vector3.Dot(d,normal),lateral=Vector3.Cross(normal,d).y;
                     bool ground=actor==player&&(boat.TransformVector(ship-approach)).sqrMagnitude<3f*3f;

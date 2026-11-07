@@ -262,7 +262,7 @@ public class NavalHull
     public NavalCrewController CrewController;
     public float RescuePickupUntil;
     public bool SinkingDanger {get;private set;}
-    private float capsizeSeconds,submergedHullSeconds;
+    private float capsizeSeconds,submergedHullSeconds,irrecoverableSeconds;
     public bool SimulationRetired {get;internal set;}
     public bool FloodEffectsHidden;
     public bool HasActiveLeaks;
@@ -696,6 +696,8 @@ public class NavalHull
             if(capsizeSeconds>=4f)Sunk=true;
         }
         maintenanceEscalation.Step(dt,floodFraction,heel,CombatCritical,HasActiveLeaks&&Inflow>NavalMaintenanceMath.PumpOutRate&&Mathf.Abs(heel)>=12f);
+        irrecoverableSeconds=NavalLossPolicy.Step(irrecoverableSeconds,dt,NavalLossPolicy.Irrecoverable(floodFraction,heel,SubmergedRimHead,Inflow,NavalMaintenanceMath.PumpOutRate));
+        if(!Sunk&&irrecoverableSeconds>=8f){Sunk=true;Debug.Log("[NavalPrototype] Hull lost to sustained terminal flooding: ship="+boat.name+" flood="+floodFraction+" heel="+heel+" inflow="+Inflow);}
         if (Volume >= remainingCapacity) Sunk = true;
         if(!Sunk)
         {

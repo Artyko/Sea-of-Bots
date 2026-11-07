@@ -21,7 +21,7 @@ public static class NavalLedgeRecoveryMath
     public static bool WalkedOff(float dx,float dy,float dz,float scale)
     {return (dx*dx+dz*dz)*scale*scale<.2f*.2f&&dy*scale<=.2f;}
     public static bool Arrived(float dx,float dy,float dz,float scale)
-    {return (dx*dx+dz*dz)*scale*scale<.12f*.12f&&Math.Abs(dy)*scale<.18f;}
+    {return (dx*dx+dz*dz)*scale*scale<.12f*.12f&&dy*scale>=-.18f&&dy*scale<.65f;}
     public static bool Detached(float x,float y,float z,float halfWidth,float weatherDeck,float scale)
     {
         if(y<weatherDeck-.15f)return false;

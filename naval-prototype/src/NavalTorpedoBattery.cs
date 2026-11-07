@@ -81,9 +81,24 @@ public sealed class NavalTorpedoBattery:MonoBehaviour {
 
  private Vector3 LaunchEntry(int i,Vector3 direction){float side=Mathf.Sign(hull.Root.InverseTransformDirection(direction).x),z=mounts[i].Pivot.localPosition.z;Vector3 entry=hull.Root.TransformPoint(new Vector3(side*(hull.Definition.HullHalfWidth(z)+1f/hull.WorldScale),hull.Definition.DesignWaterline,z));entry.y=sea.Height(entry.x,entry.z)-NavalTorpedoMath.Depth;return entry;}
  public bool SalvoInProgress {get{foreach(var m in mounts)if(m!=null&&m.PairAt>0)return true;return Time.time-LastLaunch<1.5f;}}
+ private bool FriendlyLaunchClear(Vector3 start,Vector3 direction){
+  var world=NavalTestWorld.Active;if(world==null||!world.ConvoyMission)return true;
+  direction=Vector3.ProjectOnPlane(direction,Vector3.up).normalized;
+  foreach(var other in world.ConvoyHulls()){
+   if(other==hull||other.Sunk||other.Definition.Destroyer!=hull.Definition.Destroyer)continue;
+   Vector3 velocity=world.ConvoyShipVelocity(other);
+   Vector3 relative=Vector3.ProjectOnPlane(other.Root.position-start,Vector3.up);
+   Vector3 motion=Vector3.ProjectOnPlane(velocity,Vector3.up)-direction*NavalTorpedoMath.Speed;
+   float time=motion.sqrMagnitude>.001f?Mathf.Clamp(-Vector3.Dot(relative,motion)/motion.sqrMagnitude,0,NavalTorpedoMath.Range/NavalTorpedoMath.Speed):0;
+   float radius=BoatDimensions.HalfLength*other.WorldScale+8f;
+   if((relative+motion*time).sqrMagnitude<radius*radius)return false;
+  }
+  return true;
+ }
  private bool Fire(int i,Vector3 direction){var m=mounts[i];if(Time.time<m.NextShot)return false;int tube=Ready(i,0)?0:Ready(i,1)?1:-1;if(tube<0)return false;
   Vector3 local=hull.Root.InverseTransformDirection(direction);if(Mathf.Abs(local.x)<.7f)return false;
   float side=Mathf.Sign(local.x),z=m.Pivot.localPosition.z;Vector3 start=hull.Root.TransformPoint(new Vector3(side*(hull.Definition.HullHalfWidth(z)+1f/hull.WorldScale),hull.Definition.DesignWaterline,z));start.y=sea.Height(start.x,start.z)-NavalTorpedoMath.Depth;
+  if(!FriendlyLaunchClear(start,direction)){m.Status="friendly ship in torpedo path";return false;}
   if(!Corridor(start,start+direction*12)){m.Status="exit blocked";return false;}m.Status="launched";m.Loaded[tube]=false;m.NextShot=Time.time+4;LastLaunch=Time.time;
   var obj=GameObject.CreatePrimitive(PrimitiveType.Capsule);obj.name="450 mm torpedo";obj.transform.SetParent(NavalTestWorld.Active.transform,false);obj.transform.position=start;obj.transform.localScale=new Vector3(.45f,2f,.45f);obj.transform.rotation=Quaternion.LookRotation(direction)*Quaternion.Euler(90,0,0);var collider=obj.GetComponent<Collider>();collider.enabled=false;Destroy(collider);obj.GetComponent<Renderer>().sharedMaterial=steel;
   obj.AddComponent<NavalTorpedo>().Initialize(direction,hull.Root,sea,foam,launchActor!=null?launchActor:player);if(!stations.EnemyControlled)NavalShotPuff.Create(obj.transform.parent,new Vector3(start.x,start.y+NavalTorpedoMath.Depth,start.z),Vector3.up*2,foam,.9f,.65f);Debug.Log("[NavalPrototype] Torpedo launched: ship="+hull.Root.name+" mount="+i+" tube="+tube+" remaining="+Rounds);

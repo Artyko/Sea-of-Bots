@@ -2,6 +2,7 @@
 
 public partial class NavalRepairSailor
 {
+    private readonly NavalRouteFailureMemory routeFailures=new NavalRouteFailureMemory();
     private readonly NavalNavigationRecovery navigationRecovery=new NavalNavigationRecovery();
     private readonly NavalMovementWatchdog movementWatchdog=new NavalMovementWatchdog();
     private float stairRecoveryAt,deckReplanAt,deckRouteTrustedUntil;private int stairExitWaypoints,lastStairExitSide;private float blockLogAt;
@@ -10,12 +11,24 @@ public partial class NavalRepairSailor
     // The caller owns the job-specific response to an obstruction.
     private RouteResult FollowRoute(float dt,float timeout,bool finishAtRepairReach=false)
     {
-        using(NavalPerformance.Measure(NavalPerfArea.CrewRoute))
-            return FollowRouteCore(dt,timeout,finishAtRepairReach);
+        using(NavalPerformance.Measure(NavalPerfArea.CrewRoute)){
+            float q=hull.WorldScale;
+            if(route.Count>0){var target=route[0];if(routeFailures.Blocked(feet.x*q,feet.y*q,feet.z*q,target.x*q,target.y*q,target.z*q,hull.Revision,Time.time)&&!(finishAtRepairReach&&leak!=null&&CanReachLeak()))return RouteResult.Blocked;}
+            var result=FollowRouteCore(dt,timeout,finishAtRepairReach);
+            if(result==RouteResult.Blocked&&route.Count>0){var target=route[0];routeFailures.Mark(feet.x*q,feet.y*q,feet.z*q,target.x*q,target.y*q,target.z*q,hull.Revision,Time.time);}
+            return result;
+        }
     }
 
     private RouteResult FollowRouteCore(float dt,float timeout,bool finishAtRepairReach)
     {
+        // Work from the intact edge as soon as the claimed patch is in real reach.
+        // Requiring the final waypoint sent workers towards the missing floor itself.
+        if(finishAtRepairReach&&leak!=null&&!returning&&CanReachLeak()){
+            route.Clear();escapePending=false;stairExitWaypoints=0;
+            navigationRecovery.Reset();movementWatchdog.Reset();stuck=0f;
+            HoldPosition();return RouteResult.Arrived;
+        }
         if(TickTrafficWait(dt))return RouteResult.Moving;
         if(route.Count==0){escapePending=false;stairExitWaypoints=0;return RouteResult.Arrived;}
         if(escapePending){
@@ -23,6 +36,12 @@ public partial class NavalRepairSailor
             if(escapePending){movementWatchdog.Reset();Walking(false,dt);HoldPosition();ApplyUnsupportedFall(dt);return RouteResult.Moving;}
         }
         Vector3 target=route[0];bool final=route.Count==1;
+        // Finish vertical ladder travel before generic deck recovery can replace its endpoint.
+        if(ClimbAftAALadder(target,dt)){
+            navigationRecovery.Reset();movementWatchdog.Reset();stuck=0f;
+            if(boat.TransformVector(target-feet).sqrMagnitude<.04f*.04f)route.RemoveAt(0);
+            return route.Count==0?RouteResult.Arrived:RouteResult.Moving;
+        }
         int recoveryPhase=navigationRecovery.Step(dt,feet.x*hull.WorldScale,feet.y*hull.WorldScale,feet.z*hull.WorldScale);
         if(recoveryPhase==3){
             navigationRecovery.Reset();LogRouteBlock(target);
@@ -95,14 +114,23 @@ public partial class NavalRepairSailor
         // advanced sailors while their capsule was still inside the jamb,
         // after which the lateral bypass drove them into the front armour.
         bool preciseTower=NavalConningTowerLayout.DoorLane(new NavalWalkPoint(target.x,target.y,target.z),hull.Definition);
-        bool reached=walkedOff||closeRepair||(stairExitWaypoints>0?NavalStairRecovery.Arrived(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):stairPoint&&!recovering?
-            NavalWalkRoutes.Reached(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):recovering?NavalLedgeRecoveryMath.Arrived(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):final&&returning?AtStation(target):NavalRouteArrival.ReachedWorld(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale,final||preciseTower));
+        bool reached=walkedOff||closeRepair||(NavalCapitalAADeck.Waypoint(target,hull.Definition)?NavalCapitalAADeck.Reached(feet,target,hull.WorldScale):stairExitWaypoints>0?NavalStairRecovery.Arrived(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):stairPoint&&!recovering?
+            (NavalRaisedBridge.Flight(new NavalWalkPoint(target.x,target.y,target.z),hull.Definition)?NavalRaisedBridge.ReachedFlight(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):hull.Definition.Destroyer?NavalDestroyerLayout.ReachedRamp(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):NavalWalkRoutes.Reached(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale)):recovering?NavalLedgeRecoveryMath.Arrived(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):final&&returning?AtStation(target):NavalRouteArrival.ReachedWorld(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale,final||preciseTower));
+        // A displaced capsule may straddle a tread pin. Rejoin only the next
+        // supported segment of this flight; normal tread arrival stays strict.
+        if(!reached&&!final&&!recovering&&stairExitWaypoints==0&&stairPoint&&stuck>.5f&&
+           boat.TransformVector(target-feet).sqrMagnitude<NavigationRadius*NavigationRadius*1.1f&&Mathf.Abs(target.y-feet.y)*hull.WorldScale<.2f&&
+           NavalStairTraffic.SamePassage(new NavalWalkPoint(feet.x,feet.y,feet.z),new NavalWalkPoint(route[1].x,route[1].y,route[1].z),hull.Definition)&&
+           NavalPhysicsQueries.HasLocalSupport(hull,feet)&&NavalPhysicsQueries.HasLocalSupport(hull,route[1])&&NavigationClear(feet,route[1])){
+            reached=true;motionExpired=false;movementWatchdog.Reset();
+        }
         if(!reached&&!final&&!recovering&&stairExitWaypoints==0&&!stairPoint&&stuck>.35f&&
             boat.TransformVector(target-feet).sqrMagnitude<.65f*.65f&&Mathf.Abs(target.y-feet.y)*hull.WorldScale<.3f&&
             Mathf.Abs(route[1].y-feet.y)*hull.WorldScale<.3f&&ClearBody(route[1])&&NavigationWalkClear(feet,route[1]))
         {reached=true;motionExpired=false;movementWatchdog.Reset();}
         if(reached&&final&&finishAtRepairReach&&leak!=null&&!CanReachLeak())reached=false;
         stuck=NavalRouteProgress.Step(stuck,before,boat.TransformVector(target-feet).magnitude,dt,reached,Time.time<passageWorkUntil);
+        if(reached){motionExpired=false;movementWatchdog.Reset();}
         if(closeRepair)route.Clear();else if(reached){route.RemoveAt(0);if(recovering)ledgeWaypoints--;if(stairExitWaypoints>0){stairExitWaypoints--;if(stairExitWaypoints==0)lastStairExitSide=0;}}
         if(feet.y<hull.Floor-.7f)return RouteResult.Fell;
         if(motionExpired){movementWatchdog.Reset();Debug.Log("[NavalPrototype] Crew route stalled for 8 seconds: sailor="+robot.GetInstanceID()+" at="+feet+" target="+target+" ship="+boat.name+" profile="+hull.Definition.Name+" duty="+Status);return RouteResult.Blocked;}

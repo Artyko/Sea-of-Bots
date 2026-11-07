@@ -20,13 +20,18 @@ public sealed class NavalTorpedoTactics {
   int lane=world!=null&&world.ConvoyMission?world.InterceptorLane(own):0;
   float lead;if(!NavalTorpedoMath.Lead(delta.x,delta.z,velocity.x,velocity.z,out lead))lead=distance/NavalTorpedoMath.Speed;
   Vector3 intercept=delta+velocity*lead;intercept.y=0;
+  // Separate approach points along and across the convoy instead of converging on one hull centre.
+  if(convoy&&distance>450f){
+   float flank=lane==-1?-280f:lane==1?280f:420f;
+   intercept+=(target.right*flank+target.forward*(lane==2?-260f:lane==-1?180f:-120f))*Mathf.Clamp01((distance-450f)/550f);
+  }
   // On convoy passes, keep closing until the ship is inside the actual launch
   // envelope. Turning broadside too early lets the moving convoy pull away.
   if(convoy){
    float launchDistance=battery.PreferredLaunchDistance;
    if(distance>launchDistance+40f)closingForLaunch=true;
    else if(distance<=launchDistance)closingForLaunch=false;
-   if(closingForLaunch){Phase="reapproach";battery.LaunchWindowUntil=0;throttle=1;course=Quaternion.Euler(0,side*12f,0)*delta;return true;}
+   if(closingForLaunch){Phase="reapproach";battery.LaunchWindowUntil=0;throttle=1;course=Quaternion.Euler(0,side*12f,0)*intercept;return true;}
   }
   if(distance>battery.PreferredLaunchDistance+180){Phase="approach";throttle=1;course=Quaternion.Euler(0,side*(Mathf.Abs(lane)==1?33:22),0)*intercept;return true;}
   if(distance<150){Phase="too close";closingForLaunch=true;throttle=1;course=-delta;withdrawUntil=Time.time+12;return true;}

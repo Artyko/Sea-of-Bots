@@ -161,6 +161,7 @@ public class NavalEnemyShip : MonoBehaviour
         if(target==null&&!world.ConvoyMission)return;
         Vector3 targetVelocity=world.ConvoyMission?world.FleetVelocity(target):world.ShipVelocity;
         float dt=Mathf.Min(Time.deltaTime,0.05f);
+        float motionDt=NavalMotionClock.Elapsed(Time.deltaTime);
         bool rider=!world.Spectating&&player!=null&&!world.IsBoarding&&world.PlayerSupportedBy(Boat);
         Vector3 riderFoot=!world.Spectating&&player!=null?world.PlayerFootPoint:Vector3.zero;
         Vector3 riderOffset=!world.Spectating&&player!=null?player.transform.position-riderFoot:Vector3.zero;
@@ -199,11 +200,11 @@ public class NavalEnemyShip : MonoBehaviour
         float roll=Hull.Stability.Step(dt,NavalHullStability.Roll(Boat),Mathf.Atan2(starboard-port,10.8f)*Mathf.Rad2Deg);
         float height=(bow+stern+starboard+port)*0.25f-Hull.Stability.Waterline-Hull.SinkDepth;
         verticalSpeed+=((height-p.y)*10f-verticalSpeed*5f)*dt;
-        Vector3 next=Boat.position+(forward*speed/(1f+depth)+ram.Drift)*dt*(Hull.Sunk?0f:1f);
+        Vector3 next=Boat.position+(forward*speed/(1f+depth)+ram.Drift)*motionDt*(Hull.Sunk?0f:1f);
         next+=Vector3.up*verticalSpeed*dt;
         Quaternion smoothed=Quaternion.Slerp(Boat.rotation,Quaternion.Euler(pitch,heading,Boat.eulerAngles.z),1f-Mathf.Exp(-4f*dt));
         Quaternion nextRotation=Quaternion.Euler(smoothed.eulerAngles.x,smoothed.eulerAngles.y,roll);
-        ram.Velocity=(next-Boat.position)/Mathf.Max(dt,0.001f);ram.AngularRate=Mathf.DeltaAngle(Boat.eulerAngles.y,nextRotation.eulerAngles.y)/Mathf.Max(dt,0.001f);
+        ram.Velocity=(next-Boat.position)/Mathf.Max(motionDt,0.001f);ram.AngularRate=Mathf.DeltaAngle(Boat.eulerAngles.y,nextRotation.eulerAngles.y)/Mathf.Max(motionDt,0.001f);
         float rigRetention;
         using(NavalPerformance.Measure(NavalPerfArea.FleetContact))
         if(world.ConvoyMission)
@@ -220,8 +221,8 @@ public class NavalEnemyShip : MonoBehaviour
         if(rigRetention<1f){speed*=rigRetention;heading=nextRotation.eulerAngles.y;}
         if(NavalWorldMap.Active!=null&&NavalWorldMap.Active.ConstrainShore(Boat,ref next,ref nextRotation))
         {if(new Vector2(next.x-Boat.position.x,next.z-Boat.position.z).sqrMagnitude<.00000001f){speed=0f;ram.StopMomentum();}heading=nextRotation.eulerAngles.y;rudder=0f;helmNavigator.LandBlocked();}
-        SpeedThroughWater=NavalShipSpeedMath.Measure(next.x-Boat.position.x,next.z-Boat.position.z,dt);
-        motionVelocity=(next-Boat.position)/Mathf.Max(dt,.001f);
+        SpeedThroughWater=NavalShipSpeedMath.Measure(next.x-Boat.position.x,next.z-Boat.position.z,motionDt);
+        motionVelocity=(next-Boat.position)/Mathf.Max(motionDt,.001f);
         Hull.PhysicsBody.SetPose(next,nextRotation);
         if(rider)
         {

@@ -21,6 +21,7 @@ public sealed class NavalCargoCrate {
  public NavalCargoCrate(NavalHull owner,Vector3 point,int kind,int gun,Material wood,Material trim,Material iron,int units=1){
  hull=owner;Point=point;Kind=kind;Gun=gun;Width=hull.Definition.SteamPowered?1.2f:1.4f;Stock=new NavalCargoStock((kind==1?40:kind==2?1:20)*units);
   Pickup=hull.Definition.Destroyer&&gun>=0?hull.Definition.GunOperator(gun):hull.Definition.CapitalShip&&gun>=0?new Vector3(NavalShipDefinition.GunSide(gun)*hull.Definition.GunPostX,hull.Definition.GunDeck,NavalShipDefinition.GunZ(hull.Definition,gun)):hull.Definition.SteamPowered?new Vector3(point.x>0?.92f:-.92f,point.y,point.z):point+new Vector3(point.x>0?-1.65f:1.65f,0,0)/hull.WorldScale;
+ if(gun>=0)Pickup=point+new Vector3(point.x>=0?-1.6f:1.6f,0,0)/hull.WorldScale;
  if(gun<0){var pickup=NavalCargoLayout.Pickup(hull.Definition,new NavalWalkPoint(point.x,point.y,point.z));Pickup=new Vector3(pickup.X,pickup.Y,pickup.Z);}
  // Steam ready-use ammunition is stored inside each gun mounting. It remains
  // a logical replenishment target, but no loose steel crate or collider is

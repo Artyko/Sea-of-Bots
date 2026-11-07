@@ -6,12 +6,20 @@ public partial class NavalRepairSailor {
  private void CancelAmmo(){if(hull!=null&&hull.Cargo!=null)hull.Cargo.ReleaseRunner(this,ammoTarget);ammoTarget=ammoSource=null;ammoHandling=0;}
  private int ammoApproach;
  private bool PlanAmmoPoint(NavalCargoCrate crate){
-  for(int i=ammoApproach;i<5;i++){
-   Vector3 point=crate.Pickup+new Vector3(0,0,(i==0?0:i%2==1?1:-1)*((i+1)/2)*.35f/hull.WorldScale);
+  for(int i=ammoApproach;i<9;i++){
+   float angle=(i-1)*Mathf.PI*.25f;
+   Vector3 point=crate.Pickup+(i==0?Vector3.zero:new Vector3(Mathf.Sin(angle),0,Mathf.Cos(angle))*(1.35f/hull.WorldScale));
    if(crate.Gun<0)point=CargoApproach(crate.Pickup,i==0?0:i%2==1?1:2);
    if(!Supported(point)||!ClearBody(point))continue;
    ammoApproach=i;route.Clear();stuck=0;PlanTo(point);return true;
   }return false;
+ }
+ private bool CanHandleAmmo(NavalCargoCrate crate){
+  if(crate==null||!Supported(feet))return false;
+  Vector3 delta=boat.TransformVector(crate.Pickup-feet);
+  if(new Vector2(delta.x,delta.z).sqrMagnitude>1.35f*1.35f||Mathf.Abs(delta.y)>.65f)return false;
+  Vector3 hand=boat.TransformPoint(feet)+boat.up*NavalRepairAim.HandHeight;
+  return RepairSightClear(hand,boat.TransformPoint(crate.Pickup)+boat.up*1.1f-hand);
  }
  private bool AmmoSurvivalAllows(){
   bool repairer=false,firefighter=false;
@@ -54,6 +62,7 @@ public partial class NavalRepairSailor {
  }
  robot.DisableAI();
  if(carriedAmmo==0&&(ammoSource==null||ammoSource.Count<=0)){CancelAmmo();BeginReturn();return true;}
+ if(CanHandleAmmo(carriedAmmo>0?ammoTarget:ammoSource)){route.Clear();escapePending=false;stuck=0;movementWatchdog.Reset();}
  if(route.Count>0){var result=FollowRoute(dt,4f);if(result==RouteResult.Blocked){ammoApproach++;if(!PlanAmmoPoint(carriedAmmo>0?ammoTarget:ammoSource)){ammoRetry=Time.time+5f;CancelAmmo();BeginReturn();}}
  if(result==RouteResult.Fell){stranded=true;carriedAmmo=0;CancelAmmo();route.Clear();}return true;}
  HoldPosition();ammoHandling+=dt;if(ammoHandling<1f)return true;ammoHandling=0;

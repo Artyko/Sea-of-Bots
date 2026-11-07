@@ -4,7 +4,7 @@ public partial class NavalRepairSailor {
  public bool Yielding {get{return Time.time<yieldUntil;}}
  public bool WaitingForPassage {get{return Navigating&&stuck>.25f;}}
  public bool RequestPassageYield(NavalRepairSailor approaching){
-  if(approaching==null||approaching==this||Yielding||Time.time<yieldRetry||Busy&&!ReturningWithoutWork&&!changingPost||CapitalReserved||hull.CombatCritical||stranded||Rescuing||Defending||Assaulting||robot==null||!robot.IsAlive())return false;
+  if(approaching==null||approaching==this||Yielding||Time.time<yieldRetry||Busy&&!ReturningWithoutWork&&!changingPost&&!CanYieldWorkingPassage(approaching)||CapitalReserved||stranded||Rescuing||Defending||Assaulting||robot==null||!robot.IsAlive())return false;
   if(approaching.hull!=hull||approaching.robot==null||approaching.robot.IsPlayerTeam!=robot.IsPlayerTeam)return false;
   if(boat.TransformVector(feet-approaching.feet).sqrMagnitude>3f*3f||Mathf.Abs(feet.y-approaching.feet.y)*hull.WorldScale>.8f)return false;
   var controls=NavalStations.ForShip(boat);if(controls!=null&&(home-controls.Post(0)).sqrMagnitude<.01f)return false;
@@ -24,9 +24,15 @@ public partial class NavalRepairSailor {
   }
   return false;
  }
+ private bool CanYieldWorkingPassage(NavalRepairSailor approaching){
+  // Keep the current job and route while one of two approaching workers steps aside.
+  if(approaching==null||!Navigating||approaching.robot==null||robot==null)return false;
+  if(PassagePriority!=approaching.PassagePriority)return PassagePriority>approaching.PassagePriority;
+  return robot.GetInstanceID()>approaching.robot.GetInstanceID();
+ }
  private bool TickPassageYield(float dt){
   if(!Yielding)return false;
-  if(hull.CombatCritical){yieldUntil=0;return false;}
+
   robot.DisableAI();Move(yieldPoint,dt,true);
   Walking(boat.TransformVector(yieldPoint-feet).sqrMagnitude>.04f,dt);return true;
  }
