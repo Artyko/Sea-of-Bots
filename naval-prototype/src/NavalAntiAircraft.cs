@@ -24,7 +24,7 @@ public sealed class NavalAntiAircraft : MonoBehaviour
         public int CrewId;public bool Manned;
         public Vector3 Aim;
         public bool HasAim,Detached;
-        public System.Collections.Generic.List<NavalHullVoxel> Cells,Anchors;
+        public System.Collections.Generic.List<NavalHullVoxel> Cells,Anchors,DeckSupports;
     }
     private Mount[] mounts;
     private NavalHull hull;
@@ -97,10 +97,18 @@ public sealed class NavalAntiAircraft : MonoBehaviour
             var cells=hull.Voxels.GetRange(start,hull.Voxels.Count-start);
             foreach(var cell in cells){cell.Metallic=true;if(cell.transform.parent!=transform)cell.MovableEquipment=true;}
             mount.Cells=cells;mount.Anchors=new System.Collections.Generic.List<NavalHullVoxel>();
-            foreach(var cell in cells)if(!cell.MovableEquipment&&Vector3.Distance(cell.transform.position,mount.Pivot.position)<.65f)mount.Anchors.Add(cell);
+            foreach(var cell in cells)if(!cell.MovableEquipment&&Vector3.Distance(cell.transform.position,transform.TransformPoint(basePoint))<.5f)mount.Anchors.Add(cell);
+            mount.DeckSupports=new System.Collections.Generic.List<NavalHullVoxel>();
+            Vector3 foot=hull.Root.InverseTransformPoint(transform.TransformPoint(basePoint));
+            for(int support=0;support<start;support++){
+                var cell=hull.Voxels[support];if(cell.MovableEquipment||cell.RepairableEquipment||cell.NonPhysicalDecoration)continue;
+                Vector3 size=cell.transform.localScale,p=cell.LocalCenter;
+                if(Mathf.Abs(p.x-foot.x)*scale<=Mathf.Abs(size.x)*scale*.5f+.08f&&Mathf.Abs(p.z-foot.z)*scale<=Mathf.Abs(size.z)*scale*.5f+.08f&&
+                   Mathf.Abs((p.y+Mathf.Abs(size.y)*.5f-foot.y)*scale)<.35f)mount.DeckSupports.Add(cell);
+            }
             mount.Mechanism=new NavalRepairableMechanism(hull,cells,false,false,"\u0417\u0435\u043d\u0438\u0442\u043d\u044b\u0439 \u043f\u0443\u043b\u0435\u043c\u0451\u0442");
             mounts[i]=mount;Pose(mount);
-            Debug.Log("[NavalPrototype] AA installed: ship="+hull.Root.name+" mount="+(i+1)+" post="+mount.Post+" cells="+cells.Count);
+            Debug.Log("[NavalPrototype] AA installed: ship="+hull.Root.name+" mount="+(i+1)+" post="+mount.Post+" cells="+cells.Count+" anchors="+mount.Anchors.Count+" deck_supports="+mount.DeckSupports.Count);
         }
     }
     private static void Pose(Mount mount)
@@ -173,13 +181,14 @@ public sealed class NavalAntiAircraft : MonoBehaviour
         var structure=GetComponent<NavalStructure>();if(structure==null)return;
         foreach(var mount in mounts){
             if(mount.Detached){bool restored=true;foreach(var cell in mount.Cells)if(cell!=null&&(cell.Missing||cell.Detached)){restored=false;break;}if(restored)mount.Detached=false;else continue;}
-            if(mount.Anchors.Count==0)continue;
+
             bool attached=false;foreach(var cell in mount.Anchors)if(cell!=null&&!cell.Missing&&!cell.Detached){attached=true;break;}
-            if(attached)continue;
+            bool deckAttached=false;foreach(var cell in mount.DeckSupports)if(cell!=null&&!cell.Missing&&!cell.Detached){deckAttached=true;break;}
+            if(attached&&deckAttached)continue;
             mount.Detached=true;mount.Manned=false;mount.HasAim=false;
             var world=NavalTestWorld.Active;Vector3 velocity=world!=null?world.ConvoyShipVelocity(hull):Vector3.zero;
             structure.DropEquipment(mount.Cells,velocity);
-            Debug.Log("[NavalPrototype] AA detached: ship="+hull.Root.name+" post="+mount.Post+" reason=lost pedestal attachment");
+            Debug.Log("[NavalPrototype] AA detached: ship="+hull.Root.name+" post="+mount.Post+" reason=lost pedestal or supporting deck");
         }
     }
     private FirstPersonMover controlledPlayer;

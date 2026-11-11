@@ -14,9 +14,7 @@ public sealed class NavalTorpedoTactics {
   }
   if(Time.time<withdrawUntil){Phase="withdraw after launch";throttle=1;course=Quaternion.Euler(0,side*35,0)*(-delta);return true;}
   if(!attackSideChosen&&Time.time>=withdrawUntil){attackSideChosen=true;battery.StartAttack();side=Vector3.Cross(own.forward,delta).y<0?-1:1;var mission=NavalTestWorld.Active;int formation=mission!=null&&mission.ConvoyMission?mission.InterceptorLane(own):0;if(Mathf.Abs(formation)==1)side=formation;battery.SalvoStyle=NavalTorpedoSalvoMath.AttackStyle(Random.value,battery.Rounds,distance);battery.PreferredLaunchDistance=NavalTorpedoSalvoMath.LaunchDistance(battery.SalvoStyle,Random.value);
-   if(formation==2){battery.SalvoStyle=0;battery.PreferredLaunchDistance=330f;}
-   else if(formation==-1){battery.SalvoStyle=NavalTorpedoSalvoMath.SequentialFan;battery.PreferredLaunchDistance=480f;}
-   else if(formation==1){battery.SalvoStyle=1;battery.PreferredLaunchDistance=590f;}Debug.Log("[NavalPrototype] Torpedo attack plan: ship="+own.name+" style="+battery.SalvoStyle+" distance="+battery.PreferredLaunchDistance.ToString("F0")+" side="+side);}
+   Debug.Log("[NavalPrototype] Torpedo attack plan: ship="+own.name+" style="+battery.SalvoStyle+" distance="+battery.PreferredLaunchDistance.ToString("F0")+" side="+side);}
   int lane=world!=null&&world.ConvoyMission?world.InterceptorLane(own):0;
   float lead;if(!NavalTorpedoMath.Lead(delta.x,delta.z,velocity.x,velocity.z,out lead))lead=distance/NavalTorpedoMath.Speed;
   Vector3 intercept=delta+velocity*lead;intercept.y=0;

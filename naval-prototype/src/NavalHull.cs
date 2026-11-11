@@ -539,16 +539,28 @@ public class NavalHull
         for(int row=0;row<removed.Length;row++)removed[row]&=!attached[row];
         Flood.SetDetachedRows(removed);
     }
+    private float nextOverflowLog;
     private void ObserveRimPressure(Transform boat,NavalWater ocean,float x,float z,float width,float dt,Vector3 inward)
     {
         float rim=Definition.RimAt(z);Vector3 lip=boat.TransformPoint(new Vector3(x,rim,z));int index=Flood.Index(x,z);
-        if(!Flood.IsActive(index))return;
+        if(!Flood.IsActive(index)){
+            // A tapered lip can lie outside the active flood column. Receive
+            // overflow at the first real interior column, not an empty edge bin.
+            int resolved=-1;
+            for(int step=1;step<=12;step++){
+                float distance=step*.35f/WorldScale;
+                int candidate=Flood.Index(x+inward.x*distance,z+inward.z*distance);
+                if(Flood.IsActive(candidate)){resolved=candidate;break;}
+            }
+            if(resolved<0)return;index=resolved;
+        }
         float inside=NavalDownfloodMath.InsideAtOpening(lip.y,rim,Floor,Flood.Depth(index),boat.up.y,WorldScale);
         SubmergedRimHead=Mathf.Max(SubmergedRimHead,ocean.Height(lip.x,lip.z)-lip.y);
         float flow=NavalDownfloodMath.OverflowRate(ocean.Height(lip.x,lip.z),lip.y,inside,width);
         openingPressure+=flow;
         float accepted=Flood.Add(index,flow*dt);Inflow+=accepted/dt;OpeningInflow+=accepted/dt;
         if(Fire!=null&&accepted>.00001f)Fire.Wash(lip,boat.TransformVector(inward),accepted/dt);
+        if(ocean.Height(lip.x,lip.z)>lip.y+.05f&&Time.time>=nextOverflowLog){nextOverflowLog=Time.time+5f;Debug.Log("[NavalPrototype] Rim overflow: ship="+boat.name+" sea_y="+ocean.Height(lip.x,lip.z).ToString("F2")+" lip_y="+lip.y.ToString("F2")+" inside_y="+inside.ToString("F2")+" requested_m3s="+flow.ToString("F2")+" accepted_m3s="+(accepted/dt).ToString("F2")+" cell="+index);}
     }
     public void Step(Transform boat, NavalWater ocean, float dt, bool pump)
     {

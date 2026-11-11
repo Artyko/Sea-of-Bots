@@ -190,6 +190,7 @@ public class NavalEnemyShip : MonoBehaviour
         ram.StepMomentum(dt,ref speed);
         speed=NavalRigMath.StepSpeed(speed,throttle,rig.PowerFactor,dt,Hull.Definition.MaxSailingSpeed);
         float depth=Hull.Volume/(BoatDimensions.HoldArea*Hull.AreaScale*Mathf.Max(.01f,Hull.Flood.AttachedFraction));
+        float floodMotion=Hull.Definition.SteamPowered?NavalFloodDragMath.SpeedRetention(Hull.Stability.DryDisplacement,Hull.Volume,Hull.Flood.AttachedFraction):1f/(1f+depth);
         rudder=stations.IsFunctional(0)?NavalRigMath.StepRudder(rudder,turn,dt):0f;
         heading+=NavalRigMath.RudderRate(speed,rudder,Hull.Definition.SteeringRateScale)*stations.SteeringFactor*dt/(1f+depth);
         Quaternion flat=Quaternion.Euler(0f,heading,0f);Vector3 forward=flat*Vector3.forward,right=flat*Vector3.right;
@@ -200,7 +201,7 @@ public class NavalEnemyShip : MonoBehaviour
         float roll=Hull.Stability.Step(dt,NavalHullStability.Roll(Boat),Mathf.Atan2(starboard-port,10.8f)*Mathf.Rad2Deg);
         float height=(bow+stern+starboard+port)*0.25f-Hull.Stability.Waterline-Hull.SinkDepth;
         verticalSpeed+=((height-p.y)*10f-verticalSpeed*5f)*dt;
-        Vector3 next=Boat.position+(forward*speed/(1f+depth)+ram.Drift)*motionDt*(Hull.Sunk?0f:1f);
+        Vector3 next=Boat.position+(forward*speed*floodMotion+ram.Drift)*motionDt*(Hull.Sunk?0f:1f);
         next+=Vector3.up*verticalSpeed*dt;
         Quaternion smoothed=Quaternion.Slerp(Boat.rotation,Quaternion.Euler(pitch,heading,Boat.eulerAngles.z),1f-Mathf.Exp(-4f*dt));
         Quaternion nextRotation=Quaternion.Euler(smoothed.eulerAngles.x,smoothed.eulerAngles.y,roll);

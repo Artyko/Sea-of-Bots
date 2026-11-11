@@ -11,13 +11,14 @@ public static class NavalRepairWorkSites
     // shell and the longitudinal cargo/partition line.  Lower side holes can
     // be unreachable from x=1.55 when a wing tank or store occupies that
     // point, even though a full sailor capsule fits safely at x=1.90.
-    private static readonly float[] steamCorridors={1.90f,1.55f,1.18f,.90f};
+    private static readonly float[] steamCorridors={1.90f,1.70f,1.55f,1.18f,.90f};
     public static int ShiftCount {get{return shifts.Length;}}
     public static int CorridorCount {get{return corridors.Length;}}
+    public static int CorridorCountFor(NavalShipDefinition ship){return ship.SteamPowered?steamCorridors.Length:corridors.Length;}
     public static float Shift(int index){return shifts[index];}
-    public static float Corridor(int index){return corridors[index];}
+    public static float Corridor(int index){return corridors[Math.Min(index,corridors.Length-1)];}
     public static float Corridor(NavalShipDefinition ship,int index)
-    {return ship.SteamPowered?steamCorridors[index]:corridors[index];}
+    {return ship.SteamPowered?steamCorridors[index]:corridors[Math.Min(index,corridors.Length-1)];}
     public static bool ClearOfCasemate(NavalShipDefinition ship,float floor,float z)
     {
         if(!ship.SteamPowered||Math.Abs(floor-ship.WeatherDeck)>.12f)return true;

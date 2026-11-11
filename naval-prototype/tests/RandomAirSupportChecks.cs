@@ -1,0 +1,2 @@
+﻿using System;
+class RandomAirSupportChecks{static void Main(){int[] expected={0,2,3,4,5,6};for(int i=0;i<6;i++){int waves=NavalAirRaidMath.SupportWaveCount(i);if(waves!=expected[i])throw new Exception("Wave selection");int total=0;for(int w=0;w<waves;w++)total+=NavalAirRaidMath.AircraftInWave(w,waves);if(total!=(waves==0?0:5+(waves-1)*6)||NavalAirRaidMath.AircraftInWave(waves,waves)!=0)throw new Exception("Wave bounds");}Console.WriteLine("PASS: no aviation or two to six complete bounded waves.");}}

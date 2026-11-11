@@ -21,8 +21,10 @@ public partial class NavalRepairSailor
   plankStock=null;float cost=float.PositiveInfinity;Vector3 destination=Vector3.zero;
   foreach(var candidate in hull.PlankSupplies)if(candidate.Available&&CargoRetry(candidate)){
    float travel=SupportTravelCost(candidate.PickupPost);if(travel>=cost)continue;
-   for(int i=0;i<3;i++){
-    Vector3 point=CargoApproach(candidate.PickupPost,i);
+   for(int i=0;i<9;i++){
+    Vector3 point=CargoApproach(candidate.PickupPost,i%3);
+    if(i>=3){float angle=(i-3)*Mathf.PI/3f;point=candidate.PickupPost+new Vector3(Mathf.Cos(angle),0,Mathf.Sin(angle))*(1.2f/hull.WorldScale);}
+
     if(!Supported(point)||!ClearBody(point))continue;
     cost=travel;plankStock=candidate;destination=point;break;
    }

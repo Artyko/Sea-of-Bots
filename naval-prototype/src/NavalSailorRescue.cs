@@ -10,7 +10,7 @@ public partial class NavalSailorRescue : MonoBehaviour
     private int side,stage;
     private bool climbing;
     private Vector3 feet;
-    private float scanAt,headOffset;
+    private float scanAt,headOffset,patchAirLogAt;
     private NavalDrowning drowning;
     private NavalBoarder cachedBoarder;
     private NavalBoarder Boarder {get{if(cachedBoarder==null)cachedBoarder=GetComponent<NavalBoarder>();return cachedBoarder;}}
@@ -29,7 +29,7 @@ public partial class NavalSailorRescue : MonoBehaviour
         Vector3 foot=robot.transform.position-Vector3.up*worker.FootOffset;
         Vector3 local=home.Root.InverseTransformPoint(foot);
         float exit=HoldExitSeconds(home,local,false);
-        return AirRemaining(world)>NavalHoldSafety.AirReserve(exit)+Mathf.Max(0,travelSeconds)+workSeconds+.5f;
+        return NavalHoldSafety.CanReachAndFinishPatch(AirRemaining(world),exit,Mathf.Max(0,travelSeconds),workSeconds);
     }
     private float HoldExitSeconds(NavalHull ship,Vector3 local,bool stairs)
     {
@@ -55,8 +55,15 @@ public partial class NavalSailorRescue : MonoBehaviour
             bool stairs=NavalWalkRoutes.InStairwell(local.x,local.y,local.z,interior.Definition.StairWidth*.5f+.175f,interior.Floor);
             float exitSeconds=HoldExitSeconds(interior,local,stairs);
             float air=AirRemaining(world);
-            if(!NavalHoldSafety.MustEscape(headUnder,interior.Sunk,air,exitSeconds)||
-                !interior.Sunk&&interior==home&&NavalHoldSafety.CanFinishPatch(air,exitSeconds,worker.ActiveHullPatchSeconds))return;
+            if(!NavalHoldSafety.MustEscape(headUnder,interior.Sunk,air,exitSeconds))return;
+            float approach=worker.HullPatchApproachSeconds,remaining=worker.PendingHullPatchSeconds;
+            bool finish=!interior.Sunk&&interior==home&&(NavalHoldSafety.CanFinishPatch(air,exitSeconds,worker.ActiveHullPatchSeconds)||
+                NavalHoldSafety.CanReachAndFinishPatch(air,exitSeconds,approach,remaining));
+            if(finish){
+                if(Time.time>=patchAirLogAt){patchAirLogAt=Time.time+3f;Debug.Log("[NavalPrototype] Underwater repair continues: ship="+interior.Root.name+" sailor="+robot.GetInstanceID()+" air="+air.ToString("F1")+" approach_s="+approach.ToString("F1")+" repair_s="+remaining.ToString("F1")+" exit_s="+exitSeconds.ToString("F1")+" task="+worker.Status);}
+                return;
+            }
+            Debug.Log("[NavalPrototype] Hold evacuation decision: ship="+interior.Root.name+" sailor="+robot.GetInstanceID()+" air="+air.ToString("F1")+" approach_s="+approach.ToString("F1")+" repair_s="+remaining.ToString("F1")+" exit_s="+exitSeconds.ToString("F1")+" task="+worker.Status);
         }
         else
         {

@@ -9,5 +9,5 @@ public static class NavalRouteArrival
         return dx*dx+dz*dz<radius*radius&&Math.Abs(y-goalY)<0.3f;
     }
     public static bool ReachedWorld(float dx,float dy,float dz,float scale,bool final)
-    {float radius=final?.20f:.18f;return (dx*dx+dz*dz)*scale*scale<radius*radius&&Math.Abs(dy)*scale<.4f;}
+    {float radius=final?.20f:.18f;return (dx*dx+dz*dz)*scale*scale<radius*radius&&Math.Abs(dy)*scale<(final?.4f:.65f);}
 }

@@ -4,6 +4,7 @@ public sealed class NavalHullStability
     private readonly NavalHull hull;
     private readonly NavalStabilityMath model;
     public static float Roll(Transform ship){return Mathf.Atan2(ship.right.y,ship.up.y)*Mathf.Rad2Deg;}
+    public double DryDisplacement {get{return model.DryMass;}}
     public float WaveRoll {get;private set;}
     public float Waterline {get{return model.Waterline;}}
     public float RightingArm {get{return model.RightingArm;}}

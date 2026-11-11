@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 public partial class NavalStations
@@ -136,6 +136,17 @@ public partial class NavalStations
     private void TickCapitalBattery(Transform target,Vector3 targetVelocity,float dt)
     {
         TickCapitalDoors(dt);
+        var mission=NavalTestWorld.Active;
+        if(mission!=null&&mission.ConvoyMission){
+            float nearest=float.PositiveInfinity;Transform closest=null;
+            foreach(var candidate in mission.ConvoyHulls()){
+                if(candidate==null||candidate==hull||candidate.Sunk||candidate.SinkingDanger)continue;
+                var other=ForShip(candidate.Root);if(other==null||other.HostileToPlayer==HostileToPlayer)continue;
+                float distance=(candidate.Root.position-boat.position).sqrMagnitude;
+                if(distance<=NavalCapitalLayout.Range*NavalCapitalLayout.Range&&distance<nearest){nearest=distance;closest=candidate.Root;}
+            }
+            if(closest!=null){target=closest;targetVelocity=mission.FleetVelocity(closest);}
+        }
         var victim=ForShip(target);Vector3 relative=targetVelocity-FiringPlatformVelocity();
         bool withinSearch=target!=null&&TargetInsideSearchRange(target,targetVelocity,NavalCapitalLayout.Range);
         for(int slot=0;slot<capitalTurrets.Length;slot++){

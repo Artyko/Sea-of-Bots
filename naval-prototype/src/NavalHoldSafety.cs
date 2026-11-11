@@ -24,8 +24,14 @@ public static class NavalHoldSafety
     {return headUnder&&air<=EscapeAirSeconds;}
     public static bool CanFinishPatch(float air,float exitSeconds,float remaining)
     {
-        // Spend only the contingency buffer once hands are already on the patch.
-        return remaining>0f&&remaining<=4f&&air>Math.Max(8f,AirReserve(exitSeconds)-4f)+remaining;
+        // An already-started hull patch is finished even at the cost of the sailor's life.
+        // The caller supplies a nonzero remainder only after the first repair tick.
+        return remaining>0f&&remaining<=4f;
+    }
+    public static bool CanReachAndFinishPatch(float air,float exitSeconds,float approach,float remaining)
+    {
+        return approach>=0f&&approach<=8f&&remaining>0f&&remaining<=4f&&
+            air>approach+remaining+.5f;
     }
     public static bool CanResume(bool headUnder,bool sinking,float air,float drySeconds,bool stableFloor)
     {return !headUnder&&!sinking&&air>=NavalBreathClock.Capacity-1f&&drySeconds>=.75f&&stableFloor;}

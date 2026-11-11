@@ -12,6 +12,8 @@ class StationArrivalChecks
   Check(!NavalStationArrival.KeepMovingPost(false,.25f)&&!NavalStationArrival.KeepMovingPost(true,1.01f),"Rear approach is retained for a gunner who never reached the seat or was genuinely displaced");
   Check(NavalStationArrival.AtMainBatterySeat(.02f,.10f,.02f,4f),"Raised main-battery footing is accepted without a fragile support ray");
   Check(!NavalStationArrival.AtMainBatterySeat(0f,.25f,0f,4f)&&!NavalStationArrival.AtMainBatterySeat(.2f,0f,0f,4f),"Main-battery seat cannot accept a sailor above or beside the turntable");
+  Check(NavalStationArrival.OnRaisedSupport(.5f/12f,.15f/12f,0,12f),"Supported operator may finish within capsule skin clearance");
+  Check(!NavalStationArrival.OnRaisedSupport(1f/12f,0,0,12f),"One metre away cannot count as station arrival");
   foreach(var ship in NavalShipDefinition.Choices)
   {
    float stairsToStation=6*ship.Scale;Check(!NavalStationArrival.CanAnchor(stairsToStation*stairsToStation),"No long teleport on any ship size");

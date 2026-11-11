@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 class LowerDeckSideRepairChecks
 {
@@ -20,7 +20,7 @@ class LowerDeckSideRepairChecks
             for(int deck=0;deck<ship.DeckCount&&!reachable;deck++)
             {
                 float floor=ship.RepairFloor(preferred,deck);
-                for(int corridor=0;corridor<NavalRepairWorkSites.CorridorCount;corridor++)
+                for(int corridor=0;corridor<NavalRepairWorkSites.CorridorCountFor(ship);corridor++)
                 {
                     float x=side*NavalRepairWorkSites.Corridor(ship,corridor);
                     if(Math.Abs(x)>half-.85f/ship.Scale)continue;

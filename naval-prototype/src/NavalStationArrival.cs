@@ -20,5 +20,5 @@
         return horizontal<=.45f*.45f&&vertical>=-.12f&&vertical<=.8f;
     }
     public static bool OnRaisedSupport(float dx,float dy,float dz,float scale)
-    {return dy>=0&&dy*scale<=.8f&&(dx*dx+dz*dz)*scale*scale<=.45f*.45f;}
+    {return dy>=0&&dy*scale<=.8f&&(dx*dx+dz*dz)*scale*scale<=.65f*.65f;}
 }

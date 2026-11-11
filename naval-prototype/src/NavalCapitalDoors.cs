@@ -62,7 +62,9 @@ public partial class NavalStations
                     bool ground=actor==player&&(boat.TransformVector(ship-approach)).sqrMagnitude<3f*3f;
                     bool passage=depth>-.17f&&depth<.30f&&Mathf.Abs(lateral)<.32f&&local.y>-.10f&&local.y<.9f;
                     bool visiting=actor==player&&Mathf.Abs(local.x)<.36f&&Mathf.Abs(local.z)<.33f&&local.y>-.10f&&local.y<.94f;
-                    if(t.Ready&&actor!=player){var sailor=actor.GetComponent<NavalRepairSailor>();if(sailor!=null&&sailor.CapitalSeated)continue;}
+                    // A passing crew member must not recall a combat-ready turret
+                    // to its access bearing. Its assigned operator requests exit explicitly.
+                    if(t.Ready&&actor!=player&&!t.AccessRequested)continue;
                     if((ground&&!t.Ready&&slot!=playerCapitalSlot)||passage||visiting){t.AutoDoorUntil=Time.time+.5f;break;}
                 }
             }

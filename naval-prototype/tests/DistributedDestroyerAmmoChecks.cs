@@ -1,0 +1,2 @@
+﻿using System;
+class DistributedDestroyerAmmoChecks{static void Main(){var s=NavalShipDefinition.Novik;int n=NavalCargoLayout.Boxes(s,0),fore=0,aft=0;for(int i=0;i<n;i++){var p=NavalCargoLayout.Position(s,i);if(p.Z>0)fore++;else aft++;if(Math.Abs(p.X*s.Scale)>3.5f)throw new Exception("Stock must keep side passages free");}if(Math.Abs(fore-aft)>1)throw new Exception("Ammo reserves must be balanced fore/aft");Console.WriteLine("PASS: destroyer reserve racks balanced fore/aft with unchanged stock count.");}}

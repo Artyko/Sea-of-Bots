@@ -13,7 +13,7 @@ public partial class NavalRepairSailor
     {
         using(NavalPerformance.Measure(NavalPerfArea.CrewRoute)){
             float q=hull.WorldScale;
-            if(route.Count>0){var target=route[0];if(routeFailures.Blocked(feet.x*q,feet.y*q,feet.z*q,target.x*q,target.y*q,target.z*q,hull.Revision,Time.time)&&!(finishAtRepairReach&&leak!=null&&CanReachLeak()))return RouteResult.Blocked;}
+            if(route.Count>0){var target=route[0];if(routeFailures.Blocked(feet.x*q,feet.y*q,feet.z*q,target.x*q,target.y*q,target.z*q,hull.Revision,Time.time)&&!(finishAtRepairReach&&leak!=null&&CanReachLeak())&&!NavigationWalkClear(feet,target))return RouteResult.Blocked;}
             var result=FollowRouteCore(dt,timeout,finishAtRepairReach);
             if(result==RouteResult.Blocked&&route.Count>0){var target=route[0];routeFailures.Mark(feet.x*q,feet.y*q,feet.z*q,target.x*q,target.y*q,target.z*q,hull.Revision,Time.time);}
             return result;
@@ -116,12 +116,23 @@ public partial class NavalRepairSailor
         bool preciseTower=NavalConningTowerLayout.DoorLane(new NavalWalkPoint(target.x,target.y,target.z),hull.Definition);
         bool reached=walkedOff||closeRepair||(NavalCapitalAADeck.Waypoint(target,hull.Definition)?NavalCapitalAADeck.Reached(feet,target,hull.WorldScale):stairExitWaypoints>0?NavalStairRecovery.Arrived(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):stairPoint&&!recovering?
             (NavalRaisedBridge.Flight(new NavalWalkPoint(target.x,target.y,target.z),hull.Definition)?NavalRaisedBridge.ReachedFlight(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):hull.Definition.Destroyer?NavalDestroyerLayout.ReachedRamp(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):NavalWalkRoutes.Reached(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale)):recovering?NavalLedgeRecoveryMath.Arrived(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale):final&&returning?AtStation(target):NavalRouteArrival.ReachedWorld(feet.x-target.x,feet.y-target.y,feet.z-target.z,hull.WorldScale,final||preciseTower));
+        // A descending capsule spans several treads. Advance the route pin
+        // without moving the body artificially; the controller walks to the next tread.
+        if(!reached&&!final&&stairPoint&&!recovering&&route[1].y<target.y&&feet.y>=target.y&&
+           (feet.y-target.y)*hull.WorldScale<NavigationRadius+.5f&&
+           new Vector2(feet.x-target.x,feet.z-target.z).sqrMagnitude*hull.WorldScale*hull.WorldScale<.45f*.45f&&
+           NavalPhysicsQueries.HasLocalSupport(hull,feet))reached=true;
         // A displaced capsule may straddle a tread pin. Rejoin only the next
         // supported segment of this flight; normal tread arrival stays strict.
         if(!reached&&!final&&!recovering&&stairExitWaypoints==0&&stairPoint&&stuck>.5f&&
            boat.TransformVector(target-feet).sqrMagnitude<NavigationRadius*NavigationRadius*1.1f&&Mathf.Abs(target.y-feet.y)*hull.WorldScale<.2f&&
            NavalStairTraffic.SamePassage(new NavalWalkPoint(feet.x,feet.y,feet.z),new NavalWalkPoint(route[1].x,route[1].y,route[1].z),hull.Definition)&&
            NavalPhysicsQueries.HasLocalSupport(hull,feet)&&NavalPhysicsQueries.HasLocalSupport(hull,route[1])&&NavigationClear(feet,route[1])){
+            reached=true;motionExpired=false;movementWatchdog.Reset();
+        }
+        if(!reached&&!final&&!recovering&&stairExitWaypoints>0&&stuck>.35f&&
+           boat.TransformVector(target-feet).sqrMagnitude<.4f*.4f&&Mathf.Abs(target.y-feet.y)*hull.WorldScale<.25f&&
+           Mathf.Abs(route[1].y-feet.y)*hull.WorldScale<.3f&&ClearBody(route[1])&&NavigationWalkClear(feet,route[1])){
             reached=true;motionExpired=false;movementWatchdog.Reset();
         }
         if(!reached&&!final&&!recovering&&stairExitWaypoints==0&&!stairPoint&&stuck>.35f&&

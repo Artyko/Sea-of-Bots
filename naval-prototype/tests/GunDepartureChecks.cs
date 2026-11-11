@@ -1,0 +1,2 @@
+﻿using System;
+class GunDepartureChecks{static void Main(){var s=NavalShipDefinition.Novik;for(int g=0;g<s.GunCount;g++){var m=s.GunPosition(g);var a=new NavalWalkPoint(m.x,m.y-.55f/s.Scale,m.z-NavalGunStationLayout.RearDistance/s.Scale);var b=new NavalWalkPoint(5.6f/s.Scale,a.Y,a.Z-2f);var path=NavalDestroyerLayout.Route(a,b,s);var p=path[0];if((a.Z-p.Z)*s.Scale<1.3f)throw new Exception("Must back out behind gun shield before turning sideways");}Console.WriteLine("PASS: destroyer gun departure backs clear of each shield.");}}

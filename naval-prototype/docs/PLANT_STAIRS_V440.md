@@ -1,0 +1,3 @@
+# v440: machinery stair intersections
+
+Corrected v439 centreline-only relocation: moved EngineZ from -1.35 to 0 (higher stair region), BoilerZ to 2.2 on both coal-powered classes (forward of stair footprint). Removed obsolete detail pipe at z=.45. Engine steam inlet now follows EngineZ. Twin exhaust links bypass the centre stair along x=-1.15 before joining existing trunks. Shared layout drives boiler protection/flood coordinates and route obstacles. Build and StairTrafficChecks passed; native collider overlap/complete furnishing clearance is not certified by pure route tests and requires gameplay verification.

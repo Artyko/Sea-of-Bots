@@ -23,6 +23,7 @@ public partial class NavalRepairSailor
         // Combat recall and walking home happen only after checking available useful work.
         if(combatReturnPending&&NavalRepairDispatch.CanRecall(false,hull.HasRepairDemand,OtherLeakRepairer(),BucketWater))
         {ResumeCombatPost();return;}
+        if(HomeRouteCooling){route.Clear();returning=changingPost=false;scanAt=Time.time+.5f;Walking(false,0f);return;}
         returning=true;changingPost=false;PlanTo(home);
     }
 }

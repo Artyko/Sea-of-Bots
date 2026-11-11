@@ -82,10 +82,12 @@ public class NavalRamDamage : MonoBehaviour
     public void Contact(NavalRamDamage other)
     {
         if(other==null||other==this)return;
-        Vector3 a,b;Closest(transform,other.transform,out a,out b);
         LastContact=other.LastContact=Time.time;Opponent=other;other.Opponent=this;
-        ContactLocal=transform.InverseTransformPoint(a);other.ContactLocal=other.transform.InverseTransformPoint(b);
+        // Contact/boarding timestamps stay live; expensive surface points are
+        // only needed when the damage cooldown permits another impact.
         if(Time.time-Mathf.Max(lastDamage,other.lastDamage)<3f)return;
+        Vector3 a,b;Closest(transform,other.transform,out a,out b);
+        ContactLocal=transform.InverseTransformPoint(a);other.ContactLocal=other.transform.InverseTransformPoint(b);
         Vector3 normal=b-a;normal.y=0f;
         if(normal.sqrMagnitude<0.00001f){normal=other.transform.position-transform.position;normal.y=0f;}
         Vector3 va=Velocity+Vector3.Cross(Vector3.up*AngularRate*Mathf.Deg2Rad,a-transform.position);

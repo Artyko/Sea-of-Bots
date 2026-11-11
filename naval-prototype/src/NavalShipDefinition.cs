@@ -75,6 +75,7 @@ public sealed class NavalShipDefinition
     {if(preferred>.825f+.1f)return index==0?WeatherDeck:index==1?.825f:HoldFloor;return index<2?NavalRepairWorkSites.Floor(preferred,HoldFloor,index):WeatherDeck;}
     public float RepairAimY(float holeY,float standY)
     {
+        if(Destroyer)return NavalDestroyerRepairAim.Height(holeY,standY,HoldFloor,WeatherDeck,NavalDestroyerLayout.Foredeck(this),Scale);
         float aim=RepairDeckEdge(holeY,standY,.825f);
         return DeckCount>2?RepairDeckEdge(aim,standY,WeatherDeck):aim;
     }
@@ -125,9 +126,9 @@ public sealed class NavalShipDefinition
         return false;
     }
     public static float StandbyX(int sailor){return sailor%2==0?-1.65f:1.65f;}
-    public static float StandbyX(NavalShipDefinition ship,int sailor){if(ship.Destroyer)return NavalDestroyerCrewLayout.X(sailor)/ship.Scale;if(ship.CapitalShip)return sailor%2==0?-.5f:.5f;if(!ship.SteamPowered)return ship.Scale<=2?(sailor%2==0?-.1f:.1f):StandbyX(sailor);return sailor%2==0?-.58f:.58f;}
+    public static float StandbyX(NavalShipDefinition ship,int sailor){if(ship.Destroyer)return NavalDestroyerCrewLayout.X(sailor)/ship.Scale;if(ship.CapitalShip)return sailor%2==0?-1.15f:1.15f;if(!ship.SteamPowered)return ship.Scale<=2?(sailor%2==0?-.1f:.1f):StandbyX(sailor);return sailor%2==0?-.58f:.58f;}
     public static float StandbyZ(int sailor){return 4.9f-sailor/2*.9f;}
-    public static float StandbyZ(NavalShipDefinition ship,int sailor){if(ship.Destroyer)return NavalDestroyerCrewLayout.Z(sailor)/ship.Scale;if(!ship.SteamPowered)return StandbyZ(sailor);return ship.CapitalShip?.95f+(sailor/2%4)*.6f:sailor%4<2?1.72f:2.47f;}
+    public static float StandbyZ(NavalShipDefinition ship,int sailor){if(ship.Destroyer)return NavalDestroyerCrewLayout.Z(sailor)/ship.Scale;if(!ship.SteamPowered)return StandbyZ(sailor);return -4.5f+(sailor/2%10)*.95f;}
     // Idle steam hands wait in two machinery-deck watches instead of forming
     // a crowd between the casemate crews. The centre aisle positions lie
     // between shell-rack rows and stay clear of the armoured magazine trunk.

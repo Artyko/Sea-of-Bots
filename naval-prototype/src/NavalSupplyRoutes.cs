@@ -165,7 +165,7 @@ public static class NavalSupplyRoutes
 
   // Machinery-room service lanes: enough corners to pass either end without
   // inventing a route through the now solid boiler or magazine lockers.
-  if(ship.SteamPowered)foreach(float x in new float[]{-2.02f,-1.10f,-.55f,.55f,1.10f,2.02f})
+  if(ship.SteamPowered)foreach(float x in new float[]{-2.02f,-1.60f,-1.40f,-1.10f,-.55f,.55f,1.10f,1.40f,1.60f,2.02f})
    foreach(float z in new float[]{-2.25f,-1.15f,-.45f,.45f,1.55f,2.35f,2.85f}){
     var node=new NavalWalkPoint(x,floor,z);if(CargoClear(node,node,ship))graph.Nodes.Add(node);
    }

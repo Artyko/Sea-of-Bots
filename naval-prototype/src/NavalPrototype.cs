@@ -174,7 +174,7 @@ public partial class NavalTestWorld : MonoBehaviour
         Material wood = MakeMaterial(new Color(0.30f, 0.19f, 0.115f));
         Material lightWood = MakeMaterial(new Color(0.66f, 0.51f, 0.32f));
         Material deckWood = MakeMaterial(new Color(0.47f, 0.375f, 0.255f));
-        Material alternatePlank = MakeMaterial(new Color(0.515f, 0.426f, 0.285f));
+        Material alternatePlank = MakeMaterial(new Color(0.515f, 0.463f, 0.285f));
         Material blackMast = MakeMaterial(new Color(0.025f, 0.025f, 0.03f));
         // A readable slate-grey upper belt and oxide-red underwater body.
         // The old near-black mast material made the whole ironclad look like
@@ -228,7 +228,7 @@ public partial class NavalTestWorld : MonoBehaviour
         if(GetComponent<NavalBattleTelemetry>()==null)gameObject.AddComponent<NavalBattleTelemetry>();
         if(ConvoyMission)SpawnConvoy();else ToggleEnemy();
         rough=era==NavalEra.Sail;
-        Debug.Log("[NavalPrototype] v426 "+era+" ships and waves started on native editor map.");
+        Debug.Log("[NavalPrototype] v463 "+era+" ships and waves started on native editor map.");
     }
 
     private Material MakeMaterial(Color color)
@@ -296,7 +296,7 @@ public partial class NavalTestWorld : MonoBehaviour
         if(boat==null||!SimulationActive)return;
         if(ConvoyMission){UpdateConvoyInput();TickConvoy();}
         if(Spectating)UpdateSpectator();else RememberLiveCamera();
-        if(Time.unscaledDeltaTime>.15f&&Time.unscaledTime>=slowFrameLogAt){slowFrameLogAt=Time.unscaledTime+2f;Debug.Log("[NavalPrototype] Long frame v426: milliseconds="+(Time.unscaledDeltaTime*1000f).ToString("F1"));}
+        if(Time.unscaledDeltaTime>.15f&&Time.unscaledTime>=slowFrameLogAt){slowFrameLogAt=Time.unscaledTime+2f;Debug.Log("[NavalPrototype] Long frame v463: milliseconds="+(Time.unscaledDeltaTime*1000f).ToString("F1"));}
         UpdateBinoculars();ApplyBinocularZoom();
         UpdateHudInput();
         if(replaceEnemy){replaceEnemy=false;if(enemy==null)ToggleEnemy();}
@@ -322,6 +322,7 @@ public partial class NavalTestWorld : MonoBehaviour
         structure.Refresh(boat.forward*speed+Vector3.up*verticalVelocity);
         hull.Step(boat, ocean, dt, Input.GetKey(KeyCode.F10));
         float depth = hull.Volume / (HoldArea * hull.AreaScale * Mathf.Max(.01f,hull.Flood.AttachedFraction));
+        float floodMotion=hull.Definition.SteamPowered?NavalFloodDragMath.SpeedRetention(hull.Stability.DryDisplacement,hull.Volume,hull.Flood.AttachedFraction):1f/(1f+depth);
         retreat.Step(dt,allies!=null&&allies.NeedsRetreat,NavalCrewPriorities.ShouldWithdraw(hull.RepairRetreat,stations.AllGunsBroken,hull.HasActiveLeaks||hull.Bilge!=null&&(hull.Bilge.WantsOperator||!hull.Bilge.Functional)),EnemyBoat!=null&&!hull.Sunk&&!stations.AtHelm);
         float throttle = 0f;
         float turn = stations.AtHelm ? stations.TurnInput : 0f;
@@ -362,7 +363,7 @@ public partial class NavalTestWorld : MonoBehaviour
         Vector3 oldPosition=boat.position;Quaternion oldRotation=boat.rotation;
         Quaternion smoothed=Quaternion.Slerp(oldRotation,Quaternion.Euler(pitch,heading,oldRotation.eulerAngles.z),1f-Mathf.Exp(-4f*dt));
         Quaternion nextRotation=Quaternion.Euler(smoothed.eulerAngles.x,smoothed.eulerAngles.y,roll);
-        Vector3 next = boat.position + Vector3.up*verticalVelocity*dt + (flatForward * speed / (1f + depth) + ram.Drift) * motionDt * (hull.Sunk ? 0f : 1f);
+        Vector3 next = boat.position + Vector3.up*verticalVelocity*dt + (flatForward * speed * floodMotion + ram.Drift) * motionDt * (hull.Sunk ? 0f : 1f);
         ram.Velocity=(next-oldPosition)/Mathf.Max(motionDt,0.001f);ram.AngularRate=Mathf.DeltaAngle(oldRotation.eulerAngles.y,nextRotation.eulerAngles.y)/Mathf.Max(motionDt,0.001f);
         float rigRetention;
         if(ConvoyMission)

@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -27,6 +27,7 @@ public class NavalWater : MonoBehaviour
     private const float Spacing = 3f;
     private const float Half = 50f;
     private float nextMeshAt;
+    private bool renderedHeightReady;private float renderedOriginX,renderedOriginZ;
     private int nextMeshFrame;
     private readonly List<int>[] baseRows = new List<int>[Count-1];
     private readonly bool[] clippedRows = new bool[Count-1];
@@ -99,6 +100,15 @@ public class NavalWater : MonoBehaviour
     public float Height(float x, float z)
     {
         x -= transform.position.x; z -= transform.position.z;
+        if(renderedHeightReady){
+            float gx=(x-renderedOriginX)/Spacing,gz=(z-renderedOriginZ)/Spacing;
+            int ix=Mathf.FloorToInt(gx),iz=Mathf.FloorToInt(gz);
+            if(ix>=0&&iz>=0&&ix<Count-1&&iz<Count-1){
+                int a=iz*Count+ix;float u=gx-ix,v=gz-iz;
+                float rendered=NavalWaterSurfaceMath.Triangle(heights[a],heights[a+1],heights[a+Count],heights[a+Count+1],u,v);
+                if(!float.IsNaN(rendered)&&!float.IsInfinity(rendered))return transform.position.y+rendered;
+            }
+        }
         return transform.position.y+NavalWaveField.Sample(x,z,Amplitude,simulationTime);
     }
 
@@ -166,6 +176,7 @@ public class NavalWater : MonoBehaviour
             }
         }
         surfaceBounds=new Bounds(new Vector3(offsetX,(minY+maxY)*.5f,offsetZ),new Vector3(2f*Half*Spacing,maxY-minY,2f*Half*Spacing));
+        renderedOriginX=-Half*Spacing+offsetX;renderedOriginZ=-Half*Spacing+offsetZ;renderedHeightReady=true;
         indices.Clear();
         clippedVertices.Clear(); clippedVertices.AddRange(vertices);
         for(int z=0;z<surfaceRows.Length;z++)

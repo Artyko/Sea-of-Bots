@@ -30,6 +30,13 @@ public static class NavalDestroyerLayout {
    resumed.Add(new NavalWalkPoint(side0*3.6f/q0,floor0,landing.Z));resumed.Add(landing);
    resumed.AddRange(Route(landing,b,s,stairZ,laneSide,gunApproach));return resumed;
   }
+  if(gunApproach&&a.Y>=s.WeatherDeck-.05f)for(int gun=0;gun<s.GunCount;gun++){
+   var mount=s.GunPosition(gun);float dx=(a.X-mount.x)*s.Scale,dz=(a.Z-mount.z)*s.Scale,distance=(float)Math.Sqrt(dx*dx+dz*dz);
+   if(distance>NavalGunStationLayout.RearDistance-.8f&&distance<NavalGunStationLayout.RearDistance+.8f&&Math.Abs(a.Y-(mount.y-.55f/s.Scale))*s.Scale<.8f){
+    var departure=new NavalWalkPoint(a.X+dx/distance*NavalGunStationLayout.ApproachDistance/s.Scale,a.Y,a.Z+dz/distance*NavalGunStationLayout.ApproachDistance/s.Scale);
+    var departureRoute=new List<NavalWalkPoint>();departureRoute.Add(departure);departureRoute.AddRange(Route(departure,b,s,stairZ,laneSide,false));return departureRoute;
+   }
+  }
   if(gunApproach&&b.Y>=s.WeatherDeck-.05f){for(int gun=0;gun<s.GunCount;gun++){var mount=s.GunPosition(gun);float dx=(b.X-mount.x)*s.Scale,dz=(b.Z-mount.z)*s.Scale,distance=(float)Math.Sqrt(dx*dx+dz*dz);if(Math.Abs(distance-NavalGunStationLayout.RearDistance)<.12f&&Math.Abs(b.Y-(mount.y-.55f/s.Scale))<.05f){var approach=new NavalWalkPoint(b.X+dx/distance*NavalGunStationLayout.ApproachDistance/s.Scale,b.Y,b.Z+dz/distance*NavalGunStationLayout.ApproachDistance/s.Scale);var entry=Route(a,approach,s,stairZ,laneSide,false);entry.Add(b);return entry;}}}
   float scale=s.Scale;bool fromRaised=a.Z>29.5f/scale&&a.Y>s.WeatherDeck+.1f,toRaised=b.Z>29.5f/scale&&b.Y>s.WeatherDeck+.1f;
   if(fromRaised&&b.Y<s.WeatherDeck-.1f||toRaised&&a.Y<s.WeatherDeck-.1f){float sideGate=(fromRaised?a.X:b.X)<0?-1:1;var gate=new NavalWalkPoint(sideGate*5.2f/scale,s.WeatherDeck,25.5f/scale);var split=Route(a,gate,s,stairZ,laneSide);split.AddRange(Route(gate,b,s,stairZ,laneSide));return split;}
@@ -43,10 +50,10 @@ public static class NavalDestroyerLayout {
    for(int i=0;i<=32;i++){float t=belowA?i/32f:1-i/32f;r.Add(new NavalWalkPoint(x,s.HoldFloor+(s.WeatherDeck-s.HoldFloor)*t,z+(-4+8*t)/q));}
    r.Add(new NavalWalkPoint(lane,belowB?s.HoldFloor:s.WeatherDeck,z+(belowB?-4f:4f)/q));
    r.Add(new NavalWalkPoint(lane,belowB?s.HoldFloor:s.WeatherDeck,z+(belowB?-5f:5f)/q));
-  }else r.Add(new NavalWalkPoint(lane,belowB?s.HoldFloor:a.Z>29.5f/q?Foredeck(s):s.WeatherDeck,a.Z));
+  }else r.Add(new NavalWalkPoint(lane,belowB?s.HoldFloor:a.Z>29.5f/q&&a.Y>=Foredeck(s)-.35f/q?Foredeck(s):s.WeatherDeck,a.Z));
   float floor=belowB?s.HoldFloor:s.WeatherDeck;
   bool forecastle=!belowB&&b.Z>29.5f/q;
-  bool fromForecastle=!belowA&&a.Z>29.5f/q;
+  bool fromForecastle=!belowA&&a.Z>29.5f/q&&a.Y>=Foredeck(s)-.35f/q;
   if(!belowB&&(forecastle||fromForecastle)){
    if(fromForecastle&&!forecastle){r.Clear();r.Add(new NavalWalkPoint(side*5.6f/q,Foredeck(s),a.Z));r.Add(new NavalWalkPoint(side*5.6f/q,Foredeck(s),29.5f/q));r.Add(new NavalWalkPoint(side*3.1f/q,Foredeck(s),29.5f/q));for(int i=15;i>=0;i--)r.Add(new NavalWalkPoint(side*3.1f/q,s.WeatherDeck+1.2f*(i+1)/16/q,(25.5f+(i+.5f)*.25f)/q));}
    else if(forecastle&&!fromForecastle){r.Add(new NavalWalkPoint(lane,floor,25.5f/q));r.Add(new NavalWalkPoint(side*3.1f/q,floor,25.5f/q));for(int i=0;i<16;i++)r.Add(new NavalWalkPoint(side*3.1f/q,s.WeatherDeck+1.2f*(i+1)/16/q,(25.5f+(i+.5f)*.25f)/q));r.Add(new NavalWalkPoint(side*5.6f/q,Foredeck(s),29.5f/q));}
@@ -76,14 +83,20 @@ public static class NavalDestroyerLayout {
   for(int z=0;z<103;z++){float z0=-51.2f+z*102.4f/103,z1=-51.2f+(z+1)*102.4f/103,zc=(z0+z1)*.5f,dz=z1-z0;
    float w=NavalDestroyerDesign.HalfWidth(zc),slope=Math.Abs(NavalDestroyerDesign.HalfWidth(z1)-NavalDestroyerDesign.HalfWidth(z0));
    float top=zc>=29.5f?Foredeck(s):s.WeatherDeck;
-   for(int side=-1;side<=1;side+=2)Box(h,steel,new Vector3(side*w/q,(s.HoldFloor-1.4f/q+top+.8f/q)*.5f,zc/q),new Vector3(.20f+slope,(top-s.HoldFloor)*q+2.2f,dz),true,true,null);
-   Box(h,steel,new Vector3(0,s.HoldFloor-1.3f/q,zc/q),new Vector3(w*2,.2f,dz),true,true,null);
-   Box(h,deck,new Vector3(0,s.HoldFloor-.1f/q,zc/q),new Vector3(w*2,.2f,dz),false,true,null);
+   for(int side=-1;side<=1;side+=2)Box(h,steel,new Vector3(side*w/q,(s.HoldFloor-.2f/q+top+.8f/q)*.5f,zc/q),new Vector3(.20f+slope,(top-s.HoldFloor)*q+1f,dz),true,true,null);
+   // One watertight structural floor, directly accessible from the hold.
+   // A separate sealed slab below this deck made bottom leaks impossible to reach.
+   Box(h,steel,new Vector3(0,s.HoldFloor-.1f/q,zc/q),new Vector3(w*2,.2f,dz),true,true,null);
+   // Protective lower casing encloses the existing bilge tanks and pipe runs.
+   // The accessible upper floor remains the watertight boundary of the occupied hold.
+   Box(h,steel,new Vector3(0,s.HoldFloor-1.5f/q,zc/q),new Vector3(w*2,.2f,dz),false,true,null);
+   for(int side=-1;side<=1;side+=2)Box(h,steel,new Vector3(side*w/q,s.HoldFloor-.85f/q,zc/q),new Vector3(.20f+slope,1.5f,dz),false,true,null);
    bool hatch=Math.Abs(Math.Abs(zc)-20.5f)<4.6f;
    if(hatch){Box(h,deck,new Vector3(0,top-.1f/q,zc/q),new Vector3(4.4f,.2f,dz),false,true,null);for(int side=-1;side<=1;side+=2)Box(h,deck,new Vector3(side*(w+4.6f)*.5f/q,top-.1f/q,zc/q),new Vector3(Math.Max(.1f,w-4.6f),.2f,dz),false,true,null);}
    else Box(h,deck,new Vector3(0,top-.1f/q,zc/q),new Vector3(w*2,.2f,dz),false,true,null);
   }
-  for(int end=-1;end<=1;end+=2){float top=end>0?Foredeck(s):s.WeatherDeck;Box(h,steel,new Vector3(0,(s.HoldFloor-1.4f/q+top+.8f/q)*.5f,end*6),new Vector3(s.HullHalfWidth(end*6)*q*2,(top-s.HoldFloor)*q+2.2f,.2f),true,true,null);}
+  for(int end=-1;end<=1;end+=2)Box(h,steel,new Vector3(0,s.HoldFloor-.85f/q,end*6),new Vector3(s.HullHalfWidth(end*6)*q*2,1.5f,.2f),false,true,null);
+  for(int end=-1;end<=1;end+=2){float top=end>0?Foredeck(s):s.WeatherDeck;Box(h,steel,new Vector3(0,(s.HoldFloor-.2f/q+top+.8f/q)*.5f,end*6),new Vector3(s.HullHalfWidth(end*6)*q*2,(top-s.HoldFloor)*q+1f,.2f),true,true,null);}
  }
  public static void BuildDecks(NavalHull h,Material steel,Material trim){var s=h.Definition;float q=s.Scale;
   for(int side=-1;side<=1;side+=2){foreach(float z in new[]{20.5f,-20.5f}){var flight=new List<NavalHullVoxel>();for(int i=0;i<32;i++){float top=s.HoldFloor+(s.WeatherDeck-s.HoldFloor)*(i+1)/32;Box(h,steel,new Vector3(side*3.6f/q,top-.075f/q,(z-4+(i+.5f)*8/32)/q),new Vector3(1.8f,.15f,8f/32),false,true,flight);}new NavalRepairableMechanism(h,flight,false,false,"Внутренний трап");}

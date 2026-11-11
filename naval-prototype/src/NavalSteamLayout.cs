@@ -12,10 +12,10 @@ public static class NavalSteamLayout
     public const float ConsoleWorldOffsetX=-1.25f;
     public const float ConsoleWorldHeight=1.08f;
     public const float MinimumOperatorClearance=1.20f;
-    public const float BoilerX=-1.45f,BoilerZ=1.35f;
-    public static float BoilerZFor(NavalShipDefinition ship){return ship.CapitalShip?.1f:BoilerZ;}
+    public const float BoilerX=0f,BoilerZ=2.2f;
+    public static float BoilerZFor(NavalShipDefinition ship){return BoilerZ;}
     public static float MainHeight(NavalShipDefinition ship){return 3.6f/ship.Scale;}
-    public const float EngineX=-1.45f,EngineZ=-1.35f;
+    public const float EngineX=0f,EngineZ=0f;
     public static float ScrewY(NavalShipDefinition ship){return System.Math.Min(-.72f,ship.HoldFloor-.25f); }
     // The funnel and its uptake sit directly above the port boiler room.
     public const float FunnelX=-1.82f;
@@ -34,6 +34,9 @@ public static class NavalSteamLayout
         if(System.Math.Abs(a.Y-ship.HoldFloor)<.08f){
             if(NavalSupplyRoutes.Hits(a,b,BoilerX-.48f-margin,BoilerX+.62f+margin,boilerZ-.90f-margin,boilerZ+.90f+margin))return true;
             if(NavalSupplyRoutes.Hits(a,b,EngineX-.33f-margin,EngineX+.41f+margin,EngineZ-.60f-margin,EngineZ+.60f+margin))return true;
+            // Exhaust bypass moved with the central plant: its vertical/horizontal
+            // runs occupy the old port service lane even though the boiler does not.
+            if(ship.CapitalShip&&NavalSupplyRoutes.Hits(a,b,-1.25f-margin,-.84f+margin,-2.11f-margin,BoilerZFor(ship)+.51f+margin))return true;
             for(int i=0;i<2;i++){
                 float z=NavalMagazineLayout.Z(ship,i);
                 if(NavalSupplyRoutes.Hits(a,b,NavalCompartmentMath.WallX-margin,NavalCompartmentMath.WallX+NavalMagazineLayout.Width/ship.Scale+margin,z-NavalMagazineLayout.Depth/(2*ship.Scale)-margin,z+NavalMagazineLayout.Depth/(2*ship.Scale)+margin))return true;

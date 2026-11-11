@@ -1,0 +1,2 @@
+﻿using System;
+class WaterSurfaceChecks{static void Main(){if(NavalWaterSurfaceMath.Triangle(0,2,4,8,0,0)!=0||NavalWaterSurfaceMath.Triangle(0,2,4,8,1,1)!=8||NavalWaterSurfaceMath.Triangle(0,2,4,8,.5f,.5f)!=3||NavalWaterSurfaceMath.Triangle(0,2,4,8,.75f,.75f)!=5.5f)throw new Exception("Rendered triangle height mismatch");Console.WriteLine("PASS: ocean height matches both rendered triangles and shared diagonal.");}}

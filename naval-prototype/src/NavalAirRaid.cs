@@ -10,6 +10,8 @@ public static class NavalAirRaidMath
     public static Vector3 PairOffset(int index){int pair=index/2,wing=index%2;return new Vector3((pair%2==0?-1f:1f)*pair*90f+wing*28f,pair*18f+wing*4f,pair*280f+wing*85f);}
     public static Vector3 BombingOffset(int pair,int wing){return new Vector3(wing==0?-3f:3f,0f,(pair%3-1)*8f);}
     public const int Waves=3;
+    public static int SupportWaveCount(int choice){return choice<=0?0:System.Math.Min(6,choice+1);}
+    public static int AircraftInWave(int wave,int total){return wave<0||wave>=total?0:wave==0?5:6;}
     public const int BombsPerAircraft=4;
     public static int AircraftInWave(int wave){return wave==0?5:wave>0&&wave<Waves?6:0;}
     public static float FallTime(float height,float verticalSpeed)
@@ -63,7 +65,7 @@ public sealed class NavalAirRaid : MonoBehaviour
         public int Bombs=NavalAirRaidMath.BombsPerAircraft,Health=13;
         public bool Leaving,Crashing;
         public float SmokeAt;
-        public Vector3 CrashVelocity;
+        public Vector3 CrashVelocity,FlightVelocity;
     }
     private struct Bomb { public Transform Body;public Vector3 Position,Velocity;public float Age; }
     private sealed class Trace { public float Speed;public Transform Body;public bool MachineGun;public TrailRenderer Trail;public float StartAt,Until,Length;public Vector3 Start,Direction; }
@@ -72,6 +74,8 @@ public sealed class NavalAirRaid : MonoBehaviour
     private readonly List<Trace> traces=new List<Trace>(32);
     private readonly List<NavalHull> ships=new List<NavalHull>(4);
     private readonly RaycastHit[] bombHits=new RaycastHit[64];
+    private Collider[] aircraftContacts=new Collider[32];
+    private int plannedWaves=NavalAirRaidMath.Waves;
     private NavalTestWorld world;
     private NavalHull flagship;
     private NavalWater ocean;
@@ -87,9 +91,10 @@ public sealed class NavalAirRaid : MonoBehaviour
     public bool Completed {get{return finished;}}
     public bool HasAircraft
     {get{if(finished)return false;foreach(var plane in aircraft)if(!plane.Crashing&&plane.Health>0)return true;return false;}}
-    public void Initialize(NavalTestWorld owner,NavalHull lead,NavalWater water)
+    public void Initialize(NavalTestWorld owner,NavalHull lead,NavalWater water,int waveCount=3)
     {
         world=owner;flagship=lead;ocean=water;
+        plannedWaves=Mathf.Clamp(waveCount,2,6);
         foreach(var ship in owner.ConvoyHulls())if(!owner.ConvoyAirSupport||!ship.Definition.Destroyer)ships.Add(ship);
         if(owner.ConvoyAirSupport)pause=0f;
         canvas=Paint(new Color(.57f,.51f,.32f));frame=Paint(new Color(.26f,.14f,.08f));
@@ -119,7 +124,7 @@ public sealed class NavalAirRaid : MonoBehaviour
     }
     private void SpawnWave()
     {
-        int count=NavalAirRaidMath.AircraftInWave(wave++);
+        int count=NavalAirRaidMath.AircraftInWave(wave++,plannedWaves);
         Vector3 from=NavalAirRaidMath.Approach(wave,world.ConvoyAirSupport);
         Vector3 side=Vector3.Cross(Vector3.up,from);
         Vector3 anchor=flagship.Root.position;
@@ -282,7 +287,7 @@ public sealed class NavalAirRaid : MonoBehaviour
             obj.AddComponent<MeshFilter>().sharedMesh=mesh;obj.AddComponent<MeshRenderer>().sharedMaterial=material;
         }
         var debris=root.gameObject.AddComponent<NavalAircraftDebris>();
-        debris.Initialize(plane.Course*(plane.Leaving?70f:62f),meshes,ocean);
+        debris.Initialize(plane.Crashing?plane.CrashVelocity:plane.Course*(plane.Leaving?70f:62f),meshes,ocean);
         if(plane.Parts[plane.Anchor].Health<=0)plane.Health=0;
     }
     private NavalHull PickTarget(int index)
@@ -341,7 +346,8 @@ public sealed class NavalAirRaid : MonoBehaviour
         if(direction.sqrMagnitude>.1f)plane.Course=Vector3.RotateTowards(plane.Course,direction,1.5f*dt,0f);
         if(plane.LeftDamage!=plane.RightDamage)
             plane.Course=Quaternion.AngleAxis(Mathf.Clamp(plane.LeftDamage-plane.RightDamage,-10f,10f)*dt*1.8f,Vector3.up)*plane.Course;
-        plane.Body.position=pos+plane.Course*(plane.Leaving?70f:62f)*dt;
+        plane.FlightVelocity=NavalAircraftCrashMath.FlightVelocity(plane.Course,plane.AttackForward,plane.Leaving?70f:62f);
+        plane.Course=plane.FlightVelocity.normalized;plane.Body.position=pos+plane.FlightVelocity*dt;
         plane.Body.rotation=Quaternion.LookRotation(plane.Course,Vector3.up);
         plane.Propeller.Rotate(0f,0f,1250f*dt,Space.Self);
     }
@@ -382,6 +388,16 @@ public sealed class NavalAirRaid : MonoBehaviour
         foreach(var part in plane.Parts){
             if(part.Health<=0)continue;
             Vector3 centre=position+plane.Body.rotation*part.Bounds.center;
+            // A rotating wing may already overlap the deck before its translation sweep.
+            int contacts=NavalOverlapQueries.Box(centre,part.Bounds.extents,plane.Body.rotation,mask,ref aircraftContacts);
+            for(int i=0;i<contacts;i++){
+                var shape=aircraftContacts[i];if(shape==null)continue;
+                Vector3 point=shape.ClosestPoint(centre);
+                var cell=NavalVoxelHit.Resolve(shape,point);
+                if(cell==null||cell.Owner==null||cell.Owner.SimulationRetired)continue;
+                Vector3 normal=centre-point;if(normal.sqrMagnitude<.00001f)normal=Vector3.up;else normal.Normalize();
+                AirImpactEffect(point,normal,cell,true);return true;
+            }
             if(TryAirImpact(centre,step,true,part.Bounds.extents,plane.Body.rotation))return true;
         }
         return false;
@@ -398,24 +414,27 @@ public sealed class NavalAirRaid : MonoBehaviour
         for(int i=0;i<count;i++)
         {
             var hit=bombHits[i];if(hit.collider==null||hit.distance>=closest)continue;
-            var voxel=NavalVoxelHit.Resolve(hit.collider,hit.point);
+            var voxel=NavalVoxelHit.Resolve(hit.collider,hit.point,hit.collider.ClosestPoint(position));
             if(voxel==null&&(hit.collider.GetComponent<NavalMergedCollider>()!=null||hit.collider.GetComponent<NavalHullVoxel>()!=null))continue;
             first=i;closest=hit.distance;cell=voxel;
         }
         if(first>=0)
         {
             Vector3 point=bombHits[first].point;
-            if(cell!=null&&cell.Owner!=null&&!cell.Owner.SimulationRetired)
-            {
-                cell.Owner.Damage(cell.Owner.Root.InverseTransformPoint(point),3.1f,true,cell,5.2f,4.2f,true);
-                if(aircraftCrash)Debug.Log("[NavalPrototype] Aircraft crash impact: ship="+cell.Owner.Root.name+" equivalent=50kg bomb");
-                else impacts++;
-            }
-            BombEffect(point,false);
-            BombFragments(point,bombHits[first].normal);
+            AirImpactEffect(point,bombHits[first].normal,cell,aircraftCrash);
             return true;
         }
         return false;
+    }
+
+    private void AirImpactEffect(Vector3 point,Vector3 normal,NavalHullVoxel cell,bool aircraftCrash)
+    {
+        if(cell!=null&&cell.Owner!=null&&!cell.Owner.SimulationRetired){
+            cell.Owner.Damage(cell.Owner.Root.InverseTransformPoint(point),3.1f,true,cell,5.2f,4.2f,true);
+            if(aircraftCrash)Debug.Log("[NavalPrototype] Aircraft crash impact: ship="+cell.Owner.Root.name+" equivalent=50kg bomb");
+            else impacts++;
+        }
+        BombEffect(point,false);BombFragments(point,normal);
     }
 
     private void BombFragments(Vector3 point,Vector3 surfaceNormal)
@@ -607,7 +626,7 @@ public sealed class NavalAirRaid : MonoBehaviour
             trace.Body.position=trace.Start+trace.Direction*Mathf.Min(travel,trace.Length);
         }
         if(finished)return;
-        float dt=Mathf.Min(Time.deltaTime,.05f);
+        float dt=NavalAircraftDebrisMath.Elapsed(Time.deltaTime);
         for(int i=bombs.Count-1;i>=0;i--)
         {
             Bomb bomb=bombs[i];
@@ -619,14 +638,16 @@ public sealed class NavalAirRaid : MonoBehaviour
             if(plane.Health<=0&&!plane.Crashing)
             {
                 plane.Crashing=true;downed++;
-                plane.CrashVelocity=plane.Course*40f+Vector3.down*3f;
-                Debug.Log("[NavalPrototype] Biplane shot down: "+plane.Body.name);
+                plane.CrashVelocity=plane.FlightVelocity.sqrMagnitude>1f?plane.FlightVelocity:NavalAircraftCrashMath.FlightVelocity(plane.Course,plane.AttackForward,plane.Leaving?70f:62f);
+                Debug.Log("[NavalPrototype] Biplane shot down: "+plane.Body.name+" inherited_velocity="+plane.CrashVelocity);
             }
             EmitAircraftSmoke(plane);
             if(plane.Crashing)
             {
-                plane.Age+=dt;
-                if(!StepCrash(plane,dt))continue;
+                float remaining=Mathf.Max(0f,Time.deltaTime);bool impacted=false;
+                while(remaining>0f){float stepTime=Mathf.Min(.05f,remaining);remaining-=stepTime;
+                    plane.Age+=stepTime;if(StepCrash(plane,stepTime)){impacted=true;break;}}
+                if(!impacted)continue;
             }
             else
             {
@@ -638,7 +659,7 @@ public sealed class NavalAirRaid : MonoBehaviour
         }
         if(flagship.Sunk){Finish(false);return;}
         if(aircraft.Count>0||bombs.Count>0)return;
-        if(wave==NavalAirRaidMath.Waves){Finish(true);return;}
+        if(wave>=plannedWaves){Finish(true);return;}
         pause-=dt;
         if(pause<=0f){SpawnWave();pause=20f;}
     }

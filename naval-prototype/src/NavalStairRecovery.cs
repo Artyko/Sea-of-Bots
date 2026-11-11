@@ -21,10 +21,10 @@ public static class NavalStairRecovery
   return false;
  }
  public static bool Arrived(float dx,float dy,float dz,float scale)
- {return (dx*dx+dz*dz)*scale*scale<.12f*.12f&&Math.Abs(dy)*scale<.35f;}
+ {return (dx*dx+dz*dz)*scale*scale<.35f*.35f&&Math.Abs(dy)*scale<.35f;}
  public static List<NavalWalkPoint> Exit(NavalWalkPoint feet,NavalWalkPoint goal,NavalShipDefinition ship,float floor,int side,float bodyRadius=.45f)
  {
-  if(ship.Destroyer){float q=ship.Scale,escapeX=(feet.X<0?-1:1)*5.6f/q,centre=feet.Z<0?-20.5f:20.5f;var escapeRoute=new List<NavalWalkPoint>();escapeRoute.Add(new NavalWalkPoint(escapeX,feet.Y,feet.Z));escapeRoute.Add(new NavalWalkPoint(escapeX,floor,feet.Z));var farLanding=new NavalWalkPoint(escapeX,floor,(centre+(goal.Z>feet.Z?5.8f:-5.8f))/q);escapeRoute.Add(farLanding);escapeRoute.AddRange(NavalSupplyRoutes.Plan(farLanding,goal,ship));return escapeRoute;}
+  if(ship.Destroyer){float q=ship.Scale,escapeX=(feet.X<0?-1:1)*5.6f/q,centre=feet.Z<0?-20.5f:20.5f;var escapeRoute=new List<NavalWalkPoint>();escapeRoute.Add(new NavalWalkPoint(escapeX,floor,feet.Z));var farLanding=new NavalWalkPoint(escapeX,floor,(centre+(goal.Z>feet.Z?5.8f:-5.8f))/q);escapeRoute.Add(farLanding);escapeRoute.AddRange(NavalSupplyRoutes.Plan(farLanding,goal,ship));return escapeRoute;}
   // The old .30 m margin ended exactly on the broad native capsule cast at
   // x ~= .83 on the ironclad. The next tick then rebuilt the same escape.
   float x=side*SideLane(ship,bodyRadius);

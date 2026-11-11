@@ -88,7 +88,7 @@ public sealed partial class NavalSteamPlant : MonoBehaviour
         AddGroup(engine,new Vector3(NavalSteamLayout.EngineX,hull.Floor+.025f,NavalSteamLayout.EngineZ),new Vector3(.65f,.05f,.9f),iron);
         for(int band=-1;band<=1;band++)AddDetail(boilerCentre+new Vector3(0,0,band*.43f),new Vector3(.68f,.60f,.07f),darkIron);
         AddDetail(boilerCentre+new Vector3(0,.36f,0),new Vector3(.28f,.18f,.30f),iron);
-        AddDetail(new Vector3(NavalSteamLayout.BoilerX,hull.Floor+.62f,.45f),new Vector3(.13f,.13f,.80f),accent);
+
         // A guarded flywheel and cylinder covers distinguish the engine from a
         // generic crate; their solid details remain inside the machinery envelope.
         for(int spoke=0;spoke<8;spoke++)
@@ -208,7 +208,7 @@ public sealed partial class NavalSteamPlant : MonoBehaviour
             Vector3 smokeTop=new Vector3(NavalSteamLayout.BoilerX,hull.Definition.WeatherDeck-.30f,boilerZ+dz);
             if(!Twin)Pipe(funnel,new Vector3(NavalSteamLayout.BoilerX,hull.Floor+.55f,boilerZ+dz),smokeTop,.18f,dark);
         }
-        Pipe(propulsionMain,new Vector3(-1.78f,steamY,-1.2f),new Vector3(NavalSteamLayout.EngineX,hull.Floor+.55f,-1.2f),.10f,accent);
+        Pipe(propulsionMain,new Vector3(-1.78f,steamY,NavalSteamLayout.EngineZ),new Vector3(NavalSteamLayout.EngineX,hull.Floor+.55f,NavalSteamLayout.EngineZ),.10f,accent);
         Pipe(pumpMain,new Vector3(-1.78f,steamY,-4.70f),new Vector3(-1.78f,steamY,-5.35f),.09f,accent);
         Pipe(pumpMain,new Vector3(-1.78f,steamY,-5.35f),new Vector3(0,steamY,-5.35f),.09f,accent);
         Pipe(pumpMain,new Vector3(0,steamY,-5.35f),new Vector3(0,hull.Floor+.35f,-5.35f),.09f,accent);
@@ -218,7 +218,10 @@ public sealed partial class NavalSteamPlant : MonoBehaviour
         if(Twin)foreach(float z in new[]{.4f,-2f}){
             Vector3 from=new Vector3(NavalSteamLayout.BoilerX,hull.Floor+.55f,boilerZ+(z>0?.4f:-.4f));
             Vector3 low=new Vector3(-.95f,hull.Floor+.62f,z);
-            Pipe(funnel,from,low,.18f,dark);
+            Vector3 bypass=new Vector3(-1.15f,hull.Floor+.62f,from.z);
+            Pipe(funnel,from,bypass,.18f,dark);
+            Pipe(funnel,bypass,new Vector3(bypass.x,low.y,low.z),.18f,dark);
+            Pipe(funnel,new Vector3(bypass.x,low.y,low.z),low,.18f,dark);
         }
         Vector3 drive=new Vector3(NavalSteamLayout.EngineX,hull.Floor+.03f,NavalSteamLayout.EngineZ-.20f);
         Vector3 stern=new Vector3(0,NavalSteamLayout.ScrewY(hull.Definition),-6.24f);

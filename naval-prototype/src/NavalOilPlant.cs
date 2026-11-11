@@ -11,7 +11,11 @@ public sealed partial class NavalSteamPlant {
  private float oilEffectAt;
  private readonly float[] oilRuptureAt=new float[6];
  private float OilMean(bool pressure){float total=0;foreach(var v in oilStates)total+=pressure?v.Pressure:v.Coal;return total/oilStates.Length;}
- private bool OilDriveConnected(int i){foreach(var c in oilDriveLines[i])if(c==null||c.Missing||c.Detached)return false;return true;}
+ private int oilConnectionRevision=-1;private readonly bool[] oilConnections=new bool[3];
+ private bool OilDriveConnected(int i){
+  if(oilConnectionRevision!=hull.Revision){for(int branch=0;branch<3;branch++){bool connected=true;foreach(var c in oilDriveLines[branch])if(c==null||c.Missing||c.Detached){connected=false;break;}oilConnections[branch]=connected;}oilConnectionRevision=hull.Revision;}
+  return oilConnections[i];
+ }
  private float OilPower {get{float total=0;for(int i=0;i<3;i++)total+=NavalOilDriveMath.Branch(oilStates[i*2].Pressure,oilStates[i*2+1].Pressure,Integrity(oilTurbines[i]),Integrity(oilShafts[i]),OilDriveConnected(i));return total/3*Mathf.Max(PropulsionMainIntegrity,PumpMainIntegrity);}}
 
  private void OilBox(List<NavalHullVoxel> group,Vector3 p,Vector3 size,Material m){int start=hull.Voxels.Count;NavalDestroyerLayout.Box(hull,m,p,size,false,true,group);for(int i=start;i<hull.Voxels.Count;i++){var c=hull.Voxels[i];c.RepairableEquipment=true;}}

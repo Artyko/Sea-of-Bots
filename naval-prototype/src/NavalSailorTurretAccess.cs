@@ -60,8 +60,9 @@ public partial class NavalRepairSailor
     {
         if(capitalStep>=capitalPath.Count){Walking(false,dt);return true;}
         Vector3 goal=capitalPath[capitalStep];float before=boat.TransformVector(goal-feet).magnitude;
-        if(capitalSlot==3&&Mathf.Abs(goal.y-feet.y)*hull.WorldScale>.02f&&
-            new Vector2(goal.x-feet.x,goal.z-feet.z).magnitude*hull.WorldScale<.4f)
+        Vector3 ladderAxis=capitalSlot==3?NavalTurretAccessLayout.ToShip(hull.Definition,3,new Vector3(.58f,0,0)):Vector3.zero;
+        bool xLadderGoal=capitalSlot==3&&new Vector2(goal.x-ladderAxis.x,goal.z-ladderAxis.z).sqrMagnitude<.00001f;
+        if(xLadderGoal&&new Vector2(goal.x-feet.x,goal.z-feet.z).magnitude*hull.WorldScale<2.4f)
         {feet=Vector3.MoveTowards(feet,goal,2.4f*dt/hull.WorldScale);HoldPosition();}
         else Move(goal,dt,capitalStep==capitalPath.Count-1);
         Walking(true,dt);
@@ -77,6 +78,12 @@ public partial class NavalRepairSailor
             new Vector2(goal.x-capitalPath[capitalStep-1].x,goal.z-capitalPath[capitalStep-1].z).sqrMagnitude<.00001f&&
             Mathf.Abs(goal.y-capitalPath[capitalStep-1].y)*hull.WorldScale>.15f;
         if(verticalX){horizontalTolerance=.12f;heightTolerance=.08f;}
+        // Align on the ladder before advancing to a vertical segment. Broad
+        // descending-tread tolerances otherwise left the capsule outside grip range.
+        bool nextVerticalX=capitalSlot==3&&capitalStep+1<capitalPath.Count&&
+            new Vector2(goal.x-capitalPath[capitalStep+1].x,goal.z-capitalPath[capitalStep+1].z).sqrMagnitude<.00001f&&
+            Mathf.Abs(goal.y-capitalPath[capitalStep+1].y)*hull.WorldScale>.15f;
+        if(nextVerticalX){horizontalTolerance=.12f;heightTolerance=.15f;}
         if(new Vector2(delta.x,delta.z).sqrMagnitude<horizontalTolerance*horizontalTolerance&&Mathf.Abs(delta.y)<heightTolerance){capitalStep++;capitalStuck=0;return capitalStep>=capitalPath.Count;}
         capitalStuck=NavalRouteProgress.Step(capitalStuck,before,delta.magnitude,dt,false,false);
         if(capitalStuck>6f){

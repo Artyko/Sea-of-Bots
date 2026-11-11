@@ -93,7 +93,7 @@ public class NavalFloodGrid
     public float CellCapacity(int i){return !IsActive(i)?0:storageCapacity!=null?storageCapacity[i]:MaxCellVolume;}
     public float Depth(int i) { float depth=water[i]/(CellArea*Scale);return storage!=null?storage.Depth(i,depth):depth; }
     public float Add(int i,float amount)
-    { float actual=Math.Max(-water[i],Math.Min(CellCapacity(i)-water[i],amount)); water[i]+=actual;if(actual!=0){summaryDirty=true;if(actual>0)knownDry=false;} return actual; }
+    { if(float.IsNaN(amount)||float.IsInfinity(amount))return 0f;float actual=Math.Max(-water[i],Math.Min(CellCapacity(i)-water[i],amount)); water[i]+=actual;if(actual!=0){summaryDirty=true;if(actual>0)knownDry=false;} return actual; }
     public void Pump(float amount)
     {
         float total=Total; if(total<=0f)return;

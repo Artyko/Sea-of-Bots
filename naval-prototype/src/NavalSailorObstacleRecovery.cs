@@ -15,9 +15,15 @@ public partial class NavalRepairSailor
     private float NavigationRadius {get{var body=Controller();return body!=null?Mathf.Max(.15f,body.radius*Mathf.Max(Mathf.Abs(body.transform.lossyScale.x),Mathf.Abs(body.transform.lossyScale.z))):.38f;}}
     private bool NavigationStairs(Vector3 p)
     {return NavalShipRoutes.InStairwell(new NavalWalkPoint(p.x,p.y,p.z),hull.Definition);}
+    private bool SubmergedNavigationPoint(Vector3 p){
+        var world=NavalTestWorld.Active;if(world==null||!movingInWater)return false;
+        Vector3 point=boat.TransformPoint(p);return world.WaterLevelAt(point)>point.y+2.6f;
+    }
     private bool Supported(Vector3 p)
     {
-        if(!InsideWalkingDeck(p)||NavigationStairs(p))return false;
+        if(!InsideWalkingDeck(p))return false;
+        if(SubmergedNavigationPoint(p))return true;
+        if(NavigationStairs(p))return false;
         // A ray can still hit the intact half of a plank beneath the capsule.
         // Reject the candidate when any part of the body footprint overlaps a
         // destroyed deck cell, otherwise the escape grid plans into the same
@@ -28,7 +34,13 @@ public partial class NavalRepairSailor
     private bool NavigationClear(Vector3 a,Vector3 b)
     {
         Vector3 bottom,top;float radius;NavigationCapsule(a,out bottom,out top,out radius);
-        Vector3 delta=boat.TransformVector(b-a);if(delta.sqrMagnitude<.001f)return true;int count;
+        Vector3 delta=boat.TransformVector(b-a);
+        // Live controller feet sit above the ideal deck plane. Sweeping down
+        // from that pose classified the supporting deck as an impassable wall.
+        if(Mathf.Abs(b.y-a.y)*hull.WorldScale<.65f&&!NavigationStairs(a)&&!NavigationStairs(b)&&
+           NavalPhysicsQueries.HasLocalSupport(hull,a)&&NavalPhysicsQueries.HasLocalSupport(hull,b))
+            delta=Vector3.ProjectOnPlane(delta,boat.up);
+        if(delta.sqrMagnitude<.001f)return true;int count;
         while(true)
         {
             count=Physics.CapsuleCastNonAlloc(bottom,top,radius,delta.normalized,
@@ -43,7 +55,11 @@ public partial class NavalRepairSailor
             // Only a convex primitive at the start may be left, toward a verified clear endpoint.
             if(hit.distance<=.001f&&(shape is BoxCollider||shape is CapsuleCollider||shape is SphereCollider)){
                 Vector3 centre=(bottom+top)*.5f,away=centre-shape.ClosestPoint(centre);
-                if(Vector3.Dot(delta,away)>.0001f){
+                bool insideStart=away.sqrMagnitude<.000001f;
+                // ClosestPoint returns the point itself when already inside a
+                // convex collider. A zero escape normal must not imprison the
+                // sailor: a straight segment from inside to outside exits once.
+                if(insideStart||Vector3.Dot(delta,away)>.0001f){
                     if(!endpointClear.HasValue)endpointClear=ClearBody(b);
                     if(endpointClear.Value)continue;
                 }
@@ -58,7 +74,8 @@ public partial class NavalRepairSailor
         bool leavingGap=hull.DeckGapAt(a,NavigationRadius);
         for(int i=1;i<=steps;i++){
             Vector3 point=Vector3.Lerp(a,b,(float)i/steps);bool gap=hull.DeckGapAt(point,NavigationRadius);
-            if(!InsideWalkingDeck(point)||!NavalPhysicsQueries.HasLocalSupport(hull,point)||!leavingGap&&gap)return false;
+            if(!InsideWalkingDeck(point))return false;
+            if(!SubmergedNavigationPoint(point)&&(!NavalPhysicsQueries.HasLocalSupport(hull,point)||!leavingGap&&gap))return false;
             if(!gap)leavingGap=false;
         }
         return NavigationClear(a,b);
@@ -124,17 +141,17 @@ public partial class NavalRepairSailor
     {
         if(hull.Revision!=escapeRevision||boat.TransformVector(feet-escapeOrigin).sqrMagnitude>.5f*.5f||route.Count<=escapeSkip||
             (route[escapeSkip]-escapeGoal).sqrMagnitude>.001f){escapePending=false;return false;}
-        if(!NavalRecoverySlice.Take(Time.frameCount))return true;
+        if(!NavalRecoverySlice.Take(Time.frameCount,GetInstanceID()))return true;
         long slice=System.Diagnostics.Stopwatch.GetTimestamp();Vector3 target=escapeGoal;
         int found=-1,processed=0;
         while(escapeHead<escapeTail)
         {
-            if(processed++>=2||NavalRecoverySlice.Expired(slice))return true;
+            if(processed++>=4||NavalRecoverySlice.Expired(slice))return true;
             int current=escapeQueue[escapeHead++];Vector3 point=escapeNodes[current];
             float remaining=boat.TransformVector(target-point).magnitude;
             // Rejoin only through a clear segment, never merely because a node is closer.
             bool approachStair=NavigationStairs(target)&&remaining<1.6f&&!hull.DeckGapAt(target,NavigationRadius);
-            if(current!=144&&remaining<8f&&!hull.DeckGapAt(target,NavigationRadius)&&
+            if(current!=144&&remaining<8f&&(SubmergedNavigationPoint(target)||!hull.DeckGapAt(target,NavigationRadius))&&
                 (approachStair?NavigationClear(point,target):NavigationWalkClear(point,target)))
             {found=current;break;}
             for(int dz=-1;dz<=1;dz++)for(int dx=-1;dx<=1;dx++)
@@ -143,7 +160,7 @@ public partial class NavalRepairSailor
                 int x=current%17+dx,z=current/17+dz;if(x<0||x>16||z<0||z>16)continue;
                 int next=z*17+x;if(escapeState[next]==2||escapeState[next]==3)continue;
                 Vector3 candidate=escapeNodes[next];
-                if(escapeSupport[next]==0)escapeSupport[next]=(byte)(!hull.DeckGapAt(candidate,NavigationRadius)&&Supported(candidate)&&ClearBody(candidate)?1:3);
+                if(escapeSupport[next]==0)escapeSupport[next]=(byte)((SubmergedNavigationPoint(candidate)||!hull.DeckGapAt(candidate,NavigationRadius))&&Supported(candidate)&&ClearBody(candidate)?1:3);
                 escapeState[next]=escapeSupport[next];
                 if(escapeState[next]!=1)continue;
                 int link=current*4+(dx<0?0:dx>0?1:dz<0?2:3);
@@ -174,12 +191,12 @@ public partial class NavalRepairSailor
         System.Array.Clear(escapeSupport,0,escapeSupport.Length);
         System.Array.Clear(escapeLinks,0,escapeLinks.Length);
         // Search includes nodes behind the sailor, so a cannon/rail pocket can be exited first.
-        if(Mathf.Abs(target.y-feet.y)*hull.WorldScale<.3f&&GridEscape(target))return true;
+        if(Mathf.Abs(target.y-feet.y)*hull.WorldScale<.65f&&GridEscape(target))return true;
         // A transit waypoint can itself be inside a rotated gun/cleat. Rejoin a
         // later same-floor point only through fully supported, capsule-clear links.
         for(int skip=1;skip<Mathf.Min(route.Count,4)&&!NavigationStairs(target);skip++)
         {
-            if(Mathf.Abs(route[skip].y-feet.y)*hull.WorldScale>=.3f||NavigationStairs(route[skip]))break;
+            if(Mathf.Abs(route[skip].y-feet.y)*hull.WorldScale>=.65f||NavigationStairs(route[skip]))break;
             if(GridEscape(route[skip],skip))return true;
         }
         Vector3 forward=target-feet;forward.y=0;if(forward.sqrMagnitude<.001f)return false;forward.Normalize();

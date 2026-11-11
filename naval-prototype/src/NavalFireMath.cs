@@ -52,10 +52,10 @@ public static class NavalReadyAmmoLayout
     public const float Width=.90f,Height=1.15f,Depth=.70f,HitRadius=.80f;
     public static int Count(NavalShipDefinition ship){return ship.SteamPowered?ship.GunCount:0;}
     public static float X(NavalShipDefinition ship,int gun)
-    {return ship.Destroyer?ship.GunPosition(gun).x-1.25f/ship.Scale:NavalShipDefinition.GunSide(gun)*(ship.GunMountX+.05f);}
+    {return ship.Destroyer?-2.5f/ship.Scale:NavalShipDefinition.GunSide(gun)*(ship.GunMountX+.05f);}
     public static float Z(NavalShipDefinition ship,int gun)
     {
-        if(ship.Destroyer)return ship.GunPosition(gun).z-1.5f/ship.Scale;
+        if(ship.Destroyer)return (gun==0?30f:gun==1?6f:-10f)/ship.Scale;
         float gunZ=NavalShipDefinition.GunZ(ship,gun);
         float offset=gunZ>1f?-.58f:.58f;float z=gunZ+offset;
         return Math.Abs(z-ship.LadderZ)<.8f?gunZ-offset:z;

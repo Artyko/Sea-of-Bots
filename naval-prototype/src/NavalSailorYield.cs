@@ -10,9 +10,10 @@ public partial class NavalRepairSailor {
   var controls=NavalStations.ForShip(boat);if(controls!=null&&(home-controls.Post(0)).sqrMagnitude<.01f)return false;
   yieldRetry=Time.time+.75f;
   Vector3 away=feet-approaching.feet;away.y=0;if(away.sqrMagnitude<.001f)away=Vector3.right;away.Normalize();
-  for(int side=0;side<8;side++){
+  for(int attempt=0;attempt<24;attempt++){
+   int side=attempt%8;float yieldDistance=attempt<8?1.9f:attempt<16?1.2f:.85f;
    float angle=side==0?90:side==1?-90:side==2?45:side==3?-45:side==4?135:side==5?-135:side==6?180:0;
-   Vector3 candidate=feet+Quaternion.Euler(0,angle,0)*away*(1.9f/hull.WorldScale);
+   Vector3 candidate=feet+Quaternion.Euler(0,angle,0)*away*(yieldDistance/hull.WorldScale);
    if(approaching.route.Count>0){
     Vector3 line=approaching.route[0]-approaching.feet;line.y=0;float length=line.magnitude;
     if(length>.001f){Vector3 direction=line/length;Vector3 nearest=approaching.feet+direction*Mathf.Clamp(Vector3.Dot(candidate-approaching.feet,direction),0,length);

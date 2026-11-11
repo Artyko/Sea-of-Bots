@@ -14,7 +14,7 @@
  public static int Boxes(NavalShipDefinition ship,int kind){return (OriginalBoxes(ship,kind)+1)/2;}
  public static int Units(NavalShipDefinition ship,int kind,int rack){return System.Math.Min(2,OriginalBoxes(ship,kind)-rack*2);}
  public static NavalWalkPoint Position(NavalShipDefinition ship,int n){
-  if(ship.Destroyer){float[] rows={32f,35f,38f,41f,44f,-34f,-37f,-40f,-43f,-46f};return new NavalWalkPoint(0,ship.HoldFloor,rows[n]/ship.Scale); }
+  if(ship.Destroyer){float[] rows={30f,-32f,6f,-10f,44f,-46f,35f,-37f,41f,-43f};return new NavalWalkPoint(0,ship.HoldFloor,rows[n]/ship.Scale); }
   int level=n%ship.MaintenanceDeckCount,slot=n/ship.MaintenanceDeckCount,row=slot/2;
   if(ship.CapitalShip){float[] capitalRows={-5f,-4.5f,-3.9f,.95f,1.55f,2.15f,2.75f,3.35f};float rackZ=capitalRows[row];if(level==0&&slot%2==0&&row==3)rackZ=2.75f;return new NavalWalkPoint(slot%2==0?-.95f:.95f,ship.MaintenanceFloor(level),rackZ);}
   if(ship.SteamPowered){

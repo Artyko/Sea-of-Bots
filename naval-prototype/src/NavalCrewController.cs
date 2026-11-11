@@ -140,7 +140,8 @@ public partial class NavalCrewController
         RecoveringOverboard=false;
         for(int i=0;i<workers.Length;i++)if(workers[i]!=null&&workers[i].RescueComponent!=null&&workers[i].RescueComponent.AwaitingHomeRescue)RecoveringOverboard=true;
         RecoveringOverboard|=hull.RescuePickupUntil>Time.time;
-        stations.RescueStop=RecoveringOverboard&&!hull.Sunk&&!hull.CombatCritical&&!hull.UrgentTrim;
+        // Overboard recovery must never override helm or propulsion orders.
+        stations.RescueStop=false;
         HasHelmsman=false;MannedGuns=0;Repairing=false;if(hull.Sunk){if(hull.Definition.CapitalShip){foreach(var worker in workers)if(worker!=null&&worker.CapitalReserved)worker.TickCapitalExit(stations,dt);stations.UpdateCapitalAccess(dt);}cannonBattle.Reset();stations.CrewRepairRetreat=false;return;}
         for(int i=0;i<crew.Length;i++)if(crew[i]!=null&&workers[i]!=null)
         {

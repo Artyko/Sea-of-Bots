@@ -181,7 +181,7 @@ public sealed partial class NavalFireSystem : MonoBehaviour
         for(int gun=0;gun<count;gun++)
         {
             float side=NavalShipDefinition.GunSide(gun);
-            Vector3 floor=new Vector3(NavalReadyAmmoLayout.X(hull.Definition,gun),hull.Definition.Destroyer?hull.Definition.GunOperator(gun).y:NavalReadyAmmoLayout.Floor(hull.Definition),NavalReadyAmmoLayout.Z(hull.Definition,gun));
+            Vector3 floor=new Vector3(NavalReadyAmmoLayout.X(hull.Definition,gun),hull.Definition.Destroyer?hull.Floor:NavalReadyAmmoLayout.Floor(hull.Definition),NavalReadyAmmoLayout.Z(hull.Definition,gun));
             int first=hull.Voxels.Count;
             // Low armoured ready-use locker bolted to the outboard side of the
             // fixed mounting.  The open inboard face exposes individual brass
@@ -411,7 +411,7 @@ public sealed partial class NavalFireSystem : MonoBehaviour
         if(source!=null&&source.ReadyUse)
         {
             if(hull.Cargo!=null)hull.Cargo.LoseReadyAmmo(source.ReadyGun);
-            if(controls!=null)controls.AmmunitionDetonated(source.ReadyGun);
+            if(controls!=null&&(!hull.Definition.Destroyer||(hull.Root.TransformPoint(hull.Definition.GunPosition(source.ReadyGun))-point).sqrMagnitude<=36f))controls.AmmunitionDetonated(source.ReadyGun);
         }
         if(source!=null&&source.MainMagazine&&controls!=null)controls.MainMagazineDetonated(source.MainSlot);
         if(source!=null&&source.CargoCrate!=null)source.CargoCrate.DestroyAmmunition();
@@ -423,6 +423,7 @@ public sealed partial class NavalFireSystem : MonoBehaviour
         if(source!=null&&source.Detonated!=null)source.Detonated();
         bool ready=source!=null&&source.ReadyUse,magazine=source!=null&&source.Magazine,main=source!=null&&source.MainMagazine;
         float radius=source!=null&&source.BlastRadiusOverride>0?source.BlastRadiusOverride:NavalAmmunitionBlastMath.HullRadius(ready,magazine,main);
+        if(main&&hull.Definition.CapitalShip&&(source==null||source.BlastRadiusOverride<=0))radius=10f;
         float power=source!=null&&source.BlastPowerOverride>0?source.BlastPowerOverride:NavalAmmunitionBlastMath.Power(ready,magazine,main);
         foreach(NavalSeaLadder ship in NavalSeaLadder.All)if(ship!=null&&ship.Hull!=null&&(source==null||source.BlastRadiusOverride<=0||ship.Hull==hull))
             ship.Hull.Damage(ship.transform.InverseTransformPoint(point),radius,true,null,power,power,true);

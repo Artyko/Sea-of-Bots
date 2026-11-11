@@ -66,7 +66,7 @@ public sealed class NavalTorpedoBattery:MonoBehaviour {
   if(!NavalTorpedoMountGeometry.InSector(yaw)){m.Status="outside traverse sector";return;}
   m.Status="turning";if(!Turn(i,yaw,dt))return;
   if(!stations.AtHelm&&Time.time>LaunchWindowUntil){m.Status="waiting tactical window";return;}
-  if(!stations.AtHelm&&SalvoStyle==NavalTorpedoSalvoMath.LongSingle&&AttackShots>0)return;
+  if(!stations.AtHelm&&(SalvoStyle==NavalTorpedoSalvoMath.LongSingle||SalvoStyle==NavalTorpedoSalvoMath.LongPair)&&AttackShots>0)return;
   if(!stations.AtHelm&&SalvoStyle==NavalTorpedoSalvoMath.SequentialFan&&(AttackShots>=4||Time.time<nextAttackShot))return;
   if(Time.time<m.NextShot){m.Status="launch interval";return;}
   Vector3 entry=LaunchEntry(i,direction);predicted.y=entry.y;
@@ -74,7 +74,7 @@ public sealed class NavalTorpedoBattery:MonoBehaviour {
   launchActor=actor;if(!Fire(i,direction.normalized))return;
   Debug.Log("[NavalPrototype] Torpedo salvo: ship="+hull.Root.name+" style="+SalvoStyle+" intercept_seconds="+t.ToString("F1")+" distance="+distance.ToString("F0")+" fan_half_deg="+halfSpread.ToString("F1"));
   AttackShots++;nextAttackShot=Time.time+.65f;
-  if((SalvoStyle==1||SalvoStyle==2)&&Ready(i,1)){m.PairAt=Time.time+.9f;m.PairDeadline=Time.time+3;m.PairTarget=target;m.PairVelocity=targetVelocity;m.PairSpread=lane+halfSpread;m.PairOperator=actor;}
+  if((SalvoStyle==1||SalvoStyle==2||SalvoStyle==NavalTorpedoSalvoMath.LongPair)&&Ready(i,1)){m.PairAt=Time.time+.9f;m.PairDeadline=Time.time+3;m.PairTarget=target;m.PairVelocity=targetVelocity;m.PairSpread=lane+halfSpread;m.PairOperator=actor;}
 
  }
  public string Diagnostics {get{var report=new System.Text.StringBuilder();report.Append("ready=").Append(Rounds).Append(" reserve=").Append(reload.Reserve).Append(" salvo_style=").Append(SalvoStyle).Append(" preferred_distance=").Append(PreferredLaunchDistance.ToString("F0")).Append(" active_projectiles=").Append(NavalTorpedo.Active.Count);for(int i=0;i<4;i++){var m=mounts[i];if(m==null)continue;report.Append(" mount=").Append(i).Append(" loaded=").Append(m.Loaded[0]?1:0).Append(m.Loaded[1]?1:0).Append(" ready=").Append(Ready(i,0)?1:0).Append(Ready(i,1)?1:0).Append(" reload=").Append(reload.Progress(i).ToString("F2")).Append(" yaw=").Append(m.Yaw.ToString("F1")).Append(" status=").Append(Time.time-m.LastAim>2?"no operator at post":m.Status);}return report.ToString();}}
@@ -131,7 +131,7 @@ public sealed class NavalTorpedoBattery:MonoBehaviour {
     if(!Turn(i,yaw,Time.deltaTime))continue;
     if(!Corridor(LaunchEntry(i,direction),LaunchEntry(i,direction)+direction*delta.magnitude)){ClearPair(m);continue;}
    }else if(m.PairOperator!=player){ClearPair(m);continue;}
-   m.NextShot=Time.time;launchActor=m.PairOperator;Fire(i,direction);ClearPair(m);
+   m.NextShot=Time.time;launchActor=m.PairOperator;if(Fire(i,direction)&&SalvoStyle==NavalTorpedoSalvoMath.LongPair)AttackShots++;ClearPair(m);
   }
  }
 

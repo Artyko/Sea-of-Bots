@@ -1,0 +1,2 @@
+﻿using System;
+class RecoveryFairnessChecks{static void Main(){int[] grants=new int[20];for(int f=0;f<20;f++)for(int w=0;w<20;w++)if(NavalRecoverySlice.Take(f,w))grants[w]++;foreach(int n in grants)if(n<1)throw new Exception("Recovery worker starved");for(int f=30;f<34;f++)if(!NavalRecoverySlice.Take(f,99))throw new Exception("Inactive workers must not block live recovery");Console.WriteLine("PASS: twenty simultaneous recovery workers receive turns; stale workers do not block queue.");}}
