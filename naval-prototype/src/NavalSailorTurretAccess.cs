@@ -8,6 +8,7 @@ public partial class NavalRepairSailor
     private float capitalStuck,capitalRetry;
     public string CapitalAccessStatus {get{return capitalStage==1?"Going to turret hatch":capitalStage==2?"Entering turret":capitalStage==3?"Seated inside turret":capitalStage==4?"Leaving turret":"Turret crew";}}
     public bool CapitalReserved {get{return capitalStage>0;}}
+    public int AssignedCapitalSlot {get{return capitalSlot;}}
     public bool CapitalSeated {get{return capitalStage==3;}}
     private void ClearCapitalAccess(NavalStations controls)
     {
@@ -60,7 +61,7 @@ public partial class NavalRepairSailor
     {
         if(capitalStep>=capitalPath.Count){Walking(false,dt);return true;}
         Vector3 goal=capitalPath[capitalStep];float before=boat.TransformVector(goal-feet).magnitude;
-        Vector3 ladderAxis=capitalSlot==3?NavalTurretAccessLayout.ToShip(hull.Definition,3,new Vector3(.58f,0,0)):Vector3.zero;
+        Vector3 ladderAxis=capitalSlot==3?NavalTurretAccessLayout.ToShip(hull.Definition,3,new Vector3(NavalTurretAccessLayout.XLadderOut,0,0)):Vector3.zero;
         bool xLadderGoal=capitalSlot==3&&new Vector2(goal.x-ladderAxis.x,goal.z-ladderAxis.z).sqrMagnitude<.00001f;
         if(xLadderGoal&&new Vector2(goal.x-feet.x,goal.z-feet.z).magnitude*hull.WorldScale<2.4f)
         {feet=Vector3.MoveTowards(feet,goal,2.4f*dt/hull.WorldScale);HoldPosition();}

@@ -7,7 +7,7 @@ public partial class NavalRepairSailor
     private void InitializeDeckCarry(){lastDeckToLocal=boat.worldToLocalMatrix;deckCarryReady=true;}
     public void CarrySupportedDeck(Matrix4x4 current)
     {
-        if(deckCarryReady&&!stranded&&!Rescuing&&!Defending&&!Assaulting&&robot!=null&&robot.IsAlive())
+        if(deckCarryReady&&!CapitalReserved&&!stranded&&!Rescuing&&!Defending&&!Assaulting&&robot!=null&&robot.IsAlive())
         {
             bool correctedFootOffset=false;
             var body=Controller();

@@ -136,21 +136,12 @@ public partial class NavalStations
     private void TickCapitalBattery(Transform target,Vector3 targetVelocity,float dt)
     {
         TickCapitalDoors(dt);
-        var mission=NavalTestWorld.Active;
-        if(mission!=null&&mission.ConvoyMission){
-            float nearest=float.PositiveInfinity;Transform closest=null;
-            foreach(var candidate in mission.ConvoyHulls()){
-                if(candidate==null||candidate==hull||candidate.Sunk||candidate.SinkingDanger)continue;
-                var other=ForShip(candidate.Root);if(other==null||other.HostileToPlayer==HostileToPlayer)continue;
-                float distance=(candidate.Root.position-boat.position).sqrMagnitude;
-                if(distance<=NavalCapitalLayout.Range*NavalCapitalLayout.Range&&distance<nearest){nearest=distance;closest=candidate.Root;}
-            }
-            if(closest!=null){target=closest;targetVelocity=mission.FleetVelocity(closest);}
-        }
-        var victim=ForShip(target);Vector3 relative=targetVelocity-FiringPlatformVelocity();
-        bool withinSearch=target!=null&&TargetInsideSearchRange(target,targetVelocity,NavalCapitalLayout.Range);
+        Transform preferredTarget=target;Vector3 preferredVelocity=targetVelocity;
         for(int slot=0;slot<capitalTurrets.Length;slot++){
             if(slot==playerCapitalSlot)continue;
+            targetVelocity=preferredVelocity;target=SelectWeaponTarget(-1,slot,preferredTarget,ref targetVelocity);
+            var victim=ForShip(target);Vector3 relative=targetVelocity-FiringPlatformVelocity();
+            bool withinSearch=target!=null&&TargetInsideSearchRange(target,targetVelocity,NavalCapitalLayout.Range);
             var t=capitalTurrets[slot];if(t.AccessRequested||Time.time<t.AutoDoorUntil||t.DoorAngle>.1f||!t.Ready||!MainBatterySlotFunctional(slot)||t.Ammo<=0){CapitalState(t,slot,t.AccessRequested||t.DoorAngle>.1f?"crew access":!t.Ready?"no seated operator":t.Ammo<=0?"empty":"damaged or automatic access");continue;}
             float hoist=SteamPlant!=null?SteamPlant.AuxiliaryFactor:1f;t.Reload=Mathf.Max(0,t.Reload-dt*hoist);
             if(t.Target!=target){t.Target=target;t.AimCell=null;t.SecondShot=0;}

@@ -19,7 +19,7 @@ public sealed class NavalBattleTelemetry : MonoBehaviour
     frameTimes.Sort();
     float p95=frameTimes[Mathf.CeilToInt(frameTimes.Count*.95f)-1];
     var own=world.PlayerHull;var other=world.EnemyBoat!=null?world.EnemyBoat.GetComponent<NavalRamDamage>():null;
-  Debug.Log("[NavalPrototype] Performance v463: era="+NavalSessionSettings.Era+" mission="+(world.AirRaidMission?"airraid":world.ConvoyMission?"convoy7":"duel")+" ships="+(own!=null?own.Definition.Name:"none")+"/"+(other!=null?other.Hull.Definition.Name:"none")+
+  Debug.Log("[NavalPrototype] Performance v466: era="+NavalSessionSettings.Era+" mission="+(world.AirRaidMission?"airraid":world.ConvoyMission?"convoy7":"duel")+" ships="+(own!=null?own.Definition.Name:"none")+"/"+(other!=null?other.Hull.Definition.Name:"none")+
      " fps="+(frames/elapsed).ToString("F1")+" fixed_step_ms="+(Time.fixedDeltaTime*1000f).ToString("F2")+" fixed_steps_per_frame="+((float)fixedSteps/Mathf.Max(1,frames)).ToString("F2")+" frame_ms="+(elapsed*1000f/Mathf.Max(1,frames)).ToString("F2")+" p95_ms="+p95.ToString("F2")+" cpu_ms avg/frame / max single call / max sampled frame (inclusive): "+NavalPerformance.AutoReport());
     if(!world.Spectating)Debug.Log("[NavalPrototype] Player support: foot="+world.PlayerFootPoint+" radius="+world.PlayerSupportRadius.ToString("F2")+" fallback_hits_interval="+world.ConsumePlayerSupportFallbacks()+" frame_cache_hits_interval="+world.ConsumePlayerSupportCacheHits());
     if(loopProfile!=null)Debug.Log("[NavalPrototype] Unity loop average ms/frame: "+loopProfile.Report());

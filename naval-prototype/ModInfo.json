@@ -1,9 +1,9 @@
 ﻿{
   "DisplayName": "Naval Prototype — Boat and Water",
   "UniqueID": "SchoolNavalPrototype",
-  "MainDLLFileName": "NavalPrototype-v463.dll",
+  "MainDLLFileName": "NavalPrototype-v466.dll",
   "Author": "Kirill",
-  "Version": 463,
+  "Version": 466,
   "Description": "Novik playable steam destroyer: three guns, four twin torpedo mounts, twelve crew, independent oil boilers and shafts, watertight closures, steam isolation and torpedo tactics.",
   "ModDependencies": [],
   "Tags": []

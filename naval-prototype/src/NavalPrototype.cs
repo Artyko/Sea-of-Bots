@@ -174,7 +174,7 @@ public partial class NavalTestWorld : MonoBehaviour
         Material wood = MakeMaterial(new Color(0.30f, 0.19f, 0.115f));
         Material lightWood = MakeMaterial(new Color(0.66f, 0.51f, 0.32f));
         Material deckWood = MakeMaterial(new Color(0.47f, 0.375f, 0.255f));
-        Material alternatePlank = MakeMaterial(new Color(0.515f, 0.463f, 0.285f));
+        Material alternatePlank = MakeMaterial(new Color(0.515f, 0.466f, 0.285f));
         Material blackMast = MakeMaterial(new Color(0.025f, 0.025f, 0.03f));
         // A readable slate-grey upper belt and oxide-red underwater body.
         // The old near-black mast material made the whole ironclad look like
@@ -228,7 +228,7 @@ public partial class NavalTestWorld : MonoBehaviour
         if(GetComponent<NavalBattleTelemetry>()==null)gameObject.AddComponent<NavalBattleTelemetry>();
         if(ConvoyMission)SpawnConvoy();else ToggleEnemy();
         rough=era==NavalEra.Sail;
-        Debug.Log("[NavalPrototype] v463 "+era+" ships and waves started on native editor map.");
+        Debug.Log("[NavalPrototype] v466 "+era+" ships and waves started on native editor map.");
     }
 
     private Material MakeMaterial(Color color)
@@ -296,7 +296,7 @@ public partial class NavalTestWorld : MonoBehaviour
         if(boat==null||!SimulationActive)return;
         if(ConvoyMission){UpdateConvoyInput();TickConvoy();}
         if(Spectating)UpdateSpectator();else RememberLiveCamera();
-        if(Time.unscaledDeltaTime>.15f&&Time.unscaledTime>=slowFrameLogAt){slowFrameLogAt=Time.unscaledTime+2f;Debug.Log("[NavalPrototype] Long frame v463: milliseconds="+(Time.unscaledDeltaTime*1000f).ToString("F1"));}
+        if(Time.unscaledDeltaTime>.15f&&Time.unscaledTime>=slowFrameLogAt){slowFrameLogAt=Time.unscaledTime+2f;Debug.Log("[NavalPrototype] Long frame v466: milliseconds="+(Time.unscaledDeltaTime*1000f).ToString("F1"));}
         UpdateBinoculars();ApplyBinocularZoom();
         UpdateHudInput();
         if(replaceEnemy){replaceEnemy=false;if(enemy==null)ToggleEnemy();}

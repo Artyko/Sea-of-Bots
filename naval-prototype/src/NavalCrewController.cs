@@ -260,7 +260,7 @@ public partial class NavalCrewController
             if((bearingKnown&bit)==0)
             {
                 bearingKnown|=bit;
-                if(enemy!=null&&stations.CanBearOnShip(station,enemy))bearingMask|=bit;
+                if(enemy!=null&&stations.CanEngageAnyShip(station,enemy))bearingMask|=bit;
             }
             bool canFire=(bearingMask&bit)!=0;
             if((pass==0)!=canFire)continue;
@@ -278,9 +278,9 @@ public partial class NavalCrewController
         int reliefGun=skeleton.GunStation;
         if(reliefGun<=0&&enemy!=null)
             for(int station=1;station<=stations.GunCount;station++)
-                if(stations.CrewGunReady(station)&&stations.CanBearOnShip(station,enemy)){reliefGun=station;break;}
+                if(stations.CrewGunReady(station)&&stations.CanEngageAnyShip(station,enemy)){reliefGun=station;break;}
         bool reliefReady=reliefGun>0&&stations.CrewGunReady(reliefGun);
-        bool reliefBearing=enemy!=null&&reliefGun>0&&stations.PlayerStation!=reliefGun&&stations.CanBearOnShip(reliefGun,enemy);
+        bool reliefBearing=enemy!=null&&reliefGun>0&&stations.PlayerStation!=reliefGun&&stations.CanEngageAnyShip(reliefGun,enemy);
         int borrowed=skeleton.Step(dt,helm>=0&&freeHands==1&&enemy!=null&&!soloMaintenance&&!stations.RescueStop,
             helm>=0&&roles[helm]==0&&!workers[helm].Busy,reliefGun,reliefReady,reliefBearing,
             hull.CombatCritical||urgentPump||hull.RepairRetreat||stations.CrewRepairRetreat);
@@ -377,7 +377,7 @@ public partial class NavalCrewController
             if(facing.sqrMagnitude>.01f)sailor.transform.rotation=Quaternion.LookRotation(facing);
             if(roles[i]==0)HasHelmsman=true;
             if(roles[i]>0)MannedGuns++;
-            if(roles[i]>0&&enemy!=null)stations.AimAtShipAndFire(roles[i]-1,enemy,enemyVelocity,dt,sailor);
+            if(roles[i]>0)stations.AimAtShipAndFire(roles[i]-1,enemy,enemyVelocity,dt,sailor);
         }
         stations.TickMainBattery(enemy,enemyVelocity,dt,mainCrewReady);
         int gunRepairs=0,plannedGuns=0,idleHands=0;

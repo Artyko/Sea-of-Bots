@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 using System.Collections.Generic;
 
 public partial class NavalStations
@@ -399,6 +399,7 @@ public partial class NavalStations
     {
         using(NavalPerformance.Measure(NavalPerfArea.Gunnery))
         {
+        target=SelectWeaponTarget(gun,-1,target,ref velocity);
         gunStatus[gun]="operator present";
         if(target==null||!Functional(gun+1)||PlayerStation==gun+1){gunStatus[gun]="no target / disabled / player control";return false;}
         if(aimShip[gun]!=target||aimCell[gun]==null||aimCell[gun].Missing||aimCell[gun].Detached||!LockedTargetVisible(gun,target))

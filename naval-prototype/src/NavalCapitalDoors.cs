@@ -18,7 +18,9 @@ public partial class NavalStations
         float rise=NavalCapitalLayout.TurretRise(slot)+NavalTurretAccessLayout.RootLift+NavalTurretAccessLayout.Floor;
         float outer=NavalTurretAccessLayout.GroundDistance(slot),edge=NavalTurretAccessLayout.Side(slot)==0?.36f:.43f;
         if(slot==3){
-            float x=NavalTurretAccessLayout.Side(slot)*(edge+.15f);
+            float x=NavalTurretAccessLayout.Side(slot)*NavalTurretAccessLayout.XLadderOut;
+            float landingWidth=NavalTurretAccessLayout.XLadderOut-edge+.12f;
+            ArmoredDecoration(ramp,armor,new Vector3((edge+NavalTurretAccessLayout.XLadderOut)*.5f,rise-.025f,0),new Vector3(landingWidth,.05f,.48f),true);
             for(int side=-1;side<=1;side+=2)
                 ArmoredDecoration(ramp,armor,new Vector3(x,rise*.5f,side*.22f),new Vector3(.035f,rise+.15f,.035f),true);
             for(float y=.05f;y<=rise+.05f;y+=.05f)
@@ -37,7 +39,7 @@ public partial class NavalStations
     public bool CapitalDoorReady(int slot){var t=capitalTurrets[slot];return Mathf.Abs(Mathf.DeltaAngle(t.Yaw,NavalCapitalLayout.BaseYaw(slot)))<.3f&&t.DoorAngle>179f;}
     public void UpdateCapitalAccess(float dt){if(capitalTurrets!=null)TickCapitalDoors(dt);}
     private static Collider[] hatchContacts=new Collider[32];
-    private bool CapitalDoorPoseClear(CapitalMount mount,float angle)
+    private bool CapitalDoorPoseClear(CapitalMount mount,float angle,int slot)
     {
         Quaternion rotation=mount.DoorHinge.parent.rotation*Quaternion.Euler(0,-angle,0);
         Vector3 scale=mount.DoorHinge.lossyScale;
@@ -45,7 +47,10 @@ public partial class NavalStations
         Vector3 half=Vector3.Scale(new Vector3(.34f,.46f,.035f),scale)*.5f+Vector3.one*.025f;
         int count;
         while(true){count=Physics.OverlapBoxNonAlloc(centre,half,hatchContacts,rotation,~0,QueryTriggerInteraction.Ignore);if(count<hatchContacts.Length)break;System.Array.Resize(ref hatchContacts,hatchContacts.Length*2);}
-        bool clear=true;for(int i=0;i<count;i++)if(hatchContacts[i] is CharacterController){var actor=hatchContacts[i].GetComponentInParent<Character>();if(actor!=null&&actor.IsAlive()){clear=false;break;}}
+        bool clear=true;for(int i=0;i<count;i++)if(hatchContacts[i] is CharacterController){var actor=hatchContacts[i].GetComponentInParent<Character>();if(actor!=null&&actor.IsAlive()){
+            var operatorWorker=actor.GetComponent<NavalRepairSailor>();
+            if(mount.AccessRequested&&operatorWorker!=null&&operatorWorker.CapitalReserved&&operatorWorker.AssignedCapitalSlot==slot)continue;
+            clear=false;break;}}
         System.Array.Clear(hatchContacts,0,count);return clear;
     }
     private void TickCapitalDoors(float dt)
@@ -74,7 +79,7 @@ public partial class NavalStations
                 t.DoorAngle=Mathf.MoveTowards(t.DoorAngle,0,240f*dt);
 
             }else t.DoorAngle=Mathf.MoveTowards(t.DoorAngle,wanted?180f:0f,240f*dt);
-            if(t.DoorAngle!=oldDoor&&!CapitalDoorPoseClear(t,t.DoorAngle))t.DoorAngle=oldDoor;
+            if(t.DoorAngle!=oldDoor&&!CapitalDoorPoseClear(t,t.DoorAngle,slot))t.DoorAngle=oldDoor;
             if(wanted&&!home&&t.DoorAngle<=.1f&&oldDoor<=.1f){
 
                 // Retract elevation before returning to the access bearing.

@@ -5,6 +5,7 @@ using UnityEngine;
 // One physical access description drives shell openings, stairs and crew motion.
 public static class NavalTurretAccessLayout
 {
+    public const float XLadderOut=.95f;
     public const float RootLift=.14f,Floor=.04f,RoofBottom=.54f,RoofTop=.60f;
     public const float BarrelAxis=.32f,MaximumPitch=25f;
     public const float DoorWidth=.36f,DoorHeight=.48f,Wall=.06f;
@@ -20,7 +21,7 @@ public static class NavalTurretAccessLayout
         var points=new List<Vector3>();Vector3 axis=Out(slot),door=Door(slot);float edge=Side(slot)==0?.36f:.43f,outer=GroundDistance(slot);
         float rise=NavalCapitalLayout.TurretRise(slot)+RootLift+Floor;int count=Math.Max(4,(int)Math.Ceiling(rise*ship.Scale/.14f));
         if(slot==3){
-            Vector3 foot=axis*(edge+.15f);foot.y=-NavalCapitalLayout.TurretRise(slot)-RootLift;
+            Vector3 foot=axis*XLadderOut;foot.y=-NavalCapitalLayout.TurretRise(slot)-RootLift;
             points.Add(ToShip(ship,slot,foot));
             foot.y=(Floor-NavalCapitalLayout.TurretRise(slot)-RootLift)*.5f;points.Add(ToShip(ship,slot,foot));
             foot.y=Floor;points.Add(ToShip(ship,slot,foot));
