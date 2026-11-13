@@ -764,7 +764,7 @@ public class NavalCannonball : MonoBehaviour
                 Character target = part != null ? part.GetOwner() : null;
                 if (attacker != null && part != null && target != null && target != attacker && target.IsAlive() &&
                     NavalBattleMath.CanDamageCrew(hostile,target.IsPlayerTeam,target.IsNeutral) && !target.IsImmuneToDamage() && part.CanBeDamaged)
-                    part.TryStabVolume(transform.position, hitPoint + step.normalized * 0.3f*RadiusScale, attackId, ImpactStrength, attacker, FireType.None, false, DamageSourceType.None);
+                    part.TryStabVolume(transform.position, hitPoint + step.normalized * 0.3f*RadiusScale, attackId, ImpactStrength, attacker, FireType.None, false, DamageSourceType.None,false);
                 else if (hit.collider.isTrigger) continue;
             }
             if(armedHull!=null){armedTravelled=NavalArmorMath.InternalEncounterDistance(armedTravelled,hit.distance,armedStepOffset);DetonateArmed(hitPoint,"obstruction");return true;}
@@ -795,7 +795,7 @@ public class NavalCannonball : MonoBehaviour
                 NavalBattleMath.CanDamageCrew(hostile,target.IsPlayerTeam,target.IsNeutral)&&!target.IsImmuneToDamage()&&part.CanBeDamaged)
             {
                 Vector3 hit=collider.ClosestPoint(point);
-                if(part.TryStabVolume(transform.position,hit+velocity.normalized*0.35f*RadiusScale,attackId,ImpactStrength,attacker,FireType.None,false,DamageSourceType.None))
+                if(part.TryStabVolume(transform.position,hit+velocity.normalized*0.35f*RadiusScale,attackId,ImpactStrength,attacker,FireType.None,false,DamageSourceType.None,false))
                     Debug.Log("[NavalPrototype] Cannon impact damaged robot body: "+target.name);
             }
         }
@@ -824,7 +824,7 @@ public class NavalCannonball : MonoBehaviour
             if(attacker!=null&&part!=null&&damaged.Add(part)&&target!=null&&target!=attacker&&target.IsAlive()&&
                 NavalBattleMath.CanDamageCrew(hostile,target.IsPlayerTeam,target.IsNeutral)&&!target.IsImmuneToDamage()&&part.CanBeDamaged)
                 part.TryStabVolume(point-velocity.normalized*.2f,collider.ClosestPoint(point)+velocity.normalized*.12f,attackId,
-                    Mathf.Max(1,Mathf.RoundToInt(power*1.5f)),attacker,FireType.None,false,DamageSourceType.None);
+                    Mathf.Max(1,Mathf.RoundToInt(power*1.5f)),attacker,FireType.None,false,DamageSourceType.None,false);
         }
         for(int i=0;i<14;i++)NavalShotPuff.Create(transform.parent,point+Random.insideUnitSphere*.06f,
             velocity.normalized*Random.Range(.4f,2.0f)+Random.insideUnitSphere*3.0f,metalSpark,Random.Range(.16f,.34f),Random.Range(.025f,.065f));

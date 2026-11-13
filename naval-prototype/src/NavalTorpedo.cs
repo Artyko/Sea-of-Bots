@@ -109,7 +109,7 @@ public sealed class NavalTorpedo:MonoBehaviour {
  private void DamageCrew(Vector3 point){if(attacker==null)return;var seen=new HashSet<BaseBodyPart>();foreach(var shape in Physics.OverlapSphere(point,NavalTorpedoMath.CrewBlastRadius,~0,QueryTriggerInteraction.Ignore)){
   var part=shape.GetComponentInParent<BaseBodyPart>();var actor=part!=null?part.GetOwner():null;if(part==null||!seen.Add(part)||actor==null||!actor.IsAlive()||actor.IsImmuneToDamage()||!part.CanBeDamaged)continue;
   Vector3 end=shape.ClosestPoint(point),delta=end-point;RaycastHit wall;if(Physics.Raycast(point+delta.normalized*.2f,delta.normalized,out wall,Mathf.Max(0,delta.magnitude-.25f),PhysicsManager.GetEnvironmentLayerMask(),QueryTriggerInteraction.Ignore)){var c=NavalVoxelHit.Resolve(wall.collider,wall.point);if(c==null||!c.Missing)continue;}
-  part.TryStabVolume(point,end+delta.normalized*.25f,GetInstanceID(),20,attacker,FireType.None,false,DamageSourceType.None);
+  part.TryStabVolume(point,end+delta.normalized*.25f,GetInstanceID(),20,attacker,FireType.None,false,DamageSourceType.None,false);
  }}
  private void OnDestroy(){Active.Remove(this);if(water!=null)Destroy(water);if(bodyMaterial!=null)Destroy(bodyMaterial);}
 }

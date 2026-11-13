@@ -228,7 +228,7 @@ public partial class NavalTestWorld : MonoBehaviour
         if(GetComponent<NavalBattleTelemetry>()==null)gameObject.AddComponent<NavalBattleTelemetry>();
         if(ConvoyMission)SpawnConvoy();else ToggleEnemy();
         rough=era==NavalEra.Sail;
-        Debug.Log("[NavalPrototype] v466 "+era+" ships and waves started on native editor map.");
+        Debug.Log("[NavalPrototype] v467 "+era+" ships and waves started on native editor map.");
     }
 
     private Material MakeMaterial(Color color)
@@ -296,7 +296,7 @@ public partial class NavalTestWorld : MonoBehaviour
         if(boat==null||!SimulationActive)return;
         if(ConvoyMission){UpdateConvoyInput();TickConvoy();}
         if(Spectating)UpdateSpectator();else RememberLiveCamera();
-        if(Time.unscaledDeltaTime>.15f&&Time.unscaledTime>=slowFrameLogAt){slowFrameLogAt=Time.unscaledTime+2f;Debug.Log("[NavalPrototype] Long frame v466: milliseconds="+(Time.unscaledDeltaTime*1000f).ToString("F1"));}
+        if(Time.unscaledDeltaTime>.15f&&Time.unscaledTime>=slowFrameLogAt){slowFrameLogAt=Time.unscaledTime+2f;Debug.Log("[NavalPrototype] Long frame v467: milliseconds="+(Time.unscaledDeltaTime*1000f).ToString("F1"));}
         UpdateBinoculars();ApplyBinocularZoom();
         UpdateHudInput();
         if(replaceEnemy){replaceEnemy=false;if(enemy==null)ToggleEnemy();}

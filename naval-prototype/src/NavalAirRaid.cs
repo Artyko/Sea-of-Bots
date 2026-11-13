@@ -461,7 +461,7 @@ public sealed class NavalAirRaid : MonoBehaviour
                 var body=contact.collider.GetComponentInParent<BaseBodyPart>();
                 var actor=body!=null?body.GetOwner():null;
                 if(actor==null||!actor.IsAlive()||actor.IsImmuneToDamage()||!body.CanBeDamaged)continue;
-                body.TryStabVolume(contact.point-direction*.35f,contact.point+direction*.25f,GetInstanceID(),12,null,FireType.None,false,DamageSourceType.None);
+                body.TryStabVolume(contact.point-direction*.35f,contact.point+direction*.25f,GetInstanceID(),12,null,FireType.None,false,DamageSourceType.None,false);
                 distance=contact.distance;break;
             }
             EmitTrace(origin,origin+direction*distance,false,160f);
